@@ -1,0 +1,5 @@
+{
+  "version": "2.1.17",
+  "lastUpdate": "2026-04-14T11:10:00-03:00",
+  "notes": "Mejora en la gestión de altas programadas: el médico ahora puede modificar o revocar una programación de alta existente."
+}

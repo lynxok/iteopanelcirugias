@@ -1,0 +1,5 @@
+{
+  "version": "2.1.18",
+  "lastUpdate": "2026-04-14T11:15:00-03:00",
+  "notes": "Hotfix: Reparado error de referencia que causaba el cierre inesperado al acceder al perfil del paciente."
+}

@@ -1,0 +1,230 @@
+HISTORIAL DE VERSIONES - PANEL DE CIRUGÍAS
+==========================================
+
+--------------------------------------------------
+Versión: 2.1.23
+Fecha: 14/04/2026
+Modificaciones: 
+- Tamaño de Notificación Extremo: Se incrementó masivamente el tamaño del icono 'fiber_new' para garantizar visibilidad absoluta en todas las condiciones.
+- Los iconos ahora tienen una presencia dominante en las tarjetas de cirugía para que no puedan ser ignorados.
+--------------------------------------------------
+Versión: 2.1.22
+Fecha: 14/04/2026
+Modificaciones: 
+- Incremento de Tamaño de Icono: Se aumentó significativamente el tamaño del aviso 'fiber_new' en todas las vistas (Mes, Semana, Día y Pendientes).
+- Refuerzo de Impacto Visual: Se añadieron efectos de resplandor (glow) y sombras más profundas para asegurar que el icono destaque sobre cualquier fondo.
+--------------------------------------------------
+Versión: 2.1.21
+Fecha: 14/04/2026
+Modificaciones: 
+- Rediseño Estético: Se mejoró la visibilidad del icono de 'Nueva Cirugía' (fiber_new) con colores más distintivos y efectos visuales.
+- Uso de Amarillo Oro (text-yellow-300) con sombreado en la vista mensual para máximo contraste sobre botones de color.
+- Uso de Cian Eléctrico (text-cyan-500) con efecto de resplandor (glow) en vistas semanal, diaria y listado de pendientes.
+- Aumento de tamaño y optimización de animaciones para facilitar la detección de novedades.
+--------------------------------------------------
+Versión: 2.1.20
+Fecha: 14/04/2026
+Modificaciones: 
+- Restricción de Seguridad: Se limitó el permiso para desmarcar (quitar el tilde) de 'Visto Internación' exclusivamente al rol 'SuperAdmin'.
+- Los usuarios de Internación pueden marcar cirugías como vistas, pero no pueden revertir esta acción una vez guardada.
+--------------------------------------------------
+Versión: 2.1.19
+Fecha: 14/04/2026
+Modificaciones: 
+- Bug Fix (Notificaciones): Se forzó el estado 'No Notificado' (internacion_notified: false) al crear nuevas cirugías para asegurar el correcto aviso.
+- Mejora UI (Aviso de Novedad): El icono 'fiber_new' ahora es visible tanto para roles de 'Internación' como 'SuperAdmin' en todas las vistas (Mes, Semana, Día y Listado de Pendientes).
+- Se corrigió la lógica restrictiva que impedía al SuperAdmin ver el indicador de nueva cirugía.
+--------------------------------------------------
+Versión: 2.1.18
+Fecha: 14/04/2026
+Modificaciones: 
+- Hotfix: Corrección de error de referencia (handleRevokeScheduledDischarge) que impedía la visualización de los detalles del paciente.
+--------------------------------------------------
+Versión: 2.1.17
+Fecha: 14/04/2026
+Modificaciones: 
+- Gestión avanzada de altas programadas: se permite modificar (reprogramar) o revocar la fecha estimada de alta desde el Panel Médico.
+- Mejora UI: Se muestra la fecha programada actual en una tarjeta informativa dentro de la sección de alta.
+--------------------------------------------------
+Versión: 2.1.16
+Fecha: 14/04/2026
+Modificaciones: 
+- Rediseño UI: El indicador de 'Alta Otorgada' ahora es un badge (etiqueta) flotante en la esquina superior derecha de la cama, mucho más visible y con fondo verde esmeralda.
+--------------------------------------------------
+Versión: 2.1.15
+Fecha: 14/04/2026
+Modificaciones: 
+- Agregada función 'Revocar Alta Médica' en el Panel Médico por si el médico desea deshacer el alta antes de la salida física.
+- El botón de alta cambia dinámicamente según el estado del paciente.
+--------------------------------------------------
+Versión: 2.1.14
+Fecha: 14/04/2026
+Modificaciones: 
+- Rediseño de flujo de alta: Separación de Alta Médica (Médico) y Liberación de Cama (Enfermería).
+- Nuevo icono de 'Alta Otorgada' (visto verde animado) en el Mapa de Enfermería.
+- Alertas de Alta Médica integradas en la barra inferior de enfermería.
+- El Panel Médico ahora solo autoriza el alta (ready_at), dejando la liberación física a cargo de enfermería.
+--------------------------------------------------
+
+VERSIÓN 2.1.27 (Actual - 2026-04-14)
+- Reprogramación Inteligente:
+  - Implementada "Fecha Sugerida" en la solicitud de reprogramación desde Internación.
+  - Nuevo Banner informativo en el detalle de la cirugía con motivo, solicitante y fecha sugerida (con soporte para "sin fecha sugerida").
+  - Botón de acción directa para Técnicos que pre-rellena el modal de reprogramación.
+  - Indicador visual (ícono event_repeat) en el calendario para cirugías con solicitud pendiente.
+
+VERSIÓN 2.1.26 (Anterior - 2026-04-14)
+- Resolución de Bug Crítico:
+  - Corregida la persistencia del checkbox "Visto por Internación".
+  - Se eliminó el valor falso hardcodeado en la lógica de guardado general que reseteaba la notificación.
+  - Implementada persistencia completa de metadatos (quién y cuándo) durante el guardado de la cirugía.
+
+VERSIÓN 2.1.25 (Anterior - 2026-04-14)
+- Documentación e Impresión:
+  - Nueva pestaña "Documentación" en el panel de Ajustes.
+  - Implementada funcionalidad de "Imprimir Ficha Quirúrgica (Blanco)" para respaldo físico y llenado manual.
+  - Optimización de diseño para impresión A4 con espacios ampliados para escritura.
+
+VERSIÓN 2.1.24 (Anterior - 2026-04-14)
+- Resolución de problemas de edición:
+  - Corregido ReferenceError: timeChanges en Ficha Técnica.
+  - Habilitada edición para roles: Internación, Técnico de Quirófano y Médicos.
+  - Añadido botón "Editar Ficha" en cabecera de detalle de cirugía.
+  - Desbloqueo general de campos restringidos para Técnicos en vista detalle.
+
+
+VERSIÓN 2.1.13 (Anterior - 2026-04-14)
+- Hotfix: Corregido el nombre de la columna de filtrado en el Panel Médico ('category' en lugar de 'type').
+- Restaurada la visibilidad de los medicamentos para la prescripción médica.
+
+VERSIÓN 2.1.12 (Anterior - 2026-04-14)
+- Sincronización de catálogo: Los médicos ahora ven la misma lista de fármacos que enfermería.
+- Visualización simplificada de fármacos en los registros de suministro y planes.
+- Persistencia del nombre clínico en el historial para mayor seguridad clínica.
+
+VERSIÓN 2.1.10 (Anterior - 2026-04-14)
+- Actualización masiva del catálogo de medicamentos (37 nuevos ítems para Enfermería).
+- Incorporación de antibióticos, analgésicos y medicación oral/sublingual estándar.
+
+VERSIÓN 2.1.9 (Anterior - 2026-04-14)
+- Agregada funcionalidad de "Copiar ID" en el encabezado con feedback visual (icono de check temporal).
+- Mejora de accesibilidad para la gestión rápida de códigos de cirugía.
+
+VERSIÓN 2.1.8 (Anterior - 2026-04-14)
+- Rediseño integral del encabezado de la ficha de cirugía para evitar solapamientos de texto.
+- Implementación de estructura modular en 3 bloques (Paciente, Datos Técnicos, Gestión).
+- Optimización de espacio para procedimientos y nombres largos; etiquetas posicionadas sobre los valores.
+
+VERSIÓN 2.1.7 (Anterior - 2026-04-14)
+- Estabilización de errores en consola: Corrección de error 400 en historial de pacientes (ID 'new').
+- Mejora de robustez en el sistema de notificaciones de actualización ante falta de conexión (navigator.onLine).
+- Solución a advertencias de dimensiones negativas en gráficos de Recharts (minHeight).
+
+VERSIÓN 2.1.6 (Anterior - 2026-04-14)
+- Actualización integral del Centro de Ayuda con guías visuales detalladas.
+- Incorporación de capturas de pantalla para Mapa de Internación, Escáner QR e Impresión de Pulseras.
+- Reorganización de pestañas y optimización para dispositivos móviles.
+
+VERSIÓN 2.1.4 (Anterior - 2026-04-13)
+- Corrección de error de desplazamiento (scrolling) en el modal de detalle de cama para dispositivos móviles.
+- Implementación de scroll interno y altura máxima dinámica (max-h-90vh).
+- Actualización visual a v2.1.4.
+
+VERSIÓN 2.1.3 (Anterior - 2026-04-13)
+- Solución definitiva a la búsqueda por código de cirugía (ej: CEB6D1C6).
+- Implementación de función RPC `get_surgery_by_code` en la base de datos para permitir la búsqueda de fragmentos de UUID castrados a texto.
+- Actualización visual a v2.1.3 para confirmación de despliegue.
+
+VERSIÓN 2.1.2 (Anterior - 2026-04-13)
+- Búsqueda inteligente de cirugía: permite ingresar fragmento de código (#) o DNI del paciente.
+- Lógica de desambiguación: en búsquedas por DNI, selecciona automáticamente la cirugía más reciente.
+- Actualización visual de versión global en el Mapa de Enfermería para confirmación de despliegue.
+- Persistencia de datos de alergias al realizar ingresos desde el módulo de escáner.
+
+VERSIÓN 2.1.1 (Anterior - 2026-04-13)
+- Corrección de ingreso manual de pacientes en Mapa de Enfermería y Escáner.
+- Solución al error técnico "alerts" vs "allergies" que impedía la búsqueda por código.
+- Limpieza automática de prefijo '#' y espacios en códigos de cirugía.
+- Robustez mejorada para búsqueda de UUIDs parciales en la base de datos.
+
+VERSIÓN 2.1.0 (Anterior - 2026-04-13)
+- Corrección crítica del bucle infinito (React #185) en la navegación del calendario.
+- Optimización de sincronización de URL mediante el uso de fechas locales (evitando desfases de zona horaria UTC).
+- Estabilización de la navegación entre meses (Abril a Mayo) corrigiendo el bloqueo en horarios de medianoche.
+
+VERSIÓN 2.0.9 (Anterior - 2026-04-13)
+- Implementación del icono "NUEVA" para cirugías con fecha, visible para usuarios de Internación.
+- Agregado checkbox en la Ficha Técnica para notificar el "Visto" por parte de Internación (Registrando hora y usuario responsable).
+- Inclusión de la "Fecha Creada" en la Ficha Técnica de las cirugías.
+
+VERSIÓN 2.0.8 (Anterior - 2026-04-13)
+- Agregado el código de la cirugía al encabezado del detalle de la misma.
+
+VERSIÓN 2.0.7 (Anterior - 2026-04-13)
+- Implementación de 'Guardado Automático al Imprimir'.
+- Se asegura que los datos se guarden en la base de datos antes de abrir el diálogo de impresión de la ficha técnica.
+
+VERSIÓN 2.0.6 (2026-04-13)
+- Corregida la persistencia del Anestesista al reabrir la ficha técnica.
+- Sincronización completa de metadatos de cirugía para asegurar que la impresión siempre muestre la información más reciente.
+
+VERSIÓN 2.0.5 (2026-04-13)
+- Sincronización automática del horario de finalización de cirugía desde el Monitor hacia la ficha técnica.
+- Extensión de la ventana de edición para el rol 'Tecnico' de 15 a 60 minutos post-cirugía.
+- Optimización del sistema de bloqueo optimista (Updated_at) para evitar falsos positivos de conflicto de edición.
+- Sincronización de estado local para permitir múltiples guardados sin cerrar la ficha.
+
+VERSIÓN 2.0.3 (Anterior)
+- Resolución de errores críticos (React #185) en el componente Calendario.
+- Mejora de sincronización de parámetros URL.
+- Estabilización de logs de auditoría.
+
+------------------------------------------
+DETALLE DE VERSIONES ANTERIORES (v1.x)
+------------------------------------------
+
+v1.1.20 (2026-02-09)
+- Optimización de Monitor para tablets (orientación horizontal).
+- Soporte Drag & Drop táctil en Calendario.
+- Mejora en gestión de datos de médicos y pacientes.
+
+v1.1.19 (2026-02-09)
+- Horarios de inicio de quirófano configurables desde Ajustes.
+
+v1.1.18 (2026-02-06)
+- Buscador incorporado en el modal de agendamiento/reprogramación.
+
+v1.1.17 (2026-02-06)
+- Indicador de 'FECHA RESERVADA' para cirugías pendientes de validación.
+
+v1.1.16 (2026-02-05)
+- Corrección en subida de archivos y mejora en visibilidad de logs de error.
+
+v1.1.15 (2026-02-04)
+- Actualización de constraints de base de datos para estado 'waiting_date'.
+
+v1.1.13 (2026-02-04)
+- Alerta crítica urgente (3 días) si falta autorización.
+- Eliminación de bloqueo por falta de fecha de autorización.
+
+v1.1.11 (2026-02-04)
+- Implementación de estado 'A la espera de fecha' (waiting_date).
+- Flexibilización de validación de Internación.
+
+v1.1.10 (2026-02-04)
+- Reducción de buffer de auto-finalización de 45 a 10 minutos.
+
+v1.1.0 (2026-02-04)
+- Refuerzo de seguridad RLS y permisos de esquema 'quirofano'.
+- Restricción de paso a 'Programada' sin fecha de autorización.
+- Implementación de Auditoría resiliente y Silent Error Logging.
+
+v1.0.9 (2026-02-03)
+- Corrección de persistencia de estados 'Completado' y 'En Progreso'.
+
+v1.0.3 (2026-02-03)
+- Implementación de auditoría detallada con registro de Diffs.
+- Solución a errores de navegación por rutas con espacios.
+
+v1.0.2 (2026-02-03)
+- Build de producción inicial estable.

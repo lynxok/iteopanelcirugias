@@ -1,0 +1,6 @@
+Versión 2.1.28 - 2026-04-15
+---------------------------
+- Implementación de filtros de alto nivel para tipos de cobertura: ART, Obra Social / Prepaga y Particular.
+- Mapeo dinámico de coberturas consultando la base de datos (tabla quirofano.coverages).
+- Clasificación inteligente de registros "Particular" basándose en el nombre de la cobertura o ausencia de ella.
+- Interfaz renovada con botones de acceso rápido para filtrado por tipo.

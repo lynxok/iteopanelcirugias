@@ -1,0 +1,5 @@
+{
+  "version": "2.0.7",
+  "lastUpdate": "2026-04-13T09:50:00-03:00",
+  "notes": "Implementado el guardado automático antes de imprimir. Ahora la ficha técnica asegura que todos los datos están en la base de datos antes de generar el PDF/impresión."
+}
