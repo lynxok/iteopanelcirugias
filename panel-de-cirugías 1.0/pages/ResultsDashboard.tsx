@@ -819,17 +819,21 @@ const ResultsDashboard: React.FC = () => {
                             </p>
                         </div>
 
-                        <div className="mt-4 grid grid-cols-3 gap-4 text-center">
+                        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center border-t border-slate-100 pt-4">
                             <div>
-                                <p className="text-[10px] text-slate-400 uppercase font-bold">Ocupación Promedio</p>
+                                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Ocupación Promedio</p>
                                 <p className="font-black text-slate-900 text-lg">{stats.avgOccupancy}</p>
                             </div>
                             <div>
-                                <p className="text-[10px] text-slate-400 uppercase font-bold">Total Cirugías</p>
-                                <p className="font-black text-slate-900 text- lg">{stats.totalPeriod}</p>
+                                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Cirugías Realizadas</p>
+                                <p className="font-black text-emerald-600 text-lg">{stats.totalCompleted}</p>
                             </div>
                             <div>
-                                <p className="text-[10px] text-slate-400 uppercase font-bold">Quirófanos Activos</p>
+                                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Cirugías Programadas</p>
+                                <p className="font-black text-indigo-600 text-lg">{stats.totalPeriod}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Quirófanos Activos</p>
                                 <p className="font-black text-slate-900 text-lg">{orOccupancy.length}</p>
                             </div>
                         </div>

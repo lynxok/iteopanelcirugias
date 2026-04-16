@@ -20,6 +20,11 @@ interface PreOpPatient {
     clinicalStatus: 'OK' | 'Pending' | 'Missing';
     adminStatus: 'OK' | 'Pending';
 
+    // Tooltips
+    materialTooltip?: string;
+    clinicalTooltip?: string;
+    adminTooltip?: string;
+
     // Metadata
     dateAdded: string;
     lastUpdate: string;
@@ -28,8 +33,8 @@ interface PreOpPatient {
     startTime?: string;
     orName?: string;
     tags?: string[];
-    authorizationDate?: string; // New field
-    vendorId?: string; // New field
+    authorizationDate?: string; 
+    vendorId?: string; 
     suspensionRequested?: boolean;
     rescheduleRequested?: boolean;
 }
@@ -46,23 +51,47 @@ const calculateProgress = (p: PreOpPatient) => {
 const isReady = (p: PreOpPatient) => p.materialStatus === 'OK' && p.clinicalStatus === 'OK' && p.adminStatus === 'OK';
 
 // --- Components ---
-const StatusBadge = ({ type, status }: { type: 'Mat' | 'Clin' | 'Adm', status: string }) => {
-    let colorClass = 'bg-slate-100 text-slate-500';
+const StatusBadge = ({ type, status, highlight, tooltip }: { type: 'MAT' | 'EXAM' | 'QX', status: string, highlight?: boolean, tooltip?: string }) => {
+    let colorClass = 'bg-slate-100 text-slate-500 border-slate-200';
     let icon = 'remove';
 
-    if (status === 'OK') { colorClass = 'bg-emerald-100 text-emerald-700 border-emerald-200'; icon = 'check'; }
-    if (status === 'Pending') { colorClass = 'bg-amber-100 text-amber-700 border-amber-200'; icon = 'hourglass_empty'; }
-    if (status === 'Missing') { colorClass = 'bg-red-100 text-red-700 border-red-200'; icon = 'close'; }
+    if (status === 'OK') { 
+        colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-200'; 
+        icon = 'check_circle'; 
+    }
+    if (status === 'Pending') { 
+        colorClass = 'bg-amber-50 text-amber-700 border-amber-200'; 
+        icon = 'hourglass_empty'; 
+    }
+    if (status === 'Missing') { 
+        colorClass = 'bg-red-50 text-red-700 border-red-200'; 
+        icon = 'cancel'; 
+    }
 
     return (
-        <div className={`flex items-center gap-1.5 px-2 py-1 rounded border text-[10px] font-bold uppercase tracking-wide ${colorClass}`}>
-            <span className="material-symbols-outlined text-xs font-bold">{icon}</span>
+        <div className={`relative group/badge flex items-center gap-1.5 px-2 py-1 rounded border text-[10px] font-bold uppercase tracking-wider transition-all duration-300 ${colorClass} ${highlight ? 'ring-2 ring-primary ring-offset-1 scale-105 shadow-sm' : ''}`}>
+            <span className={`material-symbols-outlined text-[12px] font-bold ${highlight ? 'animate-pulse' : ''}`}>{icon}</span>
             <span>{type}</span>
+
+            {/* Premium Tooltip */}
+            {tooltip && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-[180px] px-2.5 py-1.5 bg-slate-900/90 text-white text-[9px] font-medium normal-case rounded-lg shadow-xl opacity-0 invisible group-hover/badge:opacity-100 group-hover/badge:visible transition-all duration-200 z-[100] backdrop-blur-sm pointer-events-none">
+                    {tooltip}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-slate-900/90"></div>
+                </div>
+            )}
         </div>
     );
 };
 
-const PatientCard: React.FC<{ patient: PreOpPatient; minimal?: boolean; userRole?: string }> = ({ patient, minimal = false, userRole }) => {
+const PatientCard: React.FC<{ 
+    patient: PreOpPatient; 
+    minimal?: boolean; 
+    userRole?: string; 
+    highlight?: 'MAT' | 'EXAM' | 'QX';
+    isSuspended?: boolean;
+    onCancel?: (id: string) => void;
+}> = ({ patient, minimal = false, userRole, highlight, isSuspended, onCancel }) => {
     const navigate = useNavigate();
     const progress = calculateProgress(patient);
 
@@ -89,6 +118,12 @@ const PatientCard: React.FC<{ patient: PreOpPatient; minimal?: boolean; userRole
                     {patient.priority !== 'Normal' && (
                         <span className="bg-red-50 text-red-600 text-[9px] font-bold px-1.5 py-0.5 rounded border border-red-100 uppercase">
                             {patient.priority}
+                        </span>
+                    )}
+
+                    {isSuspended && (
+                        <span className="bg-amber-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-sm uppercase tracking-tighter">
+                            Suspendida
                         </span>
                     )}
 
@@ -145,10 +180,10 @@ const PatientCard: React.FC<{ patient: PreOpPatient; minimal?: boolean; userRole
 
             {/* Status Indicators Row */}
             {!minimal && (
-                <div className="pl-3 flex items-center gap-2 mb-3">
-                    <StatusBadge type="Mat" status={patient.materialStatus} />
-                    <StatusBadge type="Clin" status={patient.clinicalStatus} />
-                    <StatusBadge type="Adm" status={patient.adminStatus} />
+                <div className="flex items-center gap-2">
+                    <StatusBadge type="MAT" status={patient.materialStatus} highlight={highlight === 'MAT'} tooltip={patient.materialTooltip} />
+                    <StatusBadge type="EXAM" status={patient.clinicalStatus} highlight={highlight === 'EXAM'} tooltip={patient.clinicalTooltip} />
+                    <StatusBadge type="QX" status={patient.adminStatus} highlight={highlight === 'QX'} tooltip={patient.adminTooltip} />
                 </div>
             )}
 
@@ -171,9 +206,34 @@ const PatientCard: React.FC<{ patient: PreOpPatient; minimal?: boolean; userRole
                 </div>
             </div>
 
+            {/* QUICK ACTIONS for Suspended (Integrated) */}
+            {isSuspended && (userRole === 'SuperAdmin' || userRole === 'Tecnico') && (
+                <div className="pl-3 mt-4 pt-4 border-t border-slate-100 flex gap-2">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            navigate('/calendar');
+                        }}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black py-2 rounded-lg flex items-center justify-center gap-1.5 uppercase transition-colors"
+                    >
+                        <span className="material-symbols-outlined text-sm font-bold">event_repeat</span>
+                        Reprogramar
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (onCancel) onCancel(patient.id);
+                        }}
+                        className="px-3 bg-red-50 hover:bg-red-100 text-red-600 py-2 rounded-lg flex items-center justify-center transition-colors border border-red-100"
+                        title="Baja Definitiva (No se operará)"
+                    >
+                        <span className="material-symbols-outlined text-sm font-bold">person_remove</span>
+                    </button>
+                </div>
+            )}
 
-            {/* QUICK ACTIONS for Technician / SuperAdmin */}
-            {!patient.surgeryDate && (userRole === 'Tecnico' || userRole === 'SuperAdmin') && (
+            {/* QUICK ACTIONS for Scheduled/Unscheduled */}
+            {!isSuspended && !patient.surgeryDate && (userRole === 'Tecnico' || userRole === 'SuperAdmin') && (
                 <div className="pl-3 mt-4 pt-4 border-t border-slate-100">
                     <button
                         onClick={(e) => {
@@ -188,7 +248,7 @@ const PatientCard: React.FC<{ patient: PreOpPatient; minimal?: boolean; userRole
                 </div>
             )}
 
-            {/* Hover Action */}
+            {/* Hover Action Link */}
             <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button className="text-slate-400 hover:text-primary">
                     <span className="material-symbols-outlined text-xl">open_in_new</span>
@@ -225,6 +285,7 @@ const Kanban: React.FC = () => {
         return saved ? JSON.parse(saved) : {
             unscheduled: false,
             authorized: false,
+            ready: false,
             materials: false,
             clinical: false,
             admin: false,
@@ -275,6 +336,8 @@ const Kanban: React.FC = () => {
           admission_validated,
           or_validated,
           requires_prosthesis,
+          pre_op_exams,
+          consent_signed,
           or_validation_date,
           or_validated_by_name,
           created_at,
@@ -328,6 +391,20 @@ const Kanban: React.FC = () => {
                     return 'Pending';
                 };
 
+                // Tooltip Logic
+                const matStatus = s.priority === 'emergency' ? 'OK' : mapStatus(s.ortho_validated, s.requires_prosthesis || (s.surgery_materials && s.surgery_materials.length > 0));
+                const materialTooltip = matStatus === 'OK' ? 'Materiales validados / No requiere prótesis' : 
+                    (s.requires_prosthesis || (s.surgery_materials && s.surgery_materials.length > 0) ? 'Falta validación de materiales por Ortopedia' : 'Sin materiales cargados para esta cirugía');
+
+                const clinStatus = mapStatus(s.admission_validated);
+                const clinicalTooltip = clinStatus === 'OK' ? 'Validación clínica completada' : 
+                    (!s.pre_op_exams && !s.consent_signed ? 'Faltan exámenes pre-quirúrgicos y consentimiento firmado' : 
+                    (!s.pre_op_exams ? 'Faltan cargar/validar exámenes pre-quirúrgicos' : 
+                    (!s.consent_signed ? 'Falta firma de consentimiento informado' : 'Falta validación final de Internación')));
+
+                const admStatus = (mapStatus(s.or_validated) === 'OK' ? 'OK' : 'Pending') as 'OK' | 'Pending';
+                const adminTooltip = admStatus === 'OK' ? 'Quirófano y horario confirmados' : 'Falta asignar quirófano o programar horario final';
+
                 return {
                     id: s.id,
                     patientDocument: patient?.document_number || 'N/A',
@@ -336,9 +413,12 @@ const Kanban: React.FC = () => {
                     doctor: doctor?.full_name || 'No asignado',
                     proc: s.procedure_name || 'Sin nombre',
                     priority: mapPriority(s.priority),
-                    materialStatus: s.priority === 'emergency' ? 'OK' : mapStatus(s.ortho_validated, s.requires_prosthesis || (s.surgery_materials && s.surgery_materials.length > 0)),
-                    clinicalStatus: mapStatus(s.admission_validated),
-                    adminStatus: (mapStatus(s.or_validated) === 'OK' ? 'OK' : 'Pending') as 'OK' | 'Pending',
+                    materialStatus: matStatus,
+                    clinicalStatus: clinStatus,
+                    adminStatus: admStatus,
+                    materialTooltip,
+                    clinicalTooltip,
+                    adminTooltip,
                     dateAdded: new Date(s.created_at).toLocaleDateString(),
                     lastUpdate: new Date(s.created_at).toLocaleDateString(),
                     status: s.status || 'pending_validation',
@@ -366,25 +446,21 @@ const Kanban: React.FC = () => {
         p.patientDocument.includes(filterText)
     );
 
-    // --- NEW REORGANIZED GROUPING LOGIC ---
-
-    // 0. Authorized (Has auth date, no scheduled date) -- NEW SECTION
+    // 0. Authorized (Has auth date, no scheduled date)
     const authorizedPatients = filteredPatients.filter(p => !p.surgeryDate && p.authorizationDate && p.status !== 'suspended');
 
-    // 1. Unscheduled (No Date, No Auth Date)
-    // We modify this to EXCLUDE those that are already in "authorizedPatients" to avoid duplication
+    // 1. Ready to Schedule (isReady, no date, no auth) - NEW SECTION
+    const readyToSchedule = filteredPatients.filter(p => !p.surgeryDate && !p.authorizationDate && isReady(p) && p.status !== 'suspended');
+
+    // 2. Unscheduled (No Date, No Auth Date, NOT Ready)
     const unscheduledNew = filteredPatients.filter(p => !p.surgeryDate && !p.authorizationDate && !isReady(p) && p.status !== 'suspended');
 
-    // readyPatients logig might need adjustment if ready means ready to be scheduled? 
-    // Usually ready meansvalidated. Creating 'ready but unscheduled' category? 
-    // For now sticking to the requested "Authorized" section.
-
-    // 2. Blocked Scheduled (Has Date but something is missing)
+    // 3. Blocked Scheduled (Has Date but something is missing)
     const materialBlockers = filteredPatients.filter(p => p.status !== 'suspended' && p.surgeryDate && !isReady(p) && p.materialStatus !== 'OK');
     const clinicalBlockers = filteredPatients.filter(p => p.status !== 'suspended' && p.surgeryDate && !isReady(p) && p.clinicalStatus !== 'OK' && p.materialStatus === 'OK');
     const otherBlockers = filteredPatients.filter(p => p.status !== 'suspended' && p.surgeryDate && !isReady(p) && p.adminStatus !== 'OK' && p.materialStatus === 'OK' && p.clinicalStatus === 'OK');
 
-    // 3. Other Statuses
+    // 4. Other Statuses
     const suspendedPatients = filteredPatients.filter(p => p.status === 'suspended');
 
     const handleCancelSurgery = async (id: string) => {
@@ -544,16 +620,18 @@ const Kanban: React.FC = () => {
                                 </div>
                                 <div>
                                     <p className="text-2xl font-black text-blue-700 leading-none">{clinicalBlockers.length}</p>
-                                    <p className="text-xs font-bold text-blue-600 uppercase">Falta Clínico</p>
+                                    <p className="text-xs font-bold text-blue-600 uppercase">Falta Exámenes</p>
                                 </div>
                             </div>
-                            <div className="flex-shrink-0 w-[160px] md:w-auto bg-white border border-slate-200 p-3 rounded-xl flex items-center gap-3 shadow-sm hover:shadow-md transition-all">
-                                <div className="size-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center flex-shrink-0">
-                                    <span className="material-symbols-outlined">groups</span>
+                            <div className="flex-shrink-0 w-[160px] md:w-auto bg-emerald-50 border border-emerald-100 p-3 rounded-xl flex items-center gap-3 shadow-sm hover:shadow-md transition-all">
+                                <div className="size-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                                    <span className="material-symbols-outlined">how_to_reg</span>
                                 </div>
                                 <div>
-                                    <p className="text-2xl font-black text-slate-700 leading-none">{patients.length}</p>
-                                    <p className="text-xs font-bold text-slate-500 uppercase whitespace-nowrap">Total Activos</p>
+                                    <p className="text-2xl font-black text-emerald-700 leading-none">
+                                        {authorizedPatients.length + unscheduledNew.length + readyToSchedule.length + materialBlockers.length + clinicalBlockers.length + otherBlockers.length}
+                                    </p>
+                                    <p className="text-xs font-bold text-emerald-600 uppercase whitespace-nowrap">Total Activos</p>
                                 </div>
                             </div>
                         </div>
@@ -623,13 +701,43 @@ const Kanban: React.FC = () => {
                             )}
                         </section>
 
+                        {/* SECTION: READY TO SCHEDULE (NEW) */}
+                        <section className="bg-emerald-50/30 rounded-xl border border-emerald-100 p-4 transition-all">
+                            <SectionHeader
+                                title="Validadas (Listas para Programar)"
+                                count={readyToSchedule.length}
+                                colorClass="text-emerald-600"
+                                icon="task_alt"
+                                sectionKey="ready"
+                            />
+
+                            {!collapsedSections['ready'] && (
+                                <div className="mt-4">
+                                    {readyToSchedule.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-fadeIn">
+                                            {readyToSchedule.map(p => (
+                                                <div key={p.id} className="relative group">
+                                                    <PatientCard patient={p} userRole={user?.role} />
+                                                    <div className="absolute top-0 right-0 -mt-1 -mr-1 size-4 bg-emerald-500 rounded-full border-2 border-white shadow-sm animate-pulse z-20"></div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white/50 border border-dashed border-slate-200 rounded-xl p-6 text-center">
+                                            <p className="text-slate-400 text-sm italic">No hay cirugías 100% validadas pendientes de fecha.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </section>
+
 
                         {/* SECTION: BLOCKED PIPELINES */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             {/* Materials */}
                             <section className="bg-slate-100/50 rounded-xl p-4 border border-slate-200/60 flex flex-col h-fit">
                                 <SectionHeader
-                                    title="Falta Material"
+                                    title="Falta Material (Ortopedia)"
                                     count={materialBlockers.length}
                                     colorClass="text-amber-500"
                                     icon="inventory_2"
@@ -637,7 +745,7 @@ const Kanban: React.FC = () => {
                                 />
                                 {!collapsedSections['materials'] && (
                                     <div className="space-y-3 flex-1 overflow-y-auto max-h-[400px] pr-1 scrollbar-thin scrollbar-thumb-slate-200 animate-fadeIn">
-                                        {materialBlockers.map(p => <PatientCard key={p.id} patient={p} userRole={user?.role} />)}
+                                        {materialBlockers.map(p => <PatientCard key={p.id} patient={p} userRole={user?.role} highlight="MAT" />)}
                                         {materialBlockers.length === 0 && <p className="text-xs text-slate-400 italic">Sin pendientes.</p>}
                                     </div>
                                 )}
@@ -646,7 +754,7 @@ const Kanban: React.FC = () => {
                             {/* Clinical */}
                             <section className="bg-slate-100/50 rounded-xl p-4 border border-slate-200/60 flex flex-col h-fit">
                                 <SectionHeader
-                                    title="Falta Estudios"
+                                    title="Falta Exámenes (Internación)"
                                     count={clinicalBlockers.length}
                                     colorClass="text-blue-500"
                                     icon="cardiology"
@@ -654,7 +762,7 @@ const Kanban: React.FC = () => {
                                 />
                                 {!collapsedSections['clinical'] && (
                                     <div className="space-y-3 flex-1 overflow-y-auto max-h-[400px] pr-1 scrollbar-thin scrollbar-thumb-slate-200 animate-fadeIn">
-                                        {clinicalBlockers.map(p => <PatientCard key={p.id} patient={p} userRole={user?.role} />)}
+                                        {clinicalBlockers.map(p => <PatientCard key={p.id} patient={p} userRole={user?.role} highlight="EXAM" />)}
                                         {clinicalBlockers.length === 0 && <p className="text-xs text-slate-400 italic">Sin pendientes.</p>}
                                     </div>
                                 )}
@@ -663,15 +771,15 @@ const Kanban: React.FC = () => {
                             {/* Admin */}
                             <section className="bg-slate-100/50 rounded-xl p-4 border border-slate-200/60 flex flex-col h-fit">
                                 <SectionHeader
-                                    title="Falta Adm."
+                                    title="Falta Validación (Quirófano)"
                                     count={otherBlockers.length}
                                     colorClass="text-purple-500"
-                                    icon="task_alt"
+                                    icon="verified_user"
                                     sectionKey="admin"
                                 />
                                 {!collapsedSections['admin'] && (
                                     <div className="space-y-3 flex-1 overflow-y-auto max-h-[400px] pr-1 scrollbar-thin scrollbar-thumb-slate-200 animate-fadeIn">
-                                        {otherBlockers.map(p => <PatientCard key={p.id} patient={p} userRole={user?.role} />)}
+                                        {otherBlockers.map(p => <PatientCard key={p.id} patient={p} userRole={user?.role} highlight="QX" />)}
                                         {otherBlockers.length === 0 && <p className="text-xs text-slate-400 italic">Sin pendientes.</p>}
                                     </div>
                                 )}
@@ -693,29 +801,13 @@ const Kanban: React.FC = () => {
                                     {suspendedPatients.length > 0 ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                             {suspendedPatients.map(p => (
-                                                <div key={p.id} className="relative group">
-                                                    <PatientCard patient={p} userRole={user?.role} />
-                                                    <div className="absolute inset-x-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 bg-white/95 p-2 rounded-lg border border-slate-200 shadow-xl backdrop-blur-sm transform translate-y-1 group-hover:translate-y-0 duration-300">
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); navigate('/calendar'); }}
-                                                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black py-2 rounded flex items-center justify-center gap-1.5 uppercase transition-colors"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">event_repeat</span>
-                                                            Reprogramar
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); handleCancelSurgery(p.id); }}
-                                                            className="w-10 bg-red-50 hover:bg-red-100 text-red-600 py-2 rounded flex items-center justify-center transition-colors border border-red-100"
-                                                            title="Eliminar definitivamente"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">delete</span>
-                                                        </button>
-                                                    </div>
-                                                    {/* Status Badge Overwrite for Suspended */}
-                                                    <div className="absolute top-2 left-2 bg-amber-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-sm z-10 uppercase tracking-tighter">
-                                                        Suspendida
-                                                    </div>
-                                                </div>
+                                                <PatientCard 
+                                                    key={p.id} 
+                                                    patient={p} 
+                                                    userRole={user?.role} 
+                                                    isSuspended={true}
+                                                    onCancel={handleCancelSurgery}
+                                                />
                                             ))}
                                         </div>
                                     ) : (

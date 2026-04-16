@@ -139,8 +139,13 @@ export const SurgeryDetail: React.FC = () => {
     const [suspensionModal, setSuspensionModal] = useState({
         isOpen: false,
         reason: '',
-        observations: ''
+        observations: '',
+        isDefinitive: false,
+        isEdit: false
     });
+
+    const [suspensionReason, setSuspensionReason] = useState('');
+    const [suspensionObservations, setSuspensionObservations] = useState('');
 
     // Reschedule State
     const [rescheduleModal, setRescheduleModal] = useState({
@@ -537,6 +542,8 @@ export const SurgeryDetail: React.FC = () => {
                 setInternacionNotifiedBy(data.internacion_notified_by || null);
                 setInternacionNotifiedAt(data.internacion_notified_at || null);
                 setSelectedDoctorId(data.doctor_id || '');
+                setSuspensionReason(data.suspension_reason || '');
+                setSuspensionObservations(data.suspension_observations || '');
 
                 // Load Requests
                 setSuspensionRequested(data.suspension_requested || false);
@@ -1540,60 +1547,76 @@ export const SurgeryDetail: React.FC = () => {
         // Security reinforcement in code
         const allowedRoles = ['SuperAdmin', 'Tecnico', 'DireccionMedica'];
         if (!allowedRoles.includes(currentUserRole)) {
-            alert('No tiene permisos para suspender cirugías.');
+            alert('No tiene permisos para gestionar suspensiones.');
             return;
         }
 
         try {
+            const isDefinitive = suspensionModal.isDefinitive;
+            const targetStatus = isDefinitive ? 'cancelled' : 'suspended';
+            const isUpdate = suspensionModal.isEdit;
+
+            const updateData: any = {
+                suspension_reason: suspensionModal.reason,
+                suspension_observations: suspensionModal.observations,
+            };
+
+            // Only update status and resets validations if NOT an update, 
+            // OR if the definitiveness changed
+            if (!isUpdate || (status !== targetStatus)) {
+                updateData.status = targetStatus;
+                updateData.or_validated = false;
+                updateData.or_validation_date = null;
+                updateData.or_validated_by_name = null;
+            }
+
             const { error } = await supabase
                 .from('surgeries')
-                .update({
-                    status: 'suspended',
-                    suspension_reason: suspensionModal.reason,
-                    suspension_observations: suspensionModal.observations,
-                    or_validated: false, // Reset OR validation on suspension
-                    or_validation_date: null,
-                    or_validated_by_name: null
-                })
+                .update(updateData)
                 .eq('id', id);
 
             if (error) throw error;
 
-            // --- VENDOR NOTIFICATION ---
-            await queueVendorNotification(id, 'suspended', suspensionModal.reason + (suspensionModal.observations ? ` - ${suspensionModal.observations}` : ''));
+            // --- NOTIFICATIONS ---
+            // Send notification on new suspension OR if the motive changed significantly
+            if (!isUpdate || suspensionModal.reason !== suspensionReason) {
+                const prefix = isUpdate ? '[ACTUALIZACIÓN] ' : '';
+                await queueVendorNotification(id, targetStatus, prefix + suspensionModal.reason + (suspensionModal.observations ? ` - ${suspensionModal.observations}` : ''));
 
-            // --- OPERATIONAL ALERT FOR DOCTOR ---
-            if (selectedDoctorId) {
-                await createOrUpdateDoctorAlert({
-                    surgeryId: id,
-                    doctorId: selectedDoctorId,
-                    title: 'Cirugía Suspendida',
-                    message: `Su cirugía de ${patientName} ha sido susp/canc. Motivo: ${suspensionModal.reason}`,
-                    severity: 'Urgent',
-                    type: 'operational_delay',
-                    patientName
-                });
+                if (selectedDoctorId) {
+                    await createOrUpdateDoctorAlert({
+                        surgeryId: id,
+                        doctorId: selectedDoctorId,
+                        title: targetStatus === 'cancelled' ? `${prefix}Cirugía Cancelada` : `${prefix}Cirugía Suspendida`,
+                        message: `${prefix}Su cirugía de ${patientName} ha sido ${targetStatus === 'cancelled' ? 'cancelada definitivamente' : 'suspendida'}. Motivo: ${suspensionModal.reason}`,
+                        severity: 'Urgent',
+                        type: 'operational_delay',
+                        patientName
+                    });
+                }
             }
 
             // Audit Log (Non-blocking)
             supabase.from('audit_logs').insert({
                 user_name: user?.name || user?.email || 'Usuario Actual',
                 user_role: currentUserRole,
-                action: 'STATUS_CHANGE',
+                action: isUpdate ? 'UPDATE_SUSPENSION' : 'STATUS_CHANGE',
                 resource: 'Cirugía',
                 resource_id: id,
-                description: `Cirugía suspendida/cancelada. Motivo: ${suspensionModal.reason}. Obs: ${suspensionModal.observations}`,
-                meta: { source: 'SurgeryDetail' }
+                description: isUpdate 
+                    ? `Motivo de suspensión/cancelación actualizado. Nuevo Motivo: ${suspensionModal.reason}` 
+                    : `Cirugía suspendida/cancelada. Motivo: ${suspensionModal.reason}. Obs: ${suspensionModal.observations}`,
+                meta: { source: 'SurgeryDetail', isEdit: isUpdate }
             }).then(({ error }) => {
                 if (error) captureError(error, { context: 'SurgeryDetail.handleSuspend.audit', severity: 'WARNING', user: user, metadata: { surgeryId: id } });
             });
 
-            setSuspensionModal({ ...suspensionModal, isOpen: false });
+            setSuspensionModal({ ...suspensionModal, isOpen: false, isEdit: false });
             fetchSurgeryDetails(id);
-            alert('Cirugía procesada correctamente');
+            alert(isUpdate ? 'Motivo actualizado correctamente' : 'Cirugía procesada correctamente');
         } catch (err) {
             console.error('Error in handleSuspend:', err);
-            alert('Error al suspender/cancelar la cirugía');
+            alert('Error al gestionar la suspensión/cancelación');
         }
     };
 
@@ -2165,6 +2188,54 @@ export const SurgeryDetail: React.FC = () => {
                                 Aceptar
                             </button>
                         </div>
+                    </div>
+                )}
+
+                {/* SUSPENSION DETAILS BANNER */}
+                {(status === 'suspended' || status === 'cancelled') && (
+                    <div className={`mb-6 p-5 rounded-2xl shadow-xl border-2 flex flex-col md:flex-row items-center gap-5 animate-in slide-in-from-top-4 duration-500
+                        ${status === 'suspended' ? 'bg-amber-50 border-amber-200 shadow-amber-100' : 'bg-red-50 border-red-200 shadow-red-100'}`}>
+                        <div className={`size-14 rounded-full flex items-center justify-center shrink-0 shadow-inner
+                            ${status === 'suspended' ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}`}>
+                            <span className="material-symbols-outlined text-3xl font-bold">
+                                {status === 'suspended' ? 'pause_circle' : 'cancel'}
+                            </span>
+                        </div>
+                        <div className="flex-1 text-center md:text-left">
+                            <h4 className={`font-black uppercase tracking-widest text-[10px] mb-1
+                                ${status === 'suspended' ? 'text-amber-800' : 'text-red-800'}`}>
+                                ESTA CIRUGÍA SE ENCUENTRA {status === 'suspended' ? 'SUSPENDIDA TEMPORALMENTE' : 'CANCELADA DEFINITIVAMENTE'}
+                            </h4>
+                            <div className="flex flex-col gap-0.5">
+                                <p className="text-sm font-bold text-slate-800 leading-tight">
+                                    <span className="text-xs uppercase text-slate-500 mr-2">Motivo:</span> 
+                                    {suspensionReason || 'No especificado'}
+                                </p>
+                                {suspensionObservations && (
+                                    <p className="text-xs text-slate-600 italic mt-1 bg-white/40 p-2 rounded-lg border border-white/50 backdrop-blur-sm line-clamp-2">
+                                        "{suspensionObservations}"
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        {(currentUserRole === 'SuperAdmin' || currentUserRole === 'Tecnico' || currentUserRole === 'DireccionMedica') && (
+                            <div className="flex gap-3 shrink-0">
+                                <button 
+                                    onClick={() => setSuspensionModal({
+                                        isOpen: true,
+                                        reason: suspensionReason,
+                                        observations: suspensionObservations,
+                                        isDefinitive: status === 'cancelled',
+                                        isEdit: true
+                                    })}
+                                    className={`group flex items-center gap-2 px-5 py-2.5 bg-white rounded-xl font-black text-[10px] uppercase tracking-widest border transition-all active:scale-95 shadow-sm
+                                        ${status === 'suspended' ? 'text-amber-700 border-amber-200 hover:bg-amber-50' : 'text-red-700 border-red-200 hover:bg-red-50'}`}
+                                >
+                                    <span className="material-symbols-outlined text-base group-hover:rotate-12 transition-transform">edit</span>
+                                    Editar Motivo
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -3748,7 +3819,7 @@ export const SurgeryDetail: React.FC = () => {
 
                         {!isNew && status !== 'suspended' && (['SuperAdmin', 'Tecnico', 'DireccionMedica'].includes(currentUserRole)) && (
                             <button
-                                onClick={() => setSuspensionModal({ isOpen: true, reason: '', observations: '' })}
+                                onClick={() => setSuspensionModal({ isOpen: true, reason: '', observations: '', isDefinitive: false })}
                                 className={`px-4 py-2 rounded border border-amber-200 bg-amber-50 text-amber-700 font-bold text-sm hover:bg-amber-100 transition-colors flex items-center gap-2`}
                             >
                                 <span className="material-symbols-outlined text-base">block</span>
@@ -3816,15 +3887,36 @@ export const SurgeryDetail: React.FC = () => {
                                         placeholder="Explique las circunstancias de la suspensión..."
                                     />
                                 </div>
+
+                                {/* Definitive Cancellation Option */}
+                                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                                    <div className="flex items-start gap-3">
+                                        <div className="pt-0.5">
+                                            <input
+                                                type="checkbox"
+                                                id="isDefinitive"
+                                                checked={suspensionModal.isDefinitive}
+                                                onChange={(e) => setSuspensionModal({ ...suspensionModal, isDefinitive: e.target.checked })}
+                                                className="size-5 rounded border-slate-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                                            />
+                                        </div>
+                                        <label htmlFor="isDefinitive" className="cursor-pointer select-none">
+                                            <span className="block text-sm font-black text-slate-900">Baja Definitiva (No se operará)</span>
+                                            <span className="block text-[10px] text-slate-500 font-bold leading-tight mt-0.5">
+                                                Si marca esta opción, la cirugía se quitará del flujo activo del Kanban permanentemente.
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                             <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
                                 <button onClick={() => setSuspensionModal({ ...suspensionModal, isOpen: false })} className="px-5 py-2 font-bold text-slate-500 hover:bg-slate-200 rounded-xl transition-all">Cancelar</button>
                                 <button
                                     onClick={handleSuspend}
                                     disabled={!suspensionModal.reason}
-                                    className="px-6 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl font-black text-sm shadow-lg shadow-amber-200 transition-all active:scale-95"
+                                    className={`px-6 py-2 ${suspensionModal.isDefinitive ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-amber-600 hover:bg-amber-700 shadow-amber-200'} disabled:opacity-50 text-white rounded-xl font-black text-sm shadow-lg transition-all active:scale-95`}
                                 >
-                                    Confirmar Suspensión
+                                    {suspensionModal.isDefinitive ? 'Confirmar Baja Definitiva' : 'Confirmar Suspensión'}
                                 </button>
                             </div>
                         </div>
