@@ -111,6 +111,10 @@ export interface Vendor {
   id: string;
   name: string;
   email?: string;
+  whatsapp_number?: string;
+  telegram_chat_id?: string;
+  notification_method?: 'whatsapp' | 'telegram';
+  auto_notify?: boolean;
   requires_material_validation?: boolean;
 }
 
@@ -119,12 +123,14 @@ export interface Coverage {
   name: string;
   type: 'Obra Social' | 'ART' | string;
   vendor_id?: string;
+  nomenclador_type?: 'AOTER' | 'OSER' | string | null;
 }
 
 export interface NotificationPreferences {
   delays: boolean;
   daily_summary: boolean;
   status_changes: boolean;
+  vendor_assignments: boolean;
 }
 
 export interface AppUser {
@@ -139,8 +145,14 @@ export interface AppUser {
   doctorId?: string; // Links to Doctor Profile
   telegramChatId?: string; // For notifications
   telegramEnabled?: boolean; // Master connection switch
+  notification_method?: 'whatsapp' | 'telegram';
+  auto_notify?: boolean;
+  whatsapp_number?: string;
   notificationPreferences?: NotificationPreferences;
   canFillForms?: boolean;
+  saved_signature?: string | null;
+  signature_pin?: string | null;
+  specialty?: string | null;
 }
 
 export interface CatalogItem {
@@ -252,4 +264,25 @@ export interface HospitalMedicationPlan {
 }
 
 export type AlertSeverity = 'Critical' | 'Urgent' | 'Warning' | 'Info';
-export type AlertStatus = 'Active' | 'Resolved';
+
+export interface SurgeryMaterial {
+    id: string;
+    name: string;
+    category: string;
+    quantity: number;
+    requestedQuantity: number;
+    isCovered?: boolean;
+    isConfirmed?: boolean;
+    observation?: string;
+    procedureName?: string;
+}
+
+export interface SurgeryDocument {
+    id: string;
+    name: string;
+    type: string;
+    category?: string;
+    file_path: string;
+    created_at: string;
+    uploaded_by?: string;
+}

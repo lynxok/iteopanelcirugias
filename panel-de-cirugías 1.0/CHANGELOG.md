@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v2.3.8 (2026-04-24)
+- **Corrección de Sincronización Quirúrgica**:
+    - **Calendario**: Se implementó un filtrado robusto para ocultar cirugías canceladas (Baja Definitiva) de la agenda principal y del sidebar, eliminando las cirugías "fantasmas".
+    - **Gestión de Suspensiones**: Se habilitó para el rol de **Internación** la capacidad de realizar suspensiones y bajas definitivas directamente desde el listado general, unificando permisos con la ficha de detalle.
+    - **Consistencia Visual**: Se agregó la opción de "Baja Definitiva" en todos los módulos de suspensión para asegurar que las cirugías que no se operarán sean removidas de la planificación activa.
+
+
 ## v1.1.20 (2026-02-09)
 - **Correcciones para Tablet y Drag & Drop**:
     - **Optimización de Monitor**: Se ajustó el diseño para mejorar la visibilidad en tablets en orientación horizontal (landscape), incluyendo scroll funcional y reducción de rellenos innecesarios.

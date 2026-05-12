@@ -1,29 +1,31 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
+# Ignorar absolutamente todo el código fuente
+src/
+components/
+pages/
+hooks/
+utils/
+services/
+supabase/
+public/
+styles/
 node_modules/
-node_modules/**/*
-dist/
-dist/**/*
-dist-ssr/
-*.local
-.env*
-.DS_Store
-Thumbs.db
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Ignorar archivos de configuración de desarrollo
+.env
+.env.local
+vite.config.ts
+tsconfig.json
+postcss.config.js
+tailwind.config.js
+
+# Ignorar carpetas de construcción local
+dist/
+release/
+versi*n anterior/
+
+# PERMITIR archivos necesarios para identificar el repo y las actualizaciones
+!package.json
+!main.cjs
+!preload.cjs
+!README.md
+!.gitignore

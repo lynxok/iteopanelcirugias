@@ -1,1 +1,0 @@
-function o(n){return r=>{const t=(n?Math[n]:Math.trunc)(r);return t===0?0:t}}export{o as g};

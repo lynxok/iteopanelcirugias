@@ -1,5 +1,0 @@
-{
-  "version": "2.1.13",
-  "lastUpdate": "2026-04-14T09:50:00-03:00",
-  "notes": "Hotfix: Corregido el filtrado de medicamentos en el Panel Médico (cambio de 'type' a 'category')."
-}

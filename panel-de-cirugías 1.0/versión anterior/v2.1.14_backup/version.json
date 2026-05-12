@@ -1,5 +1,0 @@
-{
-  "version": "2.1.14",
-  "lastUpdate": "2026-04-14T10:05:00-03:00",
-  "notes": "Rediseño de flujo de alta: Separación de Alta Médica (Médico) y Liberación de Cama (Enfermería) con avisos visuales."
-}

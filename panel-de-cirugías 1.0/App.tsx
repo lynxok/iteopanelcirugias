@@ -81,7 +81,97 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+const HomeRedirect: React.FC = () => {
+  const { user, loading } = useAuth();
+  const [permissions, setPermissions] = React.useState<string[]>([]);
+  const [checking, setChecking] = React.useState(true);
+
+  React.useEffect(() => {
+    const fetchPermissions = async () => {
+      if (!user) return;
+      if (user.role === 'SuperAdmin') {
+        setPermissions(['dashboard']); // SuperAdmin siempre tiene acceso
+        setChecking(false);
+        return;
+      }
+
+      try {
+        const { data } = await supabase
+          .from('admin_settings')
+          .select('value')
+          .eq('key', 'role_permissions')
+          .maybeSingle();
+
+        if (data?.value) {
+          const allPerms = JSON.parse(data.value);
+          const roleKey = Object.keys(allPerms).find(k => k.toLowerCase() === user.role?.toLowerCase());
+          if (roleKey) {
+            setPermissions(allPerms[roleKey]);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching perms for redirect:', err);
+      } finally {
+        setChecking(false);
+      }
+    };
+    fetchPermissions();
+  }, [user]);
+
+  if (loading || checking) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-slate-50">
+        <div className="size-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  // Orden de prioridad para la redirección inicial
+  const priorityRoutes = [
+    { id: 'dashboard', path: '/dashboard_view' }, // Cambiaremos la ruta del dashboard para evitar bucles
+    { id: 'medico', path: '/medico' },
+    { id: 'hospitalization', path: '/hospitalization' },
+    { id: 'admin_dashboard', path: '/admin-dashboard' },
+    { id: 'surgeries', path: '/surgeries' },
+    { id: 'calendar', path: '/calendar' },
+    { id: 'monitor', path: '/monitor' },
+    { id: 'kanban', path: '/kanban' },
+    { id: 'alerts', path: '/alerts' },
+    { id: 'scanner', path: '/scanner' },
+    { id: 'results', path: '/results' },
+    { id: 'audit', path: '/audit' },
+    { id: 'billing', path: '/billing' },
+    { id: 'help', path: '/help' },
+  ];
+
+  if (user.role === 'SuperAdmin' || permissions.includes('dashboard')) {
+    return <Layout><Dashboard /></Layout>;
+  }
+
+  const firstAllowed = priorityRoutes.find(r => permissions.includes(r.id));
+  
+  if (firstAllowed) {
+    return <Navigate to={firstAllowed.path} replace />;
+  }
+
+  return <Layout><Dashboard /></Layout>; // Fallback
+};
+
 const App: React.FC = () => {
+  // Manejador global para errores de carga de módulos dinámicos (Chunks)
+  // Esto sucede cuando se sube una nueva versión y el usuario tiene una vieja en caché.
+  React.useEffect(() => {
+    const handlePreloadError = (event: Event) => {
+      console.warn("Error de precarga detectado (posible nueva versión). Recargando...");
+      window.location.reload();
+    };
+
+    window.addEventListener("vite:preloadError", handlePreloadError);
+    return () => window.removeEventListener("vite:preloadError", handlePreloadError);
+  }, []);
+
   return (
     <AuthProvider>
       <ErrorBoundary>
@@ -97,7 +187,8 @@ const App: React.FC = () => {
           }>
             <Routes>
               <Route path="/login" element={<Login />} />
-              <Route path="/" element={<Layout><Dashboard /></Layout>} />
+              <Route path="/" element={<HomeRedirect />} />
+              <Route path="/dashboard_view" element={<Layout><Dashboard /></Layout>} />
               <Route path="/alerts" element={<Layout><AlertsHistory /></Layout>} />
               <Route path="/calendar" element={<Layout><Calendar /></Layout>} />
               <Route path="/kanban" element={<Layout><Kanban /></Layout>} />
