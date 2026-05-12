@@ -1,6 +1,0 @@
-Version 1.2.6 - 15/04/2026
----------------------------
-- Implementación de filtros por cobertura en el Listado General.
-- Agregados botones para filtrar por: Todos, ART, Obra Social / Prepaga, Particular.
-- La lógica de filtrado cruza los datos con la tabla 'coverages' para determinar el tipo de cobertura.
-- Se mantuvo la estética premium y Glassmorphism en los nuevos controles.
