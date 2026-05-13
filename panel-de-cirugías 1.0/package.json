@@ -1,15 +1,15 @@
 {
   "name": "panel-de-cirugias",
   "private": true,
-  "version": "3.3.7",
+  "version": "3.5.4",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "electron:dev": "set NODE_ENV=development && electron .",
-    "electron:build": "powershell -Command \"Remove-Item -Path dist, release -Recurse -ErrorAction SilentlyContinue\" && vite build && electron-builder && powershell -Command \"New-Item -ItemType Directory -Force -Path dist\\downloads; Copy-Item -Path release\\PanelCirugias_ITEO_Setup.exe -Destination dist\\downloads; Copy-Item -Path CONFIGURAR_SINCRONIZADOR.bat -Destination dist\\downloads\""
+    "electron:dev": "concurrently \"vite\" \"electron .\"",
+    "electron:build": "vite build && electron-builder"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
@@ -21,34 +21,26 @@
     "electron-updater": "^6.8.3",
     "framer-motion": "^12.38.0",
     "html2canvas": "^1.4.1",
-    "html5-qrcode": "^2.3.8",
-    "jsbarcode": "^3.12.3",
-    "jspdf": "^2.5.1",
+    "jspdf": "^3.0.0",
     "lucide-react": "^0.344.0",
-    "qrcode.react": "^3.1.0",
     "react": "^18.2.0",
-    "react-datepicker": "^6.1.0",
     "react-dom": "^18.2.0",
-    "react-easy-crop": "^5.5.7",
     "react-router-dom": "^6.22.2",
-    "react-signature-canvas": "^1.1.0-alpha.2",
     "recharts": "^2.12.2",
-    "sonner": "^1.4.3",
-    "tailwind-merge": "^2.2.1",
-    "xlsx": "^0.18.5"
+    "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
-    "@types/react": "^18.2.56",
+    "@types/react": "^18.2.61",
     "@types/react-dom": "^18.2.19",
-    "@types/react-signature-canvas": "^1.0.7",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.18",
-    "electron": "^28.2.0",
+    "concurrently": "^8.2.2",
+    "electron": "^28.3.3",
     "electron-builder": "^24.13.3",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.2.2",
-    "vite": "^6.4.1"
+    "vite": "^5.1.4"
   },
   "build": {
     "appId": "com.iteo.panelcirugias",
@@ -56,9 +48,14 @@
     "directories": {
       "output": "release"
     },
+    "files": [
+      "dist/**/*",
+      "main.cjs",
+      "preload.cjs",
+      "sai-scraper/**/*"
+    ],
     "win": {
       "target": "nsis",
-      "icon": "public/logo-iteo.png",
       "publish": [
         {
           "provider": "github",
@@ -71,20 +68,8 @@
       "oneClick": true,
       "perMachine": true,
       "allowToChangeInstallationDirectory": false,
-      "artifactName": "PanelCirugias_ITEO_Setup.exe"
-    },
-    "files": [
-      "dist/**/*",
-      "main.cjs",
-      "preload.cjs",
-      "package.json",
-      "sai-scraper/sai-scraper/scraper.py"
-    ],
-    "extraResources": [
-      {
-        "from": "sai-scraper/sai-scraper/scraper.py",
-        "to": "scraper.py"
-      }
-    ]
+      "createDesktopShortcut": true,
+      "runAfterFinish": true
+    }
   }
 }

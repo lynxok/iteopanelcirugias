@@ -2,7 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    runOserScraper: (nuc, showBrowser) => ipcRenderer.invoke('run-oser-scraper', nuc, showBrowser),
+    runOserScraper: (nuc, showBrowser, options) => ipcRenderer.invoke('run-oser-scraper', nuc, showBrowser, options),
     stopOserScraper: () => ipcRenderer.invoke('stop-oser-scraper'),
     onScraperLog: (callback) => ipcRenderer.on('scraper-log', (event, message) => callback(message)),
     getAppInfo: () => ipcRenderer.invoke('get-app-info'),

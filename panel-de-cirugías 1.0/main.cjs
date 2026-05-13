@@ -133,7 +133,7 @@ app.on('window-all-closed', () => {
 
 // --- IPC HANDLERS PARA EL SCRAPER ---
 
-ipcMain.handle('run-oser-scraper', async (event, nuc, showBrowser) => {
+ipcMain.handle('run-oser-scraper', async (event, nuc, showBrowser, options = {}) => {
     return new Promise((resolve, reject) => {
         const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
         
@@ -146,13 +146,24 @@ ipcMain.handle('run-oser-scraper', async (event, nuc, showBrowser) => {
             ? 'scraper.py' 
             : 'scraper.py'; // Ambos se llaman igual en su respectivo CWD
 
-        console.log(`[Electron] Modo Visual: ${showBrowser}`);
+        console.log(`[Electron] Modo Visual: ${showBrowser} | Opciones:`, options);
         
         const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
         
         const args = [scraperPath, nuc];
         if (showBrowser === true) {
             args.push('--show');
+        }
+
+        // Añadir argumentos extra para auditoría histórica si existen
+        if (options.status) {
+            args.push('--status', options.status);
+        }
+        if (options.startDate) {
+            args.push('--start', options.startDate);
+        }
+        if (options.endDate) {
+            args.push('--end', options.endDate);
         }
 
         const pythonProcess = spawn(pythonCommand, args, {
