@@ -31,6 +31,7 @@ function createWindow() {
         width: 1200,
         height: 800,
         title: "Panel de Cirugías ITEO",
+        icon: path.join(__dirname, 'dist', 'favicon.png'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
             contextIsolation: true,
