@@ -142,9 +142,11 @@ ipcMain.handle('run-oser-scraper', async (event, nuc, showBrowser, options = {})
             ? path.join(__dirname, 'sai-scraper', 'sai-scraper')
             : process.resourcesPath;
             
-        const scraperPath = isDev 
-            ? 'scraper.py' 
-            : 'scraper.py'; // Ambos se llaman igual en su respectivo CWD
+        const scraperPath = 'scraper.py'; 
+
+        console.log(`[Electron] Scraper Dir: ${scraperDir}`);
+        console.log(`[Electron] Scraper Path: ${scraperPath}`);
+        event.sender.send('scraper-log', `[Electron] Iniciando scraper en: ${path.join(scraperDir, scraperPath)}`);
 
         console.log(`[Electron] Modo Visual: ${showBrowser} | Opciones:`, options);
         
