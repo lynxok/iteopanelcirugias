@@ -1,0 +1,71 @@
+Version 1.2.6 - 15/04/2026
+---------------------------
+- Implementación de filtros por cobertura en el Listado General.
+- Agregados botones para filtrar por: Todos, ART, Obra Social / Prepaga, Particular.
+- La lógica de filtrado cruza los datos con la tabla 'coverages' para determinar el tipo de cobertura.
+- Se mantuvo la estética premium y Glassmorphism en los nuevos controles.
+
+Version 2.1.35 - 16/04/2026
+---------------------------
+- Agregado ícono de información (i) en el KPI de "Ocupación Quirófano".
+- El ícono despliega un tooltip premium que detalla la lógica de cálculo (Días útiles, Franja horaria 06:30-20:00 y Algoritmo de promedios).
+
+Version 2.1.34 - 16/04/2026
+---------------------------
+- Implementada persistencia de navegación en el detalle de cirugía.
+- El sistema ahora recuerda si el usuario accedió desde el Calendario o el Kanban.
+- Al guardar o cancelar en el detalle, se redirige automáticamente a la pantalla de origen en lugar de siempre al listado general.
+
+Version 2.1.33 - 16/04/2026
+---------------------------
+- Corregido acceso a "Editar Motivo" en el banner de suspensión para usuarios ART.
+- Ahora los usuarios ART pueden modificar los detalles de una suspensión ya existente.
+
+Version 2.1.32 - 16/04/2026
+---------------------------
+- Habilitada la gestión de suspensiones y cancelaciones para usuarios con rol "Oficina ART".
+- Los usuarios ART ahora pueden suspender cirugías de su competencia directamente desde el detalle.
+- Reforzada la auditoría para incluir acciones del rol ART.
+
+Version 2.1.31 - 16/04/2026
+---------------------------
+- Corregido error visual donde los tooltips del Kanban se cortaban en el borde de la tarjeta (clipping).
+- Optimizada la visibilidad de etiquetas de estado MAT, EXAM y QX.
+- Renovada la compilación de producción para despliegue manual.
+
+Version 2.1.30 - 16/04/2026
+---------------------------
+- Implementados Tooltips interactivos en las etiquetas de estado del Kanban (MAT, EXAM, QX).
+- Los tooltips muestran detalles precisos sobre qué falta para validar (exámenes, consentimiento, aprobación de ortopedia, etc.).
+- Mejora visual con diseño premium de tooltips (fading, sombras y desenfoque de fondo).
+- Actualización de la consulta de datos para incluir estados clínicos detallados en el tablero.
+
+Version 2.1.29 - 16/04/2026
+---------------------------
+- Implementada la edición de motivos de suspensión y observaciones para cirugías ya suspendidas/canceladas.
+- Añadido banner informativo dinámico en el detalle de la cirugía.
+- Optimizado el flujo de notificaciones y auditoría para reflejar actualizaciones de suspensión.
+- Mejorado el sistema de respaldo con versión v2.1.29.
+- Corregida la superposición de botones y etiquetas en las tarjetas del Kanban.
+- Alineación de la numeración de versión con el sistema interno (v2.1.x).
+
+Versin 2.1.36
+- Gestin de permisos: Se habilit al rol 'Internacion' para suspender, cancelar (baja definitiva) y editar motivos de suspensin directamente.
+- Trazabilidad clnica: Se implement el registro automtico del nombre del usuario y la fecha/hora en cada suspensin o cancelacin.
+
+Version 2.3.18 - 29/04/2026
+---------------------------
+- Estabilización crítica del buscador de nomenclador (OSER/AOTER).
+- Implementación de fallbacks automáticos en la búsqueda para garantizar resultados.
+- Solución al error de carga de módulos dinámicos mediante limpieza de build.
+- Mejora de compatibilidad para UUID en navegadores antiguos.
+- Ajuste de permisos RLS en Supabase para el catálogo de nomenclador.
+- Gestión automática de errores de precarga (Vite Preload Error) para forzar refresco en nuevas versiones.
+
+Version 3.6.1 - 15/05/2026
+---------------------------
+- Migración del scraper de OSER a la nueva plataforma de producción.
+- Actualización de selectores de autenticación y lógica de navegación del scraper.
+- Incorporación de nuevas dependencias para gestión de QR, códigos de barras y firmas digitales.
+- Optimización del proceso de build con PNPM.
+- Sincronización completa con el repositorio de GitHub.
