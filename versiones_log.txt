@@ -75,3 +75,11 @@ Version 3.6.5 - 15/05/2026
 - Selección de estado obligatoria en OSER (Abierta/Cerrada) para evitar estados incorrectos por defecto del portal.
 - Refuerzo de la lógica de auditoría para asegurar la sincronización de cirugías finalizadas.
 - Optimización de la navegación interna del scraper.
+
+Version 3.8.0 - 19/05/2026
+---------------------------
+- Corrección de sincronización en Modo Auditoría (NUC 780774, Juana Molina) para prácticas con códigos de 6 a 8 dígitos (ej. 1210636).
+- Estabilización del scraping con retardo dinámico (Playwright sleep de 2.0s) y extracción robusta de fechas.
+- Alineación del directorio de intercambio JSON a C:\ITEO_Oser_Sync con Electron para evitar fallos de lectura silenciosos.
+- Copia y respaldo completo en 'versión anterior\v3.7.9'.
+
