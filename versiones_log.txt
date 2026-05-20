@@ -83,3 +83,8 @@ Version 3.8.0 - 19/05/2026
 - Alineación del directorio de intercambio JSON a C:\ITEO_Oser_Sync con Electron para evitar fallos de lectura silenciosos.
 - Copia y respaldo completo en 'versión anterior\v3.7.9'.
 
+Version 3.8.1 - 20/05/2026
+---------------------------
+- Corrección en la sincronización OSER para que la "Fecha Autorización" (`authorization_date`) sea siempre la fecha de referencia local comparada contra el portal, evitando el uso erróneo de la fecha planificada de cirugía (`surgery_date`) en modo auditoría.
+- Respaldo de seguridad y empaquetado de la versión anterior en 'versión anterior\v3.8.0_dist'.
+
