@@ -92,3 +92,7 @@ Version 3.8.4 - 21/05/2026
 - Corrección de empaquetado de electron-builder con app.asar.
 - Agregada dependencia explícita 'universalify' para resolver error 'Cannot find module' del proceso principal en producción.
 - Respaldo de seguridad en 'versión anterior\v3.8.4_antes_universalify_dist'.
+
+Version 3.8.5 - 21/05/2026
+---------------------------
+- Actualización forzada de versión para reparar el hash de seguridad del auto-updater (latest.yml mismatch).
