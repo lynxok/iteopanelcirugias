@@ -87,4 +87,8 @@ Version 3.8.1 - 20/05/2026
 ---------------------------
 - Corrección en la sincronización OSER para que la "Fecha Autorización" (`authorization_date`) sea siempre la fecha de referencia local comparada contra el portal, evitando el uso erróneo de la fecha planificada de cirugía (`surgery_date`) en modo auditoría.
 - Respaldo de seguridad y empaquetado de la versión anterior en 'versión anterior\v3.8.0_dist'.
-
+Version 3.8.4 - 21/05/2026
+---------------------------
+- Corrección de empaquetado de electron-builder con app.asar.
+- Agregada dependencia explícita 'universalify' para resolver error 'Cannot find module' del proceso principal en producción.
+- Respaldo de seguridad en 'versión anterior\v3.8.4_antes_universalify_dist'.
