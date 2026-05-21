@@ -96,3 +96,8 @@ Version 3.8.4 - 21/05/2026
 Version 3.8.5 - 21/05/2026
 ---------------------------
 - Actualización forzada de versión para reparar el hash de seguridad del auto-updater (latest.yml mismatch).
+
+Version 3.8.6 - 21/05/2026
+---------------------------
+- Solucionado error visual en Explorador de Procedimientos donde no aparecía el scrollbar.
+- Se reestructuraron las clases de Tailwind (h-full a absolute inset-0) para respetar límites del modal modal principal.
