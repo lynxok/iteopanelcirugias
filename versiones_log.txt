@@ -101,3 +101,8 @@ Version 3.8.6 - 21/05/2026
 ---------------------------
 - Solucionado error visual en Explorador de Procedimientos donde no aparecía el scrollbar.
 - Se reestructuraron las clases de Tailwind (h-full a absolute inset-0) para respetar límites del modal modal principal.
+
+Version 3.8.7 - 21/05/2026
+---------------------------
+- Corrección definitiva del modal Explorador de Procedimientos (arreglado el colapso del contenedor blanco aplicando min-h-0).
+- Se configuró artifactName en electron-builder para que el instalador se genere con guiones por defecto y evite el error 404 en GitHub.

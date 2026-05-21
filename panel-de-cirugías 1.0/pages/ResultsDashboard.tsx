@@ -1959,8 +1959,8 @@ const ResultsDashboard: React.FC = () => {
                         </div>
 
                         {/* Contenido Principal con Drill-Down */}
-                        <div className="relative flex-1 overflow-hidden bg-[#F8FAFC]">
-                            <div className={`absolute inset-0 overflow-y-auto custom-scrollbar p-12 transition-all duration-500 ${drillDownProcedure ? 'opacity-0 -translate-x-20 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
+                        <div className="relative flex-1 overflow-hidden min-h-0 bg-[#F8FAFC]">
+                            <div className={`h-full overflow-y-auto custom-scrollbar p-12 transition-all duration-500 ${drillDownProcedure ? 'opacity-0 -translate-x-20 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
                                 <div className="grid grid-cols-1 gap-6 pb-10">
                                     {(() => {
                                         const filtered = (predictiveStats.allDeviations || [])
