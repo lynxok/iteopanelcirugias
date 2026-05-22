@@ -106,3 +106,8 @@ Version 3.8.7 - 21/05/2026
 ---------------------------
 - Corrección definitiva del modal Explorador de Procedimientos (arreglado el colapso del contenedor blanco aplicando min-h-0).
 - Se configuró artifactName en electron-builder para que el instalador se genere con guiones por defecto y evite el error 404 en GitHub.
+
+Version 3.8.8 - 22/05/2026
+---------------------------
+- Actualización de scraper.py y OserSyncContext para separar correctamente las "Prótesis y Materiales" de las "Prácticas médicas".
+- Rediseño del modal de sincronización OSER para mostrar las prótesis en una sección separada, de solo lectura, con estilo visual propio.
