@@ -1,7 +1,7 @@
 {
   "name": "panel-de-cirugias",
   "private": true,
-  "version": "3.8.10",
+  "version": "3.8.11",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
@@ -59,7 +59,9 @@
     "files": [
       "dist/**/*",
       "main.cjs",
-      "preload.cjs"
+      "preload.cjs",
+      "package.json",
+      "node_modules/**/*"
     ],
     "extraResources": [
       {
