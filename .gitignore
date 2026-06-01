@@ -1,0 +1,42 @@
+# IGNORAR TODO POR DEFECTO
+/*
+
+# PERMITIR el README de la raíz
+!README.md
+
+# PERMITIR el proyecto del Panel de Cirugías pero filtrar su contenido
+!panel-de-cirugías 1.0/
+panel-de-cirugías 1.0/*
+!panel-de-cirugias 1.0/
+panel-de-cirugias 1.0/*
+
+# ARCHIVOS PERMITIDOS DENTRO DEL PANEL (Necesarios para el updater y build)
+!panel-de-cirugías 1.0/package.json
+!panel-de-cirugías 1.0/main.cjs
+!panel-de-cirugías 1.0/preload.cjs
+!panel-de-cirugías 1.0/.gitignore
+!panel-de-cirugías 1.0/README.md
+!panel-de-cirugías 1.0/pages/ResultsDashboard.tsx
+!panel-de-cirugías 1.0/public/version.json
+
+!panel-de-cirugias 1.0/package.json
+!panel-de-cirugias 1.0/main.cjs
+!panel-de-cirugias 1.0/preload.cjs
+!panel-de-cirugias 1.0/.gitignore
+!panel-de-cirugias 1.0/README.md
+!panel-de-cirugias 1.0/pages/ResultsDashboard.tsx
+!panel-de-cirugias 1.0/public/version.json
+
+# Ignorar carpetas pesadas dentro del panel por seguridad redundante
+panel-de-cirugías 1.0/node_modules/
+panel-de-cirugías 1.0/dist/
+panel-de-cirugías 1.0/release/
+panel-de-cirugías 1.0/src/
+panel-de-cirugías 1.0/public/
+
+panel-de-cirugias 1.0/node_modules/
+panel-de-cirugias 1.0/dist/
+panel-de-cirugias 1.0/release/
+panel-de-cirugias 1.0/src/
+panel-de-cirugias 1.0/public/
+!panel-de-cirugias 1.0/public/version.json

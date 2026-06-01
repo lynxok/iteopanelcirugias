@@ -248,6 +248,22 @@ ipcMain.handle('stop-oser-scraper', async () => {
     return { success: false, error: 'No hay ningún proceso activo.' };
 });
 
+ipcMain.handle('read-oser-data', async (event, nuc) => {
+    let baseDir = "C:\\ITEO_Oser_Sync";
+    if (!fs.existsSync(baseDir)) {
+        baseDir = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'ITEO_Oser_Sync');
+    }
+    const resultPath = path.join(baseDir, `historial_${nuc}.json`);
+    if (fs.existsSync(resultPath)) {
+        try {
+            return { success: true, data: JSON.parse(fs.readFileSync(resultPath, 'utf8')) };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    return { success: false, error: 'No data' };
+});
+
 ipcMain.handle('get-app-info', () => {
     return {
         version: app.getVersion(),

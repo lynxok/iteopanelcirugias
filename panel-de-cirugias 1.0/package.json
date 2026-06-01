@@ -1,7 +1,7 @@
 {
   "name": "panel-de-cirugias",
   "private": true,
-  "version": "3.8.13",
+  "version": "3.8.18",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
@@ -82,7 +82,8 @@
         {
           "provider": "github",
           "owner": "lynxok",
-          "repo": "iteopanelcirugias"
+          "repo": "iteopanelcirugias",
+          "releaseType": "release"
         }
       ]
     },
@@ -91,7 +92,8 @@
       "perMachine": true,
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "unicode": true
     }
   }
 }
