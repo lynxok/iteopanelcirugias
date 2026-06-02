@@ -20,26 +20,26 @@ const OserSyncModal: React.FC = () => {
 
     const filteredResults = results.filter(r => {
         const query = searchQuery.toLowerCase();
-        const patientName = (r.surgery?.patients?.full_name || '').toLowerCase();
-        const nuc = (r.surgery?.patients?.nuc || '').toLowerCase();
-        const procedure = (r.surgery?.procedure_name || '').toLowerCase();
+        const patientName = String(r.surgery?.patients?.full_name || '').toLowerCase();
+        const nuc = String(r.surgery?.patients?.nuc || '').toLowerCase();
+        const procedure = String(r.surgery?.procedure_name || '').toLowerCase();
         return patientName.includes(query) || nuc.includes(query) || procedure.includes(query);
     });
 
     const sortedResults = [...filteredResults].sort((a, b) => {
         if (sortOrder === 'asc') {
-            return (a.surgery?.patients?.full_name || '').localeCompare(b.surgery?.patients?.full_name || '');
+            return String(a.surgery?.patients?.full_name || '').localeCompare(String(b.surgery?.patients?.full_name || ''));
         }
         if (sortOrder === 'desc') {
-            return (b.surgery?.patients?.full_name || '').localeCompare(a.surgery?.patients?.full_name || '');
+            return String(b.surgery?.patients?.full_name || '').localeCompare(String(a.surgery?.patients?.full_name || ''));
         }
         return 0;
     });
 
     const filteredHistory = processedHistory.filter(item => {
         const query = searchQuery.toLowerCase();
-        const patientName = (item.patient || '').toLowerCase();
-        const nuc = (item.nuc || '').toLowerCase();
+        const patientName = String(item.patient || '').toLowerCase();
+        const nuc = String(item.nuc || '').toLowerCase();
         return patientName.includes(query) || nuc.includes(query);
     });
 
@@ -63,7 +63,7 @@ const OserSyncModal: React.FC = () => {
                 const missing = r.oserData.Practicas
                     ?.filter((p: any) => {
                         const isMatch = checkMatch(r.surgery.procedure_name, p[1], p[0]);
-                        const statusLower = (p[4] || "").toLowerCase();
+                        const statusLower = String(p[4] || "").toLowerCase();
                         const isSelectable = !statusLower.includes('rechazo') && 
                                              !statusLower.includes('rechazada') && 
                                              !statusLower.includes('no autorizada') && 
@@ -383,7 +383,7 @@ const OserSyncModal: React.FC = () => {
                                                                 const statusInfo = getStatusInfo(p[4]);
                                                                 const isMatch = checkMatch(result.surgery.procedure_name, p[1], p[0]);
                                                                 const isSelectedPractice = selectedPractices[result.surgery.id]?.includes(p[0]);
-                                                                const statusLower = (p[4] || "").toLowerCase();
+                                                                const statusLower = String(p[4] || "").toLowerCase();
                                                                 const isSelectable = !statusLower.includes('rechazo') && 
                                                                                      !statusLower.includes('rechazada') && 
                                                                                      !statusLower.includes('no autorizada') && 

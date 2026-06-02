@@ -1,7 +1,7 @@
 {
   "name": "panel-de-cirugias",
   "private": true,
-  "version": "3.8.21",
+  "version": "3.8.22",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
