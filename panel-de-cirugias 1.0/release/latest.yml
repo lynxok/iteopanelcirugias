@@ -1,9 +1,9 @@
-version: 3.8.19
+version: 3.8.20
 files:
-  - url: Panel-de-Cirugias-ITEO-Setup-3.8.19.exe
-    sha512: SQE3Qu5uKVb1B+MGDKR22jJ3LMqgTBovgkn8dr1d+xrgd3V1s1+wEXJc0ZvwpaTqHKhwiM60dqvY3R8amBeUxw==
-    size: 96345561
+  - url: Panel-de-Cirugias-ITEO-Setup-3.8.20.exe
+    sha512: is3O/ysvjd+vl6eI4SI0Lr5qodKE8daGfe5Vrvf4HaKojapIB9ahVnnn1tfP2tIcNhUXwrzd9aLReJnoAbvOJA==
+    size: 96344559
     isAdminRightsRequired: true
-path: Panel-de-Cirugias-ITEO-Setup-3.8.19.exe
-sha512: SQE3Qu5uKVb1B+MGDKR22jJ3LMqgTBovgkn8dr1d+xrgd3V1s1+wEXJc0ZvwpaTqHKhwiM60dqvY3R8amBeUxw==
-releaseDate: '2026-06-02T11:53:49.613Z'
+path: Panel-de-Cirugias-ITEO-Setup-3.8.20.exe
+sha512: is3O/ysvjd+vl6eI4SI0Lr5qodKE8daGfe5Vrvf4HaKojapIB9ahVnnn1tfP2tIcNhUXwrzd9aLReJnoAbvOJA==
+releaseDate: '2026-06-02T12:56:46.140Z'
