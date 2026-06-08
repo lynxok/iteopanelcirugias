@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v3.8.34 (2026-06-08)
+- **Gestión de Matrículas para Médicos y Residentes**:
+    - **Registro de Matrícula**: Se añadió el campo "Número de Matrícula" en el formulario de creación y edición de usuarios, disponible exclusivamente para los roles de **Médico** y **Residente**.
+    - **Base de Datos**: Se incorporó el campo `license_number` a la tabla de usuarios en la base de datos de Supabase.
+    - **Visualización**: Se muestra el indicador `M.N. [matrícula]` debajo del correo electrónico de los usuarios en la vista de lista (tanto para escritorio como para móviles).
+
+## v3.8.24 (2026-06-04)
+- **Sincronización de Anulaciones OSER**:
+    - **Diferenciación de Cirugías Anuladas**: El sincronizador ahora detecta si una cirugía cerrada en OSER fue debido a una anulación. Al sincronizar, actualiza el estado local a "CANCELADA" (`status = 'cancelled'`) y el de OSER a "ANULADA", en lugar de marcarse erróneamente como "REALIZADA / COMPLETADA".
+    - **Mejoras Visuales**: Añadidos badges (`ANULADA EN OSER` en rojo con icono de cancelación) y banners de advertencia específicos en el modal de discrepancias.
+
 ## v3.8.18 (2026-06-01)
 - **Optimización de Sincronización/Auditoría OSER**:
     - **Precisión de Fecha Programada**: Ahora el extractor de datos lee la fecha programada directamente desde la tabla `#floatIzquierda > table > tbody` del portal OSER, garantizando exactitud tanto en la sincronización normal como en el módulo de auditoría de cirugías pasadas.

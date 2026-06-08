@@ -1,3 +1,24 @@
+Version 3.8.29 - 05/06/2026
+---------------------------
+- [Frontend] Campo Sexo en Datos del Paciente: Se agregó el selector de Sexo (Masculino/Femenino) en la ficha del paciente para permitir su almacenamiento en la base de datos y automatización futura del sincronizador.
+- [Frontend] Localidad Dinámica condicional: Se ajustó el campo de Localidad para usar la lista predictiva de OSER únicamente si la provincia elegida es "Entre Ríos", actuando como texto libre convencional en cualquier otro caso.
+
+--------------------------------------------------------------------------------
+Version 3.8.28 - 05/06/2026
+---------------------------
+- [OSER Escritura] Búsqueda predictiva/autocompletado en localidad: Se implementó un filtro interactivo en las cajas de selección de localidad (tanto para el beneficiario como para el titular) que filtra la lista dinámicamente a medida que el usuario escribe, facilitando la búsqueda rápida de la localidad.
+
+
+--------------------------------------------------------------------------------
+Version 3.8.27 - 05/06/2026
+---------------------------
+
+- [OSER Sincronización] Implementada la detección de anulaciones: El scraper analiza el portal buscando marcas de anulación y actualiza el estado local a CANCELADA (status = 'cancelled') con badges rojos y advertencias específicas en el modal de discrepancias.
+- [OSER Escritura] Corregidos selectores en writer_scraper.py: Se acotaron todos los campos interactivos bajo el contenedor '.alphacube_content' de OSER para evitar excepciones de Strict Mode en Playwright por IDs duplicados en el DOM.
+- [OSER Escritura] Rediseño estético de diálogos interactivos: Las ventanas flotantes de Tkinter para ingreso y compromiso fueron modernizadas con estilos planos, paleta de colores Slate/Blue, tipografía Segoe UI y un cabezal integrado estéticamente con la WebApp.
+- [Seguridad] Credenciales seguras en Scraper: Inyección de variables OSER_USER y OSER_PASSWORD directamente a través del proceso principal de Electron, omitiendo tokens expuestos.
+
+--------------------------------------------------------------------------------
 Version 1.2.6 - 15/04/2026
 ---------------------------
 - Implementación de filtros por cobertura en el Listado General.

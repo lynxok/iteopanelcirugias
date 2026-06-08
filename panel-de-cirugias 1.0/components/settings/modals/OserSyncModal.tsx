@@ -332,6 +332,15 @@ const OserSyncModal: React.FC = () => {
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
+                                                        {result.isAnnulledInOser ? (
+                                                            <span className="bg-red-100 text-red-700 text-[10px] font-black px-3 py-1 rounded-full flex items-center gap-1.5 border border-red-200 animate-pulse">
+                                                                <span className="material-symbols-outlined text-xs">cancel</span> ANULADA EN OSER
+                                                            </span>
+                                                        ) : result.isClosedInOser ? (
+                                                            <span className="bg-red-100 text-red-700 text-[10px] font-black px-3 py-1 rounded-full flex items-center gap-1.5 border border-red-200 animate-pulse">
+                                                                <span className="material-symbols-outlined text-xs">lock</span> CERRADA EN OSER
+                                                            </span>
+                                                        ) : null}
                                                         {result.isStale && (
                                                             <span className="bg-red-100 text-red-700 text-[10px] font-black px-3 py-1 rounded-full flex items-center gap-1.5 border border-red-200">
                                                                 <span className="material-symbols-outlined text-xs">history</span> SIN AVANCES
@@ -339,6 +348,24 @@ const OserSyncModal: React.FC = () => {
                                                         )}
                                                     </div>
                                                 </div>
+
+                                                {result.isAnnulledInOser ? (
+                                                    <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-700">
+                                                        <span className="material-symbols-outlined text-red-600 animate-pulse">cancel</span>
+                                                        <div className="text-xs">
+                                                            <p className="font-black uppercase tracking-wider">⚠️ Atención: Internación Anulada</p>
+                                                            <p className="font-bold opacity-90 mt-0.5">Esta cirugía fue marcada como ANULADA en el portal de OSER. Al sincronizar, la tarjeta local del paciente se actualizará al estado "CANCELADA" y no se volverá a auditar en la próxima sincronización.</p>
+                                                        </div>
+                                                    </div>
+                                                ) : result.isClosedInOser ? (
+                                                    <div className="mx-6 mt-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-3 text-amber-700">
+                                                        <span className="material-symbols-outlined text-amber-600 animate-pulse">info</span>
+                                                        <div className="text-xs">
+                                                            <p className="font-black uppercase tracking-wider">⚠️ Atención: Internación Cerrada</p>
+                                                            <p className="font-bold opacity-90 mt-0.5">Esta cirugía fue marcada como CERRADA en el portal de OSER. Al sincronizar, la tarjeta local del paciente se actualizará al estado "REALIZADA / COMPLETADA" y no se volverá a auditar en la próxima sincronización.</p>
+                                                        </div>
+                                                    </div>
+                                                ) : null}
 
                                                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
                                                     {/* Columna Fecha */}
