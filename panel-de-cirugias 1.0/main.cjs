@@ -1,9 +1,31 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const { autoUpdater } = require('electron-updater');
+
+// --- CARGAR VARIABLES DE ENTORNO LOCALES (.env.local) ---
+const envPath = path.join(__dirname, '.env.local');
+if (fs.existsSync(envPath)) {
+    try {
+        const envConfig = fs.readFileSync(envPath, 'utf8');
+        envConfig.split('\n').forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('#')) {
+                const parts = trimmed.split('=');
+                const key = parts[0].trim();
+                const val = parts.slice(1).join('=').trim().replace(/^['"]|['"]$/g, '');
+                if (key && val) {
+                    process.env[key] = val;
+                }
+            }
+        });
+        console.log('[Electron] Variables de entorno de .env.local cargadas de forma manual.');
+    } catch (e) {
+        console.error('[Electron] Error al leer .env.local:', e);
+    }
+}
 
 let activeScraperProcess = null;
 let mainWindow;
@@ -169,8 +191,16 @@ ipcMain.handle('run-oser-scraper', async (event, nuc, showBrowser, options = {})
             args.push('--end', options.endDate);
         }
 
+        // Inyectar de forma segura variables de entorno al proceso hijo
+        const childEnv = {
+            ...process.env,
+            OSER_USER: process.env.OSER_USER || 'iteo',
+            OSER_PASSWORD: process.env.OSER_PASSWORD || 'iln518HB'
+        };
+
         const pythonProcess = spawn(pythonCommand, args, {
-            cwd: scraperDir
+            cwd: scraperDir,
+            env: childEnv
         });
 
         activeScraperProcess = pythonProcess;
@@ -239,6 +269,90 @@ ipcMain.handle('run-oser-scraper', async (event, nuc, showBrowser, options = {})
     });
 });
 
+ipcMain.handle('run-oser-writer-scraper', async (event, action, nuc, patientName, documentNumber, address, sexo, localidad) => {
+    return new Promise((resolve, reject) => {
+        const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+        
+        const scraperDir = isDev 
+            ? path.join(__dirname, 'sai-scraper', 'sai-scraper')
+            : process.resourcesPath;
+            
+        const scraperPath = 'writer_scraper.py'; 
+
+        console.log(`[Electron] Writer Scraper Dir: ${scraperDir}`);
+        console.log(`[Electron] Writer Scraper Path: ${scraperPath}`);
+        event.sender.send('scraper-log', `[Electron] Iniciando scraper de escritura en: ${path.join(scraperDir, scraperPath)}`);
+        
+        const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+        
+        const args = [
+            scraperPath, 
+            action || 'ingreso',
+            nuc, 
+            patientName || '', 
+            documentNumber || '', 
+            address || '',
+            sexo || '',
+            localidad || ''
+        ];
+
+        // Nota: Por defecto writer_scraper.py corre con show_browser=True, 
+        // a menos que queramos pasar algún flag, pero lo dejamos visible por defecto.
+
+        const childEnv = {
+            ...process.env,
+            OSER_USER: process.env.OSER_USER || 'iteo',
+            OSER_PASSWORD: process.env.OSER_PASSWORD || 'iln518HB'
+        };
+
+        const pythonProcess = spawn(pythonCommand, args, {
+            cwd: scraperDir,
+            env: childEnv
+        });
+
+        activeScraperProcess = pythonProcess;
+
+        pythonProcess.stdout.on('data', (data) => {
+            const lines = data.toString().split('\n');
+            lines.forEach(line => {
+                if (line.trim()) {
+                    event.sender.send('scraper-log', `[Escritura] ${line.trim()}`);
+                }
+            });
+        });
+
+        pythonProcess.stderr.on('data', (data) => {
+            const lines = data.toString().split('\n');
+            lines.forEach(line => {
+                if (line.trim()) {
+                    event.sender.send('scraper-log', `[Escritura ERROR] ${line.trim()}`);
+                }
+            });
+        });
+
+        pythonProcess.on('close', (code) => {
+            activeScraperProcess = null;
+            if (code === 0) {
+                resolve({ success: true, message: 'Proceso de registro e ingreso en OSER finalizado con éxito.' });
+            } else {
+                resolve({ success: false, error: `El scraper de escritura terminó con código ${code}.` });
+            }
+        });
+
+        pythonProcess.on('error', (err) => {
+            if (err.code === 'ENOENT') {
+                resolve({ 
+                    success: false, 
+                    error: `No se encontró el ejecutable de Python (${pythonCommand}). Asegúrate de que Python esté instalado.` 
+                });
+            } else {
+                resolve({ success: false, error: 'Error al iniciar el proceso: ' + err.message });
+            }
+        });
+    });
+});
+
+
 ipcMain.handle('stop-oser-scraper', async () => {
     if (activeScraperProcess) {
         activeScraperProcess.kill();
@@ -262,6 +376,33 @@ ipcMain.handle('read-oser-data', async (event, nuc) => {
         }
     }
     return { success: false, error: 'No data' };
+});
+
+ipcMain.handle('download-sincronizador', async (event) => {
+    try {
+        const sourcePath = path.join(__dirname, 'CONFIGURAR_SINCRONIZADOR.bat');
+        if (!fs.existsSync(sourcePath)) {
+            return { success: false, error: 'El archivo configurador no se encuentra en el paquete de la aplicacion.' };
+        }
+
+        const { filePath } = await dialog.showSaveDialog(mainWindow, {
+            title: 'Guardar Configurador de Sincronizador',
+            defaultPath: 'CONFIGURAR_SINCRONIZADOR.bat',
+            filters: [
+                { name: 'Archivos de Lotes de Windows (*.bat)', extensions: ['bat'] }
+            ]
+        });
+
+        if (!filePath) {
+            return { success: false, cancelled: true };
+        }
+
+        fs.copyFileSync(sourcePath, filePath);
+        return { success: true, path: filePath };
+    } catch (err) {
+        console.error('Error al descargar sincronizador:', err);
+        return { success: false, error: err.message };
+    }
 });
 
 ipcMain.handle('get-app-info', () => {

@@ -1,7 +1,7 @@
 {
   "name": "panel-de-cirugias",
   "private": true,
-  "version": "3.8.23",
+  "version": "3.8.33",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
@@ -53,7 +53,7 @@
   "build": {
     "appId": "com.iteo.panelcirugias",
     "productName": "Panel de Cirugias ITEO",
-    "artifactName": "Panel-de-Cirugias-ITEO-Setup-${version}.${ext}",
+    "artifactName": "PanelCirugias_ITEO_Setup.${ext}",
     "directories": {
       "output": "release"
     },
@@ -62,7 +62,8 @@
       "main.cjs",
       "preload.cjs",
       "package.json",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "CONFIGURAR_SINCRONIZADOR.bat"
     ],
     "extraResources": [
       {
