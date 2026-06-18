@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     runOserWriterScraper: (action, nuc, patientName, documentNumber, address, sexo, localidad) => ipcRenderer.invoke('run-oser-writer-scraper', action, nuc, patientName, documentNumber, address, sexo, localidad),
     stopOserScraper: () => ipcRenderer.invoke('stop-oser-scraper'),
     readOserData: (nuc) => ipcRenderer.invoke('read-oser-data', nuc),
+    openOserPortal: (nuc) => ipcRenderer.invoke('open-oser-portal', nuc),
     onScraperLog: (callback) => ipcRenderer.on('scraper-log', (event, message) => callback(message)),
     getAppInfo: () => ipcRenderer.invoke('get-app-info'),
     onUpdateAvailable: (callback) => ipcRenderer.on('update-available', () => callback()),
@@ -14,5 +15,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     restartApp: () => ipcRenderer.send('restart-app'),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
     onUpdateMessage: (callback) => ipcRenderer.on('update-message', (_event, value) => callback(value)),
-    downloadSincronizador: () => ipcRenderer.invoke('download-sincronizador')
+    downloadSincronizador: () => ipcRenderer.invoke('download-sincronizador'),
+    checkDependencies: () => ipcRenderer.invoke('check-dependencies'),
+    installDependencies: () => ipcRenderer.invoke('install-dependencies'),
+    onInstallProgress: (callback) => ipcRenderer.on('install-progress', (_event, msg) => callback(msg)),
+    printWristband: (surgeryId) => ipcRenderer.invoke('print-wristband', surgeryId),
+    sendReadyToPrint: (printerName) => ipcRenderer.send('ready-to-print', printerName),
+    print: (printerName) => ipcRenderer.send('ready-to-print', printerName),
+    getPrinters: () => ipcRenderer.invoke('get-printers'),
+    savePDF: (defaultName) => ipcRenderer.invoke('save-pdf', defaultName),
+    saveFile: (fileContent, defaultName, fileType) => ipcRenderer.invoke('save-file', fileContent, defaultName, fileType)
 });

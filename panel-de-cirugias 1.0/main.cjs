@@ -1,6 +1,6 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const { autoUpdater } = require('electron-updater');
@@ -69,6 +69,18 @@ function createWindow() {
         mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
     }
 
+    // Abrir enlaces externos en el navegador predeterminado del sistema
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+            if (!url.includes('localhost:3000') && !url.includes('127.0.0.1')) {
+                const { shell } = require('electron');
+                shell.openExternal(url);
+                return { action: 'deny' };
+            }
+        }
+        return { action: 'allow' };
+    });
+
     // --- EVENTOS DEL AUTO-UPDATER ---
     
     autoUpdater.on('update-available', () => {
@@ -85,6 +97,14 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    // Configurar permiso automático para cámara en la app
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+        if (permission === 'media') {
+            return callback(true);
+        }
+        callback(false);
+    });
+
     createWindow();
     
     // Solo buscamos actualizaciones si la app está empaquetada
@@ -194,6 +214,7 @@ ipcMain.handle('run-oser-scraper', async (event, nuc, showBrowser, options = {})
         // Inyectar de forma segura variables de entorno al proceso hijo
         const childEnv = {
             ...process.env,
+            PYTHONUNBUFFERED: '1',
             OSER_USER: process.env.OSER_USER || 'iteo',
             OSER_PASSWORD: process.env.OSER_PASSWORD || 'iln518HB'
         };
@@ -301,6 +322,7 @@ ipcMain.handle('run-oser-writer-scraper', async (event, action, nuc, patientName
 
         const childEnv = {
             ...process.env,
+            PYTHONUNBUFFERED: '1',
             OSER_USER: process.env.OSER_USER || 'iteo',
             OSER_PASSWORD: process.env.OSER_PASSWORD || 'iln518HB'
         };
@@ -362,6 +384,74 @@ ipcMain.handle('stop-oser-scraper', async () => {
     return { success: false, error: 'No hay ningún proceso activo.' };
 });
 
+ipcMain.handle('open-oser-portal', async (event, nuc) => {
+    return new Promise((resolve) => {
+        const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+        const scraperDir = isDev 
+            ? path.join(__dirname, 'sai-scraper', 'sai-scraper')
+            : process.resourcesPath;
+            
+        const scraperPath = 'open_oser.py'; 
+        const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+        
+        const args = [scraperPath, nuc];
+        const childEnv = {
+            ...process.env,
+            PYTHONUNBUFFERED: '1',
+            OSER_USER: process.env.OSER_USER || 'iteo',
+            OSER_PASSWORD: process.env.OSER_PASSWORD || 'iln518HB'
+        };
+
+        const pythonProcess = spawn(pythonCommand, args, {
+            cwd: scraperDir,
+            env: childEnv
+        });
+
+        let hasResolved = false;
+
+        pythonProcess.stdout.on('data', (data) => {
+            const output = data.toString().trim();
+            console.log(`[Open OSER] ${output}`);
+            
+            if (!hasResolved) {
+                if (output.includes("STATUS: OPENED")) {
+                    hasResolved = true;
+                    resolve({ success: true });
+                } else if (output.includes("STATUS: NOT_FOUND")) {
+                    hasResolved = true;
+                    resolve({ success: false, error: 'Paciente no encontrado en OSER en los estados Abiertas, Pendientes o Cerradas.' });
+                } else if (output.includes("STATUS: ERROR")) {
+                    hasResolved = true;
+                    const errorMsg = output.substring(output.indexOf("STATUS: ERROR") + 13).trim();
+                    resolve({ success: false, error: errorMsg || 'Error desconocido al buscar en el portal.' });
+                }
+            }
+        });
+
+        pythonProcess.stderr.on('data', (data) => {
+            console.error(`[Open OSER ERROR] ${data.toString().trim()}`);
+        });
+
+        pythonProcess.on('close', (code) => {
+            if (!hasResolved) {
+                hasResolved = true;
+                if (code === 0) {
+                    resolve({ success: true });
+                } else {
+                    resolve({ success: false, error: `El proceso terminó inesperadamente con código ${code}.` });
+                }
+            }
+        });
+
+        pythonProcess.on('error', (err) => {
+            if (!hasResolved) {
+                hasResolved = true;
+                resolve({ success: false, error: `Error al iniciar el script: ${err.message}` });
+            }
+        });
+    });
+});
+
 ipcMain.handle('read-oser-data', async (event, nuc) => {
     let baseDir = "C:\\ITEO_Oser_Sync";
     if (!fs.existsSync(baseDir)) {
@@ -405,9 +495,303 @@ ipcMain.handle('download-sincronizador', async (event) => {
     }
 });
 
+// Helper para ejecutar comandos de verificación
+function runCheckCommand(cmd) {
+    return new Promise((resolve) => {
+        exec(cmd, (err, stdout, stderr) => {
+            if (err) {
+                resolve({ success: false, code: err.code, stderr });
+            } else {
+                resolve({ success: true, stdout });
+            }
+        });
+    });
+}
+
+// Handler para verificar si están instalados Python, Playwright y Chromium
+ipcMain.handle('check-dependencies', async () => {
+    try {
+        // 1. Verificar Python
+        const pythonCheck = await runCheckCommand('python --version');
+        if (!pythonCheck.success) {
+            return { ok: false, status: 'missing_python' };
+        }
+
+        // 2. Verificar librería playwright en Python
+        const playwrightCheck = await runCheckCommand('python -c "import playwright"');
+        if (!playwrightCheck.success) {
+            return { ok: false, status: 'missing_playwright' };
+        }
+
+        // 3. Verificar navegadores de Playwright (Chromium)
+        const chromiumCheck = await runCheckCommand('python -c "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); b = p.chromium.launch(headless=True); b.close(); p.stop()"');
+        if (!chromiumCheck.success) {
+            return { ok: false, status: 'missing_chromium' };
+        }
+
+        return { ok: true, status: 'ok' };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    }
+});
+
+// Handler para instalar las dependencias automáticamente
+ipcMain.handle('install-dependencies', async (event) => {
+    const sendLog = (message) => {
+        event.sender.send('install-progress', message);
+    };
+
+    try {
+        // 1. Instalar Python si falta
+        const pythonCheck = await runCheckCommand('python --version');
+        if (!pythonCheck.success) {
+            sendLog('Python no detectado. Iniciando descarga del instalador...');
+            
+            const tempDir = app.getPath('temp');
+            const installerPath = path.join(tempDir, 'python_installer.exe');
+            
+            const url = 'https://www.python.org/ftp/python/3.11.5/python-3.11.5-amd64.exe';
+            const https = require('https');
+            
+            await new Promise((resolve, reject) => {
+                const file = fs.createWriteStream(installerPath);
+                https.get(url, (response) => {
+                    response.pipe(file);
+                    file.on('finish', () => {
+                        file.close(resolve);
+                    });
+                }).on('error', (err) => {
+                    fs.unlink(installerPath, () => {});
+                    reject(err);
+                });
+            });
+
+            sendLog('Instalando Python en segundo plano... Por favor espere.');
+            
+            await new Promise((resolve, reject) => {
+                const child = spawn(installerPath, ['/quiet', 'InstallAllUsers=1', 'PrependPath=1']);
+                child.on('close', (code) => {
+                    if (code === 0) resolve();
+                    else reject(new Error(`El instalador de Python falló con código ${code}`));
+                });
+                child.on('error', reject);
+            });
+            
+            try { fs.unlinkSync(installerPath); } catch(e) {}
+            sendLog('Python instalado correctamente. Configurando rutas del sistema...');
+
+            // Agregar directorios de Python al PATH del proceso actual en caliente
+            const possiblePaths = [
+                'C:\\Program Files\\Python311',
+                'C:\\Program Files\\Python311\\Scripts',
+                path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python311'),
+                path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Python', 'Python311', 'Scripts'),
+            ];
+            
+            const pathsToAdd = possiblePaths.filter(p => fs.existsSync(p));
+            if (pathsToAdd.length > 0) {
+                process.env.PATH = pathsToAdd.join(';') + ';' + process.env.PATH;
+                sendLog('Rutas de Python configuradas en memoria.');
+            } else {
+                sendLog('Python instalado. Se recomienda reiniciar la app si la sincronización falla.');
+            }
+        } else {
+            sendLog('Python ya está instalado.');
+        }
+
+        // 2. Actualizar pip
+        sendLog('Actualizando pip...');
+        await new Promise((resolve) => {
+            const child = spawn('python', ['-m', 'pip', 'install', '--upgrade', 'pip']);
+            child.on('close', resolve);
+            child.on('error', resolve);
+        });
+
+        // 3. Instalar playwright en python
+        sendLog('Instalando paquete de navegación de Playwright...');
+        await new Promise((resolve, reject) => {
+            const child = spawn('python', ['-m', 'pip', 'install', 'playwright']);
+            child.on('close', (code) => {
+                if (code === 0) resolve();
+                else reject(new Error(`La instalación de playwright falló con código ${code}`));
+            });
+            child.on('error', reject);
+        });
+
+        // 4. Instalar Chromium para playwright
+        sendLog('Descargando navegadores automatizados (Chromium)...');
+        await new Promise((resolve, reject) => {
+            const child = spawn('python', ['-m', 'playwright', 'install', 'chromium']);
+            child.on('close', (code) => {
+                if (code === 0) resolve();
+                else reject(new Error(`La instalación de Chromium falló con código ${code}`));
+            });
+            child.on('error', reject);
+        });
+
+        sendLog('¡Configuración completada con éxito!');
+        return { success: true };
+
+    } catch (error) {
+        console.error('Error configurando dependencias:', error);
+        sendLog(`ERROR: ${error.message}`);
+        return { success: false, error: error.message };
+    }
+});
+
 ipcMain.handle('get-app-info', () => {
     return {
         version: app.getVersion(),
         isElectron: true
     };
+});
+
+ipcMain.handle('print-wristband', async (event, surgeryId) => {
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    
+    // Crear una ventana oculta o visible para la pulsera
+    // (Ajustamos tamaño de acuerdo a la pulsera 280x30mm aproximado en pantalla)
+    const printWindow = new BrowserWindow({
+        width: 850,
+        height: 450,
+        title: 'Imprimir Pulsera - ITEO',
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.cjs'),
+            contextIsolation: true,
+            nodeIntegration: false
+        }
+    });
+
+    // Deshabilitar menú por defecto
+    printWindow.setMenu(null);
+
+    if (isDev) {
+        printWindow.loadURL(`http://localhost:3000/#/print-wristband/${surgeryId}`);
+    } else {
+        const { pathToFileURL } = require('url');
+        const fileUrl = pathToFileURL(path.join(__dirname, 'dist', 'index.html')).href;
+        printWindow.loadURL(`${fileUrl}#/print-wristband/${surgeryId}`);
+    }
+});
+
+// Listener para imprimir sin márgenes ni cabeceras/pies de página (evita "Consola de configuración" y "sistema...")
+ipcMain.on('ready-to-print', (event, printerName) => {
+    const webContents = event.sender;
+    const win = BrowserWindow.fromWebContents(webContents);
+    if (!win) return;
+
+    // Loggear URL y título para diagnóstico
+    console.log(`[Electron Print] ready-to-print recibido. URL del remitente: "${webContents.getURL()}" | Título: "${webContents.getTitle()}"`);
+
+    const printOptions = {
+        silent: !!printerName,
+        printBackground: true,
+        margins: {
+            marginType: 'none'
+        },
+        marginsType: 1, // Fallback legacy de Electron para forzar ocultación de cabeceras/pies de página
+        pageRanges: [{ from: 0, to: 0 }]
+    };
+
+    if (printerName) {
+        printOptions.deviceName = printerName;
+        console.log(`[Electron Print] Intentando imprimir silenciosamente en: "${printerName}"`);
+    } else {
+        console.log(`[Electron Print] No se especificó impresora. Abriendo diálogo nativo.`);
+    }
+
+    webContents.print(printOptions, (success, failureReason) => {
+        console.log(`[Electron Print] Resultado impresión: success=${success}, error=${failureReason}`);
+        if (win !== mainWindow && !win.isDestroyed()) {
+            win.close();
+        }
+    });
+});
+
+// Handler para obtener la lista de impresoras del sistema
+ipcMain.handle('get-printers', async () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        try {
+            return await mainWindow.webContents.getPrintersAsync();
+        } catch (err) {
+            console.error('Error al obtener impresoras:', err);
+            return [];
+        }
+    }
+    return [];
+});
+
+ipcMain.handle('save-pdf', async (event, defaultName) => {
+    const { filePath } = await dialog.showSaveDialog(mainWindow, {
+        title: 'Guardar PDF',
+        defaultPath: defaultName || 'Reporte.pdf',
+        filters: [
+            { name: 'Documentos PDF (*.pdf)', extensions: ['pdf'] }
+        ]
+    });
+
+    if (!filePath) {
+        return { success: false, cancelled: true };
+    }
+
+    try {
+        const data = await event.sender.printToPDF({
+            margins: {
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0
+            },
+            pageSize: 'A4',
+            printBackground: true
+        });
+
+        fs.writeFileSync(filePath, data);
+        return { success: true, path: filePath };
+    } catch (error) {
+        console.error('Error generating PDF:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('save-file', async (event, fileContent, defaultName, fileType) => {
+    const filters = [];
+    if (fileType === 'xlsx') {
+        filters.push({ name: 'Archivos Excel (*.xlsx)', extensions: ['xlsx'] });
+    } else if (fileType === 'csv') {
+        filters.push({ name: 'Archivos CSV (*.csv)', extensions: ['csv'] });
+    } else {
+        filters.push({ name: 'Todos los Archivos (*.*)', extensions: ['*'] });
+    }
+
+    const { filePath } = await dialog.showSaveDialog(mainWindow, {
+        title: 'Guardar Archivo',
+        defaultPath: defaultName || 'archivo',
+        filters: filters
+    });
+
+    if (!filePath) {
+        return { success: false, cancelled: true };
+    }
+
+    try {
+        let buffer;
+        if (typeof fileContent === 'string') {
+            if (fileContent.startsWith('data:')) {
+                const base64Data = fileContent.split(';base64,').pop();
+                buffer = Buffer.from(base64Data, 'base64');
+            } else {
+                buffer = Buffer.from(fileContent, 'utf-8');
+            }
+        } else {
+            // Buffer o Uint8Array/ArrayBuffer enviado desde el Renderer
+            buffer = Buffer.from(fileContent);
+        }
+        
+        fs.writeFileSync(filePath, buffer);
+        return { success: true, path: filePath };
+    } catch (error) {
+        console.error('Error saving file:', error);
+        return { success: false, error: error.message };
+    }
 });

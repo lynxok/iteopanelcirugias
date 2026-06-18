@@ -32,8 +32,9 @@ import {
     X,
     Database
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, LineChart, Line, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, LineChart, Line, AreaChart, Area, ScatterChart, Scatter, ZAxis, ComposedChart, Legend } from 'recharts';
 import nomencladorMapping from '../src/data/nomenclador_mapping.json';
+import * as XLSX from 'xlsx';
 import {
     format,
     startOfWeek,
@@ -110,6 +111,8 @@ const ResultsDashboard: React.FC = () => {
     const [suspensionReasons, setSuspensionReasons] = useState<{ label: string, value: number, color: string }[]>([]);
     const [efficiencyData, setEfficiencyData] = useState<any[]>([]);
     const [chartMode, setChartMode] = useState<'Occupancy' | 'Volume'>('Volume');
+    const [casuistryMode, setCasuistryMode] = useState<'Frecuencia' | 'Relacion'>('Frecuencia');
+    const [casuistryPage, setCasuistryPage] = useState<number>(0);
     const [volumeData, setVolumeData] = useState<{ label: string, value: number, isCurrent: boolean }[]>([]);
 
     const [selectedDocDetails, setSelectedDocDetails] = useState<{ doctor: string, surgeries: any[] } | null>(null);
@@ -131,6 +134,31 @@ const ResultsDashboard: React.FC = () => {
     const [holidays, setHolidays] = useState<string[]>([]);
     const [showAllProceduresModal, setShowAllProceduresModal] = useState(false);
     const [procedureSearchQuery, setProcedureSearchQuery] = useState('');
+
+    const exportCasuistryToExcel = () => {
+        if (!procedureCasuistry.length) return;
+        const exportData = procedureCasuistry.map(p => ({
+            "Procedimiento": p.name,
+            "Código Nomenclador": (p as any).code || '-',
+            "Cantidad de Cirugías": p.count,
+            "Tiempo Promedio (min)": (p as any).avgDuration || 0,
+            "Participación (%)": p.percentage
+        }));
+        
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Casuística");
+        
+        ws['!cols'] = [
+            { wch: 60 },
+            { wch: 20 },
+            { wch: 20 },
+            { wch: 20 },
+            { wch: 15 }
+        ];
+
+        XLSX.writeFile(wb, `Casuistica_Cirugias_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    };
     const [drillDownProcedure, setDrillDownProcedure] = useState<any>(null);
 
     const handleChartClick = (data: any) => {
@@ -480,7 +508,7 @@ const ResultsDashboard: React.FC = () => {
             setVolumeData(processedVolume);
 
             // 6. Casuística por Procedimiento (Unificada v3.3.1)
-            const procedureStats: Record<string, { name: string, count: number, doctors: Record<string, { name: string, count: number }> }> = {};
+            const procedureStats: Record<string, { name: string, count: number, totalDuration: number, doctors: Record<string, { name: string, count: number }> }> = {};
             
             // Solo tener en cuenta los que tienen nomenclador asociado (código entre corchetes)
             const listWithNomenclator = (surgeries || []).filter((s: any) => {
@@ -506,19 +534,31 @@ const ResultsDashboard: React.FC = () => {
                 }
 
                 if (!procedureStats[unifiedCode]) {
-                    procedureStats[unifiedCode] = { name: finalName, count: 0, doctors: {} };
+                    procedureStats[unifiedCode] = { name: finalName, count: 0, totalDuration: 0, doctors: {} };
                 }
 
                 procedureStats[unifiedCode].count += 1;
+
+                // Calcular duración real si existe, o usar estimada
+                let duration = 0;
+                if (s.actual_start_time && s.actual_end_time) {
+                    const [startH, startM] = s.actual_start_time.split(':').map(Number);
+                    const [endH, endM] = s.actual_end_time.split(':').map(Number);
+                    duration = (endH * 60 + endM) - (startH * 60 + startM);
+                } else {
+                    duration = s.estimated_duration || 0;
+                }
+                procedureStats[unifiedCode].totalDuration += duration;
 
                 // Desglose por médico
                 if (s.doctor_id && s.doctors) {
                     const docId = s.doctor_id;
                     const docName = (s.doctors as any).full_name || 'Desconocido';
                     if (!procedureStats[unifiedCode].doctors[docId]) {
-                        procedureStats[unifiedCode].doctors[docId] = { name: docName, count: 0 };
+                        procedureStats[unifiedCode].doctors[docId] = { name: docName, count: 0, totalDuration: 0 };
                     }
                     procedureStats[unifiedCode].doctors[docId].count += 1;
+                    procedureStats[unifiedCode].doctors[docId].totalDuration += duration;
                 }
             });
 
@@ -527,11 +567,15 @@ const ResultsDashboard: React.FC = () => {
                     code,
                     name: data.name,
                     count: data.count,
+                    avgDuration: Math.round(data.totalDuration / data.count),
                     percentage: totalForCasuistry > 0 ? Math.round((data.count / totalForCasuistry) * 100) : 0,
-                    doctors: Object.values(data.doctors).sort((a, b) => b.count - a.count)
+                    doctors: Object.values(data.doctors).map((d: any) => ({
+                        name: d.name,
+                        count: d.count,
+                        avg: Math.round(d.totalDuration / d.count)
+                    })).sort((a, b) => b.count - a.count)
                 }))
-                .sort((a, b) => b.count - a.count)
-                .slice(0, 10);
+                .sort((a, b) => b.count - a.count);
 
             setProcedureCasuistry(processedCasuistry);
 
@@ -617,7 +661,7 @@ const ResultsDashboard: React.FC = () => {
                     // Guardar datos de la cirugía individual para el drill-down
                     procStats.surgeries.push({
                         id: s.id,
-                        patient_name: s.patient_name || 'N/A',
+                        patient_name: s.patients?.full_name || 'N/A',
                         doctor_name: (s.doctors as any)?.full_name || 'N/A',
                         date: s.surgery_date,
                         actual_duration: actualDuration,
@@ -1300,6 +1344,7 @@ const ResultsDashboard: React.FC = () => {
                                                 onClick={() => setSelectedProcedureDetails({ 
                                                     name: d.name, 
                                                     code: d.code, 
+                                                    avgDuration: d.avg_total_time,
                                                     doctors: d.doctors,
                                                     relatedCodes: (d as any).relatedCodes 
                                                 })}
@@ -1433,15 +1478,42 @@ const ResultsDashboard: React.FC = () => {
                                 </div>
                             </div>
                         </div>
-                        
-                        <div className="bg-slate-50 px-6 py-3 rounded-2xl border border-slate-100 flex items-center gap-4">
-                            <div className="text-right">
-                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Muestra Total</p>
-                                <p className="text-xl font-black text-slate-900 leading-none">{stats.totalPeriod} <span className="text-[10px] text-slate-500">Eventos</span></p>
-                            </div>
-                            <div className="w-px h-8 bg-slate-200"></div>
-                            <div className="p-2 bg-white rounded-xl shadow-sm">
-                                <Search className="w-4 h-4 text-emerald-500" />
+
+                            <div className="flex flex-wrap items-center gap-4">
+                                {/* Botón de exportación a Excel */}
+                                <button
+                                    onClick={exportCasuistryToExcel}
+                                    className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-300 shadow-sm shadow-emerald-500/20 active:scale-95"
+                                >
+                                    <Database className="w-3.5 h-3.5" />
+                                    Exportar Tabla
+                                </button>
+                                
+                                {/* Toggle for chart view mode */}
+                                <div className="bg-slate-100 p-1.5 rounded-xl flex gap-1 border border-slate-200/50">
+                                    <button
+                                        onClick={() => setCasuistryMode('Frecuencia')}
+                                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-300 ${casuistryMode === 'Frecuencia' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                                    >
+                                        Frecuencia
+                                    </button>
+                                    <button
+                                        onClick={() => setCasuistryMode('Relacion')}
+                                        className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-300 ${casuistryMode === 'Relacion' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                                    >
+                                        Cantidad vs Duración
+                                    </button>
+                                </div>
+                                
+                                <div className="bg-slate-50 px-6 py-3 rounded-2xl border border-slate-100 flex items-center gap-4">
+                                <div className="text-right">
+                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Muestra Total</p>
+                                    <p className="text-xl font-black text-slate-900 leading-none">{stats.totalPeriod} <span className="text-[10px] text-slate-500">Eventos</span></p>
+                                </div>
+                                <div className="w-px h-8 bg-slate-200"></div>
+                                <div className="p-2 bg-white rounded-xl shadow-sm">
+                                    <Search className="w-4 h-4 text-emerald-500" />
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1450,94 +1522,254 @@ const ResultsDashboard: React.FC = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 relative z-10">
                             {/* Gráfico Principal Mejorado */}
                             <div className="lg:col-span-8">
-                                <div className="h-[450px] w-full bg-slate-50/50 rounded-3xl p-6 border border-slate-100/50">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart 
-                                            data={procedureCasuistry} 
-                                            layout="vertical" 
-                                            margin={{ left: 20, right: 60, top: 20, bottom: 20 }}
-                                            onClick={(data) => {
-                                                if (data && data.activePayload) {
-                                                    const item = data.activePayload[0].payload;
-                                                    setSelectedProcedureDetails({
-                                                        name: item.name,
-                                                        code: item.code,
-                                                        doctors: item.doctors,
-                                                        relatedCodes: Object.entries(nomencladorMapping.mapping)
-                                                            .filter(([orig, unified]) => unified === item.code)
-                                                            .map(([orig]) => orig)
-                                                    });
-                                                }
-                                            }}
-                                        >
-                                            <CartesianGrid strokeDasharray="8 8" horizontal={false} stroke="#e2e8f0" />
-                                            <XAxis type="number" hide />
-                                            <YAxis 
-                                                dataKey="name" 
-                                                type="category" 
-                                                width={1} 
-                                                hide
-                                            />
-                                            <Tooltip 
-                                                cursor={{ fill: 'rgba(16, 185, 129, 0.05)', radius: 12 }}
-                                                content={({ active, payload }) => {
-                                                    if (active && payload && payload.length) {
-                                                        const data = payload[0].payload;
-                                                        return (
-                                                            <div className="bg-white p-4 rounded-2xl shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
-                                                                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Procedimiento</p>
-                                                                <p className="text-sm font-black text-slate-900 mb-3 leading-tight">{data.name}</p>
-                                                                <div className="flex gap-4 pt-3 border-t border-slate-50">
-                                                                    <div>
-                                                                        <p className="text-[8px] text-slate-400 font-bold uppercase">Volumen</p>
-                                                                        <p className="text-lg font-black text-slate-900">{data.count}</p>
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="text-[8px] text-slate-400 font-bold uppercase">Participación</p>
-                                                                        <p className="text-lg font-black text-emerald-600">{data.percentage}%</p>
-                                                                    </div>
-                                                                </div>
-                                                                <p className="mt-3 text-[8px] text-slate-400 font-black uppercase tracking-tighter italic">Click para ver distribución x médico</p>
-                                                            </div>
-                                                        );
-                                                    }
-                                                    return null;
-                                                }}
-                                            />
-                                            <Bar 
-                                                dataKey="count" 
-                                                radius={[0, 12, 12, 0]} 
-                                                barSize={32}
-                                                className="cursor-pointer"
+                                {/* Pagination controls */}
+                                {(() => {
+                                    const PAGE_SIZE = 15;
+                                    const totalPages = Math.ceil(procedureCasuistry.length / PAGE_SIZE);
+                                    const pagedData = procedureCasuistry.slice(casuistryPage * PAGE_SIZE, (casuistryPage + 1) * PAGE_SIZE);
+                                    // Dominios fijos globales para mantener la escala constante entre páginas
+                                    const globalMaxCount = Math.max(...procedureCasuistry.map(p => p.count), 1);
+                                    const globalMaxDuration = Math.max(...procedureCasuistry.map(p => (p as any).avgDuration || 0), 1);
+                                    return (
+                                        <>
+                                            {totalPages > 1 && (
+                                                <div className="flex items-center justify-between mb-3 px-1">
+                                                    <button
+                                                        disabled={casuistryPage === 0}
+                                                        onClick={() => setCasuistryPage(p => p - 1)}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-white border-slate-200 text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700"
+                                                    >
+                                                        <ChevronLeft className="w-3.5 h-3.5" /> Anterior
+                                                    </button>
+                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                        Página {casuistryPage + 1} de {totalPages}
+                                                        <span className="ml-2 text-slate-300">·</span>
+                                                        <span className="ml-2 text-slate-500">{procedureCasuistry.length} procedimientos</span>
+                                                    </span>
+                                                    <button
+                                                        disabled={casuistryPage >= totalPages - 1}
+                                                        onClick={() => setCasuistryPage(p => p + 1)}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-white border-slate-200 text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700"
+                                                    >
+                                                        Siguiente <ChevronRight className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+                                            )}
+                                            <div className="h-[450px] w-full bg-slate-50/50 rounded-3xl p-6 border border-slate-100/50">
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    {casuistryMode === 'Frecuencia' ? (
+                                                        <BarChart 
+                                                            data={pagedData} 
+                                                            layout="vertical" 
+                                                            margin={{ left: 20, right: 60, top: 20, bottom: 20 }}
+                                                            onClick={(data) => {
+                                                                if (data && data.activePayload) {
+                                                                    const item = data.activePayload[0].payload;
+                                                                    setSelectedProcedureDetails({
+                                                                        name: item.name,
+                                                                        code: item.code,
+                                                                        avgDuration: item.avgDuration,
+                                                                        doctors: item.doctors,
+                                                                        relatedCodes: Object.entries(nomencladorMapping.mapping)
+                                                                            .filter(([orig, unified]) => unified === item.code)
+                                                                            .map(([orig]) => orig)
+                                                                    });
+                                                                }
+                                                            }}
                                             >
-                                                {procedureCasuistry.map((entry, index) => (
-                                                    <Cell 
-                                                        key={`cell-${index}`} 
-                                                        fill={`url(#barGradientCasuistry-${index})`}
-                                                        className="hover:opacity-80 transition-opacity"
-                                                    />
-                                                ))}
-                                            </Bar>
-                                            <defs>
-                                                {procedureCasuistry.map((_, index) => (
-                                                    <linearGradient key={`grad-${index}`} id={`barGradientCasuistry-${index}`} x1="0" y1="0" x2="1" y2="0">
-                                                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
-                                                        <stop offset="100%" stopColor="#059669" stopOpacity={1} />
+                                                <CartesianGrid strokeDasharray="8 8" horizontal={false} stroke="#e2e8f0" />
+                                                <XAxis type="number" hide domain={[0, globalMaxCount]} />
+                                                <YAxis 
+                                                    dataKey="name" 
+                                                    type="category" 
+                                                    width={1} 
+                                                    hide
+                                                />
+                                                <Tooltip 
+                                                    cursor={{ fill: 'rgba(16, 185, 129, 0.05)', radius: 12 }}
+                                                    content={({ active, payload }) => {
+                                                        if (active && payload && payload.length) {
+                                                            const data = payload[0].payload;
+                                                            return (
+                                                                <div className="bg-white p-4 rounded-2xl shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200">
+                                                                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Procedimiento</p>
+                                                                    <p className="text-sm font-black text-slate-900 mb-3 leading-tight">{data.name}</p>
+                                                                    <div className="flex gap-4 pt-3 border-t border-slate-50">
+                                                                        <div>
+                                                                            <p className="text-[8px] text-slate-400 font-bold uppercase">Volumen</p>
+                                                                            <p className="text-lg font-black text-slate-900">{data.count}</p>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-[8px] text-slate-400 font-bold uppercase">Participación</p>
+                                                                            <p className="text-lg font-black text-emerald-600">{data.percentage}%</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <p className="mt-3 text-[8px] text-slate-400 font-black uppercase tracking-tighter italic">Click para ver distribución x médico</p>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    }}
+                                                />
+                                                <Bar 
+                                                    dataKey="count" 
+                                                    radius={[0, 12, 12, 0]} 
+                                                    barSize={32}
+                                                    className="cursor-pointer"
+                                                >
+                                                    {pagedData.map((entry, index) => (
+                                                        <Cell 
+                                                            key={`cell-${index}`} 
+                                                            fill={`url(#barGradientCasuistry-${index})`}
+                                                            className="hover:opacity-80 transition-opacity"
+                                                        />
+                                                    ))}
+                                                </Bar>
+                                                <defs>
+                                                    {pagedData.map((_, index) => (
+                                                        <linearGradient key={`grad-${index}`} id={`barGradientCasuistry-${index}`} x1="0" y1="0" x2="1" y2="0">
+                                                            <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                                                            <stop offset="100%" stopColor="#059669" stopOpacity={1} />
+                                                        </linearGradient>
+                                                    ))}
+                                                </defs>
+                                            </BarChart>
+                                        ) : (
+                                            /* Combo Chart: Bar (cantidad) + Line (tiempo promedio) */
+                                            <ComposedChart
+                                                data={pagedData}
+                                                margin={{ top: 20, right: 50, bottom: 60, left: 10 }}
+                                                onClick={(data) => {
+                                                    if (data && data.activePayload && data.activePayload.length) {
+                                                        const item = data.activePayload[0].payload;
+                                                        setSelectedProcedureDetails({
+                                                            name: item.name,
+                                                            code: item.code,
+                                                            avgDuration: item.avgDuration,
+                                                            doctors: item.doctors,
+                                                            relatedCodes: Object.entries(nomencladorMapping.mapping)
+                                                                .filter(([, unified]) => unified === item.code)
+                                                                .map(([orig]) => orig)
+                                                        });
+                                                    }
+                                                }}
+                                            >
+                                                <defs>
+                                                    <linearGradient id="comboBarGradient" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.9} />
+                                                        <stop offset="100%" stopColor="#818cf8" stopOpacity={0.5} />
                                                     </linearGradient>
-                                                ))}
-                                            </defs>
-                                        </BarChart>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="8 8" stroke="#e2e8f0" vertical={false} />
+                                                <XAxis
+                                                    dataKey="code"
+                                                    stroke="#94a3b8"
+                                                    fontSize={9}
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                    angle={-40}
+                                                    textAnchor="end"
+                                                    interval={0}
+                                                    height={56}
+                                                    tick={{ fontWeight: 700, fill: '#475569' }}
+                                                />
+                                                {/* Left Y: Cantidad */}
+                                                <YAxis
+                                                    yAxisId="left"
+                                                    stroke="#6366f1"
+                                                    fontSize={9}
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                    domain={[0, globalMaxCount]}
+                                                    tick={{ fontWeight: 700, fill: '#6366f1' }}
+                                                    label={{ value: 'Cant. cirugías', angle: -90, position: 'insideLeft', offset: 10, fontSize: 9, fill: '#6366f1', fontWeight: '800' }}
+                                                />
+                                                {/* Right Y: Tiempo promedio */}
+                                                <YAxis
+                                                    yAxisId="right"
+                                                    orientation="right"
+                                                    stroke="#f59e0b"
+                                                    fontSize={9}
+                                                    tickLine={false}
+                                                    axisLine={false}
+                                                    unit=" m"
+                                                    domain={[0, globalMaxDuration]}
+                                                    tick={{ fontWeight: 700, fill: '#f59e0b' }}
+                                                    label={{ value: 'Tiempo prom.', angle: 90, position: 'insideRight', offset: 10, fontSize: 9, fill: '#f59e0b', fontWeight: '800' }}
+                                                />
+                                                <Tooltip
+                                                    cursor={{ fill: 'rgba(99,102,241,0.05)', radius: 8 }}
+                                                    content={({ active, payload }) => {
+                                                        if (active && payload && payload.length) {
+                                                            const d = payload[0].payload;
+                                                            return (
+                                                                <div className="bg-white p-4 rounded-2xl shadow-2xl border border-slate-100 animate-in fade-in zoom-in duration-200 max-w-[300px]">
+                                                                    <p className="text-[9px] font-black text-indigo-500 uppercase tracking-widest mb-0.5">{d.code}</p>
+                                                                    <p className="text-sm font-black text-slate-900 mb-3 leading-tight">{d.name}</p>
+                                                                    <div className="flex gap-5 pt-3 border-t border-slate-100">
+                                                                        <div>
+                                                                            <p className="text-[8px] text-slate-400 font-bold uppercase">Cant. Cirugías</p>
+                                                                            <p className="text-xl font-black text-indigo-600">{d.count}</p>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-[8px] text-slate-400 font-bold uppercase">Tiempo Promedio</p>
+                                                                            <p className="text-xl font-black text-amber-500">{d.avgDuration} min</p>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-[8px] text-slate-400 font-bold uppercase">Participación</p>
+                                                                            <p className="text-xl font-black text-slate-700">{d.percentage}%</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <p className="mt-3 text-[8px] text-slate-400 font-black uppercase tracking-tighter italic">Click para ver distribución x médico</p>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    }}
+                                                />
+                                                <Legend
+                                                    verticalAlign="top"
+                                                    align="right"
+                                                    wrapperStyle={{ fontSize: 9, fontWeight: 800, paddingBottom: 8 }}
+                                                    formatter={(value) => value === 'count' ? 'Cantidad' : 'Tiempo prom. (min)'}
+                                                />
+                                                <Bar
+                                                    yAxisId="left"
+                                                    dataKey="count"
+                                                    name="count"
+                                                    fill="url(#comboBarGradient)"
+                                                    radius={[8, 8, 0, 0]}
+                                                    barSize={28}
+                                                    className="cursor-pointer"
+                                                />
+                                                <Line
+                                                    yAxisId="right"
+                                                    type="monotone"
+                                                    dataKey="avgDuration"
+                                                    name="avgDuration"
+                                                    stroke="#f59e0b"
+                                                    strokeWidth={2.5}
+                                                    dot={{ fill: '#f59e0b', r: 5, strokeWidth: 2, stroke: 'white' }}
+                                                    activeDot={{ r: 7, stroke: '#f59e0b', strokeWidth: 2, fill: 'white' }}
+                                                    className="cursor-pointer"
+                                                />
+                                            </ComposedChart>
+                                        )}
                                     </ResponsiveContainer>
                                 </div>
+                                        </>
+                                    );
+                                })()
+                                }
                             </div>
 
                             {/* Ranking Lateral Premium */}
                             <div className="lg:col-span-4 space-y-6">
                                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.25em] mb-6 flex items-center gap-2">
                                     <TrendingUp className="w-4 h-4 text-emerald-500" />
-                                    Top 10 Procedimientos
+                                    Procedimientos Principales
                                 </h4>
-                                <div className="space-y-3">
+                                <div className="space-y-3 overflow-y-auto max-h-[380px] pr-2 scrollbar-thin">
                                     {procedureCasuistry.map((p, idx) => (
                                         <div 
                                             key={idx} 
@@ -1545,6 +1777,7 @@ const ResultsDashboard: React.FC = () => {
                                             onClick={() => setSelectedProcedureDetails({
                                                 name: p.name,
                                                 code: p.code,
+                                                avgDuration: (p as any).avgDuration,
                                                 doctors: (p as any).doctors,
                                                 relatedCodes: Object.entries(nomencladorMapping.mapping)
                                                     .filter(([orig, unified]) => unified === p.code)
@@ -1562,9 +1795,9 @@ const ResultsDashboard: React.FC = () => {
                                                     <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Código: {p.code}</p>
                                                 </div>
                                             </div>
-                                            <div className="text-right pl-4">
-                                                <div className="text-base font-black text-slate-900 leading-none">{p.count}</div>
-                                                <div className="text-[9px] font-black text-emerald-500 uppercase mt-1">{p.percentage}%</div>
+                                            <div className="text-right pl-4 shrink-0">
+                                                <div className="text-base font-black text-slate-900 leading-none">{p.count} <span className="text-[9px] text-slate-400 font-normal">cir.</span></div>
+                                                <div className="text-[10px] font-black text-indigo-600 uppercase mt-1">{p.avgDuration} min</div>
                                             </div>
                                         </div>
                                     ))}
@@ -1687,6 +1920,20 @@ const ResultsDashboard: React.FC = () => {
                                         <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest bg-white border border-slate-200 px-3 py-1 rounded-full">
                                             Código: {selectedProcedureDetails.code}
                                         </span>
+                                        {selectedProcedureDetails.doctors[0]?.avg !== undefined && (
+                                            (() => {
+                                             const doctorsList = selectedProcedureDetails.doctors || [];
+                                             const totalSurgeries = doctorsList.reduce((acc: any, d: any) => acc + d.count, 0);
+                                             const generalAvg = totalSurgeries > 0
+                                                 ? Math.round(doctorsList.reduce((acc: any, d: any) => acc + ((d.avg || 0) * d.count), 0) / totalSurgeries)
+                                                 : 0;
+                                             return (
+                                                 <span className="text-[10px] text-amber-600 font-black uppercase tracking-widest bg-amber-50 border border-amber-200 px-3 py-1 rounded-full shadow-sm">
+                                                     Tiempo Promedio General: {generalAvg} min
+                                                 </span>
+                                             );
+                                         })()
+                                        )}
                                     </div>
                                     <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-3">
                                         {selectedProcedureDetails.name}
@@ -1777,17 +2024,17 @@ const ResultsDashboard: React.FC = () => {
                                                             </div>
                                                         </div>
                                                         <div className="text-right">
-                                                            <div className="flex items-baseline justify-end gap-1">
-                                                                <p className="text-2xl font-black text-slate-900 leading-none">
-                                                                    {currentValue}
-                                                                </p>
-                                                                <p className={`text-[10px] font-black uppercase ${
-                                                                    selectedProcedureDetails.doctors[0]?.avg ? 'text-indigo-600' : 'text-emerald-600'
-                                                                }`}>
-                                                                    {doc.avg ? 'min' : 'eventos'}
-                                                                </p>
-                                                            </div>
-                                                        </div>
+                                                             <div className="flex items-baseline justify-end gap-1">
+                                                                 <p className="text-2xl font-black text-slate-900 leading-none">
+                                                                     {currentValue}
+                                                                 </p>
+                                                                 <p className={`text-[10px] font-black uppercase ${
+                                                                     selectedProcedureDetails.doctors[0]?.avg ? 'text-indigo-600' : 'text-emerald-600'
+                                                                 }`}>
+                                                                     min
+                                                                 </p>
+                                                             </div>
+                                                         </div>
                                                     </div>
                                                     
                                                     {/* Progresión Visual Premium */}

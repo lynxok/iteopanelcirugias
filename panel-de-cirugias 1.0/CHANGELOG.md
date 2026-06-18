@@ -1,5 +1,51 @@
 # CHANGELOG
 
+## v3.9.5 (2026-06-18)
+- **Gestión Avanzada de Guardias (Instrumentadores y Anestesistas)**:
+    - **Nuevos Perfiles Habilitados**: Ahora es posible designar si un **Técnico (Instrumentador)** o un **Anestesista** realiza guardias desde su panel de configuración de usuario/médico.
+    - **Panel de Configuración en Calendario**: Se habilitaron menús desplegables dedicados para "Instrumentador General" y "Anestesista General" en el panel lateral de "Guardia de la Semana".
+    - **Excepciones por Día**: Al igual que con los cirujanos, se pueden configurar sobreescrituras diarias individuales para instrumentadores y anestesistas.
+    - **Visualización Integral**: Las vistas mensual y semanal del calendario muestran ahora las tres figuras de guardia (Médico en rosa, Instrumentador en verde y Anestesista en morado) para una rápida identificación de la cobertura del equipo quirúrgico.
+
+## v3.9.4 (2026-06-18)
+- **Correcciones en App de Escritorio (Electron) e Integración con OSER**:
+    - **Solución al Bloqueo del Botón "Ver OSER"**: Se desactivó el búfer de salida de Python agregando la variable de entorno `PYTHONUNBUFFERED: '1'` al iniciar los procesos y forzando el vaciado de flujo (flush) en los prints de `open_oser.py`. Ahora, el botón "Ver OSER" se vuelve a habilitar de forma instantánea al abrir la ventana del portal OSER.
+    - **Corrección en Rutas de Logos en Electron**: Se cambiaron las rutas de imágenes con barra inclinada inicial (`/logo-iteo-azul.png` y `/logo-iteo.png`) por rutas relativas en `App.tsx`, `Login.tsx`, `SurgeryForm.tsx` y `SurgeryPDF.tsx`, solucionando el error `net::ERR_FILE_NOT_FOUND` al cargar los logos bajo el protocolo local `file://` en la aplicación de escritorio.
+
+## v3.9.3 (2026-06-17)
+- **Correcciones en Facturación e Impresión**:
+    - **Solución a Bloqueo de Impresión**: Se reemplazaron llamadas directas de `window.print()` por el puente de impresión IPC de Electron (`ready-to-print`), evitando que la app se tilde al imprimir en computadoras cliente.
+    - **Filtro de Fecha Robustecido**: Se ajustó la comparación del rango de fechas de ingreso en la planilla de internaciones para comparar únicamente strings en formato `YYYY-MM-DD`, resolviendo discrepancias horarias y de zona horaria.
+    - **Estructura del Componente**: Corregido error de sintaxis y falta de declaración del componente `Billing` que impedía la compilación de producción.
+
+## v3.8.44 (2026-06-12)
+- **Actualización de Compilación y Distribución**:
+    - Se incrementó la versión a v3.8.44 en la configuración del proyecto.
+    - Se generó un nuevo paquete de distribución web (`dist/`) optimizado para producción.
+    - Se compiló e implementó la release ejecutable para escritorio de Windows (`release/PanelCirugias_ITEO_Setup.exe`).
+
+## v3.8.43 (2026-06-11)
+- **Corrección de Imagen de Logo en Pulseras**:
+    - Se corrigió la ruta de la imagen en `PatientPrintLabel.tsx` reemplazando el nombre de archivo con espacios (`/logo iteo azul.png`) por la ruta real con guiones (`/logo-iteo-azul.png`), solucionando el error de carga del logo que causaba que se imprimiera el texto alternativo "Logo ITEO" en la pulsera.
+
+## v3.8.42 (2026-06-11)
+- **Corrección de Cabeceras/Pies de página en Impresión de Pulseras**:
+    - **Ocultación Completa de Textos del OS (como "Consola de configuración" o "sistema...")**: Se implementó una doble protección agregando la propiedad heredada `marginsType: 1` a las opciones de impresión silenciosa y manual en Electron, en combinación con el formato moderno `margins: { marginType: 'none' }`.
+    - **Control del Título del Documento**: Se fuerza dinámicamente `document.title = " "` en el renderizado de la pulsera (`PatientPrintLabel.tsx`). Esto asegura que, incluso si el driver de la impresora fuerza la impresión de cabeceras, el título esté vacío y no ensucie la cinta.
+    - **Logs de Diagnóstico de Impresión**: Se agregaron registros de consola en el proceso principal de Electron que muestran el título y la URL exacta del remitente al recibir el evento de impresión (`ready-to-print`), facilitando futuras auditorías.
+
+## v3.8.41 (2026-06-11)
+- **Limitación de Páginas por Defecto**:
+    - Se configuró la opción `pageRanges: [{ from: 0, to: 0 }]` en la llamada de impresión de Electron.
+    - Esto hace que el cuadro de diálogo de Windows preseleccione de forma predeterminada imprimir solo la primera página (Página 1), evitando impresiones accidentales de páginas en blanco.
+
+## v3.8.40 (2026-06-11)
+- **Configuración de Impresora de Pulseras Térmicas**:
+    - **Pestaña de Selección de Impresora**: Se añadió una nueva pestaña llamada "Impresoras" en la sección de Configuración (visible únicamente en la versión Desktop/Electron) que lee las impresoras instaladas en el sistema.
+    - **Impresión Silenciosa Directa**: Al elegir una impresora de la lista, la aplicación enviará el trabajo de impresión en segundo plano directamente a ese dispositivo sin abrir cuadros de diálogo intermedios.
+    - **Optimización de Formato y Remoción de Basura**: Se fuerza el modo sin márgenes (`marginType: 'none'`), lo que desactiva de raíz la impresión de cabeceras y pies de página (como "Consola de configuración" o la URL del archivo local) que distorsionaban el formato de la pulsera.
+    - **Modo Manual**: Si no se selecciona ninguna impresora preferida, se utiliza el diálogo clásico de Windows como respaldo.
+
 ## v3.8.34 (2026-06-08)
 - **Gestión de Matrículas para Médicos y Residentes**:
     - **Registro de Matrícula**: Se añadió el campo "Número de Matrícula" en el formulario de creación y edición de usuarios, disponible exclusivamente para los roles de **Médico** y **Residente**.

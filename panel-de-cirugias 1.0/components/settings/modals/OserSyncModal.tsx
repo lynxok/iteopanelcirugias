@@ -17,6 +17,26 @@ const OserSyncModal: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'discrepancies' | 'history'>('discrepancies');
     const [searchQuery, setSearchQuery] = useState('');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'none'>('none');
+    const [openingNuc, setOpeningNuc] = useState<string | null>(null);
+
+    const handleOpenOserPortal = async (nuc: string) => {
+        if (!nuc || openingNuc) return;
+        if (typeof (window as any).electronAPI !== 'undefined' && (window as any).electronAPI.openOserPortal) {
+            setOpeningNuc(nuc);
+            try {
+                const res = await (window as any).electronAPI.openOserPortal(nuc);
+                if (!res.success) {
+                    alert("Error: " + res.error);
+                }
+            } catch (err: any) {
+                alert("Error al abrir el portal de OSER: " + err.message);
+            } finally {
+                setOpeningNuc(null);
+            }
+        } else {
+            alert("Esta acción solo está disponible en la versión de escritorio de la aplicación.");
+        }
+    };
 
     const filteredResults = results.filter(r => {
         const query = searchQuery.toLowerCase();
@@ -64,13 +84,16 @@ const OserSyncModal: React.FC = () => {
                     ?.filter((p: any) => {
                         const isMatch = checkMatch(r.surgery.procedure_name, p[1], p[0]);
                         const statusLower = String(p[4] || "").toLowerCase();
+                        const isCambioCodigoBloqueante = (statusLower.includes('cambio de codigo') || statusLower.includes('cambio de código')) && 
+                                                         !statusLower.includes('aceptacion') && 
+                                                         !statusLower.includes('aceptación') && 
+                                                         !statusLower.includes('aceptado');
                         const isSelectable = !statusLower.includes('rechazo') && 
                                              !statusLower.includes('rechazada') && 
                                              !statusLower.includes('no autorizada') && 
                                              !statusLower.includes('anulado') && 
                                              !statusLower.includes('anulada') && 
-                                             !statusLower.includes('cambio de codigo') && 
-                                             !statusLower.includes('cambio de código');
+                                             !isCambioCodigoBloqueante;
                         return !isMatch && isSelectable;
                     })
                     .map((p: any) => p[0]) || [];
@@ -104,6 +127,7 @@ const OserSyncModal: React.FC = () => {
         const s = (status || "").toLowerCase();
         if (s.includes('anulado')) return { color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100', icon: 'cancel', label: 'ANULADA' };
         if (s.includes('no autorizada') || s.includes('rechazo') || s.includes('rechazada')) return { color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-100', icon: 'block', label: 'NO AUTORIZADA' };
+        if (s.includes('aceptacion') || s.includes('aceptación') || s.includes('aceptado')) return { color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100', icon: 'check_circle', label: 'AUTORIZADA' };
         if (s.includes('cambio de codigo') || s.includes('cambio de código')) return { color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-100', icon: 'swap_horiz', label: 'CAMBIO DE CÓDIGO' };
         if (s.includes('iniciada') || s.includes('pendiente')) return { color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100', icon: 'pending', label: 'INICIADA' };
         if (s.includes('autorizada') || s.includes('aprobada')) return { color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-100', icon: 'check_circle', label: 'AUTORIZADA' };
@@ -328,7 +352,34 @@ const OserSyncModal: React.FC = () => {
                                                         />
                                                         <div>
                                                             <h4 className="text-lg font-black text-slate-800 leading-none mb-1">{result.surgery.patients.full_name}</h4>
-                                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">NUC: {result.surgery.patients.nuc}</p>
+                                                            <div className="flex items-center gap-3">
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">NUC: {result.surgery.patients.nuc}</p>
+                                                                {result.surgery.patients.nuc && typeof (window as any).electronAPI !== 'undefined' && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleOpenOserPortal(String(result.surgery.patients.nuc))}
+                                                                        disabled={openingNuc !== null}
+                                                                        className={`text-[9px] font-black uppercase tracking-wider flex items-center gap-1 hover:underline ${
+                                                                            openingNuc === String(result.surgery.patients.nuc) 
+                                                                                ? 'text-slate-400 cursor-not-allowed' 
+                                                                                : 'text-sky-600 hover:text-sky-800'
+                                                                        }`}
+                                                                        title="Buscar y abrir en portal OSER"
+                                                                    >
+                                                                        {openingNuc === String(result.surgery.patients.nuc) ? (
+                                                                            <>
+                                                                                <span className="material-symbols-outlined text-[10px] animate-spin font-black">sync</span>
+                                                                                Buscando...
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <span className="material-symbols-outlined text-[10px] font-black">open_in_new</span>
+                                                                                Ver OSER
+                                                                            </>
+                                                                        )}
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
@@ -411,13 +462,16 @@ const OserSyncModal: React.FC = () => {
                                                                 const isMatch = checkMatch(result.surgery.procedure_name, p[1], p[0]);
                                                                 const isSelectedPractice = selectedPractices[result.surgery.id]?.includes(p[0]);
                                                                 const statusLower = String(p[4] || "").toLowerCase();
+                                                                const isCambioCodigoBloqueante = (statusLower.includes('cambio de codigo') || statusLower.includes('cambio de código')) && 
+                                                                                                  !statusLower.includes('aceptacion') && 
+                                                                                                  !statusLower.includes('aceptación') && 
+                                                                                                  !statusLower.includes('aceptado');
                                                                 const isSelectable = !statusLower.includes('rechazo') && 
                                                                                      !statusLower.includes('rechazada') && 
                                                                                      !statusLower.includes('no autorizada') && 
                                                                                      !statusLower.includes('anulado') && 
                                                                                      !statusLower.includes('anulada') && 
-                                                                                     !statusLower.includes('cambio de codigo') && 
-                                                                                     !statusLower.includes('cambio de código');
+                                                                                     !isCambioCodigoBloqueante;
                                                                 
                                                                 return (
                                                                     <div 
@@ -546,7 +600,26 @@ const OserSyncModal: React.FC = () => {
                                         ) : (
                                             sortedHistory.map((item, idx) => (
                                                 <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                                                    <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">{item.nuc}</td>
+                                                    <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">
+                                                        <div className="flex items-center gap-2">
+                                                            {item.nuc}
+                                                            {item.nuc && typeof (window as any).electronAPI !== 'undefined' && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleOpenOserPortal(String(item.nuc))}
+                                                                    disabled={openingNuc !== null}
+                                                                    className={`text-slate-400 hover:text-sky-600 disabled:text-slate-200 transition-colors flex items-center`}
+                                                                    title="Buscar y abrir en portal OSER"
+                                                                >
+                                                                    {openingNuc === String(item.nuc) ? (
+                                                                        <span className="material-symbols-outlined text-[12px] animate-spin font-black">sync</span>
+                                                                    ) : (
+                                                                        <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                                                                    )}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
                                                     <td className="px-6 py-4 text-sm font-black text-slate-700">{item.patient}</td>
                                                     <td className="px-6 py-4">
                                                         <div className="flex justify-center">
