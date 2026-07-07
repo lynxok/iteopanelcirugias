@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Calendar,
@@ -70,6 +70,7 @@ import { supabase } from '../src/lib/supabase';
 import { Surgery } from '../types';
 import ProgressBar from '../components/ProgressBar';
 import { utils, writeFile } from 'xlsx';
+import HospitalizationStats from './HospitalizationStats';
 
 // Helper to parse "YYYY-MM-DD" reliably into a local Date object without Timezone shifting
 const parseLocalDate = (dateStr: string) => {
@@ -81,6 +82,90 @@ const parseLocalDate = (dateStr: string) => {
 const ResultsDashboard: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState<'surgeries' | 'nursing'>('surgeries');
+
+    // --- State variables for caching raw database data ---
+    const [rawOrs, setRawOrs] = useState<any[]>([]);
+    const [rawSurgeries, setRawSurgeries] = useState<any[]>([]);
+    const [rawAdmissions, setRawAdmissions] = useState<any[]>([]);
+    const [currentPeriodSurgeries, setCurrentPeriodSurgeries] = useState<any[]>([]);
+
+    // --- Local Period Helper ---
+    const parseLocalDate = (dateStr: string) => {
+        if (!dateStr) return null;
+        const [year, month, day] = dateStr.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    };
+
+    const getPeriodDates = (
+        activePeriod: string, 
+        refDate: Date, 
+        customRange: { start: string, end: string }
+    ) => {
+        let startDate = startOfMonth(refDate);
+        let endDate = endOfMonth(refDate);
+
+        if (activePeriod === 'Esta Semana') {
+            startDate = startOfWeek(refDate, { weekStartsOn: 1 });
+            endDate = endOfWeek(refDate, { weekStartsOn: 1 });
+        } else if (activePeriod === 'Este Mes') {
+            startDate = startOfMonth(refDate);
+            endDate = endOfMonth(refDate);
+        } else if (activePeriod === 'Este Trimestre') {
+            startDate = startOfMonth(subMonths(refDate, 2));
+            endDate = endOfMonth(refDate);
+        } else if (activePeriod === 'Este Año') {
+            startDate = startOfYear(refDate);
+            endDate = endOfYear(refDate);
+        } else if (activePeriod === 'Personalizado') {
+            startDate = parseLocalDate(customRange.start) || startOfMonth(refDate);
+            endDate = parseLocalDate(customRange.end) || endOfMonth(refDate);
+        }
+        return { startDate, endDate };
+    };
+
+    // --- Card 1 (Volumen Quirúrgico) Filter States ---
+    const [isLocalVolumen, setIsLocalVolumen] = useState(false);
+    const [periodVolumen, setPeriodVolumen] = useState('Este Mes');
+    const [customRangeVolumen, setCustomRangeVolumen] = useState({
+        start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+        end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+    });
+
+    // --- Card 2 (Motivos de Suspensión) Filter States ---
+    const [isLocalSuspensiones, setIsLocalSuspensiones] = useState(false);
+    const [periodSuspensiones, setPeriodSuspensiones] = useState('Este Mes');
+    const [customRangeSuspensiones, setCustomRangeSuspensiones] = useState({
+        start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+        end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+    });
+
+    // --- Card 3 (Derivaciones) Filter States ---
+    const [periodDerivaciones, setPeriodDerivaciones] = useState('Este Trimestre');
+
+    // --- Card 4 (Operaciones por Cirujano) Filter States ---
+    const [isLocalCirujanos, setIsLocalCirujanos] = useState(false);
+    const [periodCirujanos, setPeriodCirujanos] = useState('Este Mes');
+    const [customRangeCirujanos, setCustomRangeCirujanos] = useState({
+        start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+        end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+    });
+
+    // --- Card 5 (Inteligencia Predictiva) Filter States ---
+    const [isLocalPredictiva, setIsLocalPredictiva] = useState(false);
+    const [periodPredictiva, setPeriodPredictiva] = useState('Este Mes');
+    const [customRangePredictiva, setCustomRangePredictiva] = useState({
+        start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+        end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+    });
+
+    // --- Card 6 (Casuística por Procedimiento) Filter States ---
+    const [isLocalCasuistica, setIsLocalCasuistica] = useState(false);
+    const [periodCasuistica, setPeriodCasuistica] = useState('Este Mes');
+    const [customRangeCasuistica, setCustomRangeCasuistica] = useState({
+        start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+        end: format(endOfMonth(new Date()), 'yyyy-MM-dd')
+    });
     const [period, setPeriod] = useState('Este Mes');
     const [referenceDate, setReferenceDate] = useState(new Date());
     const [globalCustomRange, setGlobalCustomRange] = useState({
@@ -200,21 +285,81 @@ const ResultsDashboard: React.FC = () => {
             navigate('/surgeries');
             return;
         }
-        fetchResults();
-    }, [period, referenceDate, globalCustomRange, user, navigate, holidays]);
+        fetchRawData();
+    }, [user, navigate]);
 
-    const fetchResults = async () => {
+    // --- Inline Component helper for Card Local Filter Controls ---
+    const renderCardFilterControls = (
+        isLocal: boolean, 
+        setIsLocal: (val: boolean) => void, 
+        localPeriod: string, 
+        setLocalPeriod: (val: string) => void, 
+        localCustomRange: { start: string, end: string }, 
+        setLocalCustomRange: (val: { start: string, end: string }) => void,
+        isDark?: boolean
+    ) => {
+        const bgContainer = isDark ? 'bg-slate-800/50 border-slate-700/50' : 'bg-slate-50 border-slate-100';
+        const textLabel = isDark ? 'text-slate-300' : 'text-slate-500';
+        const bgInput = isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-700';
+        return (
+            <div className={`flex flex-col sm:flex-row sm:items-center gap-3 p-2 rounded-xl border mt-2 ${bgContainer}`}>
+                <div className="flex items-center gap-2">
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                            type="checkbox" 
+                            checked={isLocal} 
+                            onChange={(e) => setIsLocal(e.target.checked)} 
+                            className="sr-only peer" 
+                        />
+                        <div className="w-7 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-600"></div>
+                        <span className={`ml-1.5 text-[9px] font-black uppercase ${textLabel}`}>Filtro Local</span>
+                    </label>
+                </div>
+                {isLocal && (
+                    <div className="flex flex-wrap items-center gap-2 animate-in fade-in duration-200">
+                        <select
+                            value={localPeriod}
+                            onChange={(e) => setLocalPeriod(e.target.value)}
+                            className={`rounded-lg px-2 py-0.5 text-[10px] font-bold focus:outline-none ${bgInput}`}
+                        >
+                            {['Esta Semana', 'Este Mes', 'Este Trimestre', 'Este Año', 'Personalizado'].map(p => (
+                                <option key={p} value={p} className={isDark ? 'bg-slate-800 text-white' : ''}>{p}</option>
+                            ))}
+                        </select>
+                        {localPeriod === 'Personalizado' && (
+                            <div className="flex items-center gap-1">
+                                <input
+                                    type="date"
+                                    value={localCustomRange.start}
+                                    onChange={(e) => setLocalCustomRange({ ...localCustomRange, start: e.target.value })}
+                                    className={`rounded-lg px-1.5 py-0.5 text-[9px] font-bold ${bgInput}`}
+                                />
+                                <span className="text-[9px] font-bold text-slate-400">a</span>
+                                <input
+                                    type="date"
+                                    value={localCustomRange.end}
+                                    onChange={(e) => setLocalCustomRange({ ...localCustomRange, end: e.target.value })}
+                                    className={`rounded-lg px-1.5 py-0.5 text-[9px] font-bold ${bgInput}`}
+                                />
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // --- Fetch Raw Data once (or when user changes) ---
+    const fetchRawData = async () => {
         setLoading(true);
         try {
-            // 1. Fetch ORs with goals
             const { data: ors, error: orError } = await supabase
                 .from('operating_rooms')
                 .select('id, name, daily_goal')
                 .eq('active', true);
-
             if (orError) throw orError;
+            setRawOrs(ors || []);
 
-            // 2. Fetch Surgeries with Doctor and Patient info
             const { data: surgeries, error: surError } = await supabase
                 .from('surgeries')
                 .select(`
@@ -226,6 +371,7 @@ const ResultsDashboard: React.FC = () => {
                     surgery_date,
                     procedure_name,
                     doctor_id,
+                    patient_id,
                     actual_start_time,
                     actual_end_time,
                     doctors!doctor_id (
@@ -240,501 +386,648 @@ const ResultsDashboard: React.FC = () => {
                         full_name
                     )
                 `);
-
             if (surError) throw surError;
+            setRawSurgeries(surgeries || []);
 
-            // --- Date Handling Helpers ---
-            // Helper to parse "YYYY-MM-DD" reliably into a local Date object without Timezone shifting
-            // const parseLocalDate = (dateStr: string) => {
-            //     if (!dateStr) return null;
-            //     const [year, month, day] = dateStr.split('-').map(Number);
-            //     return new Date(year, month - 1, day);
-            // };
+            const twoYearsAgoStr = format(subYears(new Date(), 2), 'yyyy-MM-dd');
+            const { data: admissionsData, error: admError } = await supabase
+                .from('hospital_admissions')
+                .select('patient_id, check_in, check_out')
+                .not('check_out', 'is', null)
+                .gte('check_in', twoYearsAgoStr);
+            if (admError) throw admError;
+            setRawAdmissions(admissionsData || []);
 
-            // --- Precise Occupancy Calculation ---
-            // 1. Determine Date Range
-            let startDate = new Date();
-            let endDate = new Date();
-            const anchor = referenceDate;
-            anchor.setHours(0, 0, 0, 0);
+        } catch (err) {
+            console.error('Error fetching raw results:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-            if (period === 'Esta Semana') {
-                startDate = startOfWeek(anchor, { weekStartsOn: 1 });
-                endDate = endOfWeek(anchor, { weekStartsOn: 1 });
-            } else if (period === 'Este Mes') {
-                startDate = startOfMonth(anchor);
-                endDate = endOfMonth(anchor);
-            } else if (period === 'Este Trimestre') {
-                startDate = startOfQuarter(anchor);
-                endDate = endOfQuarter(anchor);
-            } else if (period === 'Este Año') {
-                startDate = startOfYear(anchor);
-                endDate = endOfYear(anchor);
-            } else if (period === 'Personalizado') {
-                startDate = parseLocalDate(globalCustomRange.start) || startOfMonth(anchor);
-                endDate = parseLocalDate(globalCustomRange.end) || endOfMonth(anchor);
+    // --- Reactively calculate global KPIs ---
+    const globalStats = useMemo(() => {
+        const { startDate, endDate } = getPeriodDates(period, referenceDate, globalCustomRange);
+
+        const daysInRange = eachDayOfInterval({ start: startDate, end: endDate });
+        const usefulDays = daysInRange.filter(day => {
+            const dateStr = format(day, 'yyyy-MM-dd');
+            return !isWeekend(day) && !holidays.includes(dateStr);
+        }).length;
+        const usefulMinutes = usefulDays * 810;
+
+        const rawFiltered = rawSurgeries.filter((s: any) => {
+            if (!s.surgery_date) return false;
+            const sDate = parseLocalDate(s.surgery_date);
+            return sDate && sDate >= startDate && sDate <= endDate;
+        });
+
+        const admissionsMap = {};
+        rawAdmissions.forEach(adm => {
+            if (adm.patient_id) {
+                if (!admissionsMap[adm.patient_id]) admissionsMap[adm.patient_id] = [];
+                admissionsMap[adm.patient_id].push(adm);
             }
+        });
 
-            // 2. Count "Días Útiles" (Non-weekend, non-holiday)
-            const daysInRange = eachDayOfInterval({ start: startDate, end: endDate });
-            const usefulDays = daysInRange.filter(day => {
-                const dateStr = format(day, 'yyyy-MM-dd');
-                return !isWeekend(day) && !holidays.includes(dateStr);
+        const filteredSurgeries = rawFiltered.map((s: any) => {
+            const hasRealEndTime = !s.actual_end_time;
+            let hasCompletedAdmission = false;
+            if (s.patient_id && s.surgery_date && s.actual_start_time) {
+                const sDate = new Date(s.surgery_date + 'T12:00:00Z');
+                const adms = admissionsMap[s.patient_id] || [];
+                hasCompletedAdmission = adms.some(adm => {
+                    if (!adm.check_in || !adm.check_out) return false;
+                    const checkInDate = new Date(adm.check_in.substring(0, 10) + 'T12:00:00Z');
+                    const diffDays = Math.abs(sDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24);
+                    return diffDays <= 2;
+                });
+            }
+            const isFinished = s.status === 'completed' || hasRealEndTime || hasCompletedAdmission;
+            return { ...s, status: isFinished ? 'completed' : s.status };
+        });
+
+        const total = filteredSurgeries.length;
+        const completedCount = filteredSurgeries.filter((s: any) => s.status === 'completed').length;
+        const suspendedCount = filteredSurgeries.filter((s: any) => s.status === 'suspended').length;
+        const suspRate = total > 0 ? ((suspendedCount / total) * 100).toFixed(1) : '0';
+        const succRate = total > 0 ? ((completedCount / total) * 100).toFixed(1) : '0';
+
+        const orOccupancyData = rawOrs.map(or => {
+            const orSurgeries = filteredSurgeries.filter((s: any) => s.status === 'completed' && s.operating_room_id === or.id);
+            let usedMinutes = 0;
+            orSurgeries.forEach((s: any) => {
+                const actualStart = s.actual_start_time;
+                const actualEnd = s.actual_end_time;
+                if (actualStart && actualEnd) {
+                    const [startH, startM] = actualStart.split(':').map(Number);
+                    const [endH, endM] = actualEnd.split(':').map(Number);
+                    usedMinutes += Math.max(0, (endH * 60 + endM) - (startH * 60 + startM));
+                } else {
+                    usedMinutes += (s.estimated_duration || 0);
+                }
+            });
+            return usefulMinutes > 0 ? Math.round((usedMinutes / usefulMinutes) * 100) : 0;
+        });
+
+        const avgOcc = orOccupancyData.length > 0
+            ? Math.round(orOccupancyData.reduce((acc, curr) => acc + curr, 0) / orOccupancyData.length)
+            : 0;
+
+        return {
+            totalCompleted: completedCount,
+            successRate: `${succRate}%`,
+            suspensionRate: `${suspRate}%`,
+            avgOccupancy: `${avgOcc}%`,
+            totalPeriod: total
+        };
+    }, [rawSurgeries, rawOrs, rawAdmissions, period, referenceDate, globalCustomRange, holidays]);
+
+    // --- Reactively calculate Card 1 (Volumen Quirúrgico) ---
+    const card1Data = useMemo(() => {
+        const { startDate, endDate } = isLocalVolumen 
+            ? getPeriodDates(periodVolumen, new Date(), customRangeVolumen)
+            : getPeriodDates(period, referenceDate, globalCustomRange);
+
+        const daysInRange = eachDayOfInterval({ start: startDate, end: endDate });
+        const usefulDays = daysInRange.filter(day => {
+            const dateStr = format(day, 'yyyy-MM-dd');
+            return !isWeekend(day) && !holidays.includes(dateStr);
+        }).length;
+        const usefulMinutes = usefulDays * 810;
+
+        const rawFiltered = rawSurgeries.filter((s: any) => {
+            if (!s.surgery_date) return false;
+            const sDate = parseLocalDate(s.surgery_date);
+            return sDate && sDate >= startDate && sDate <= endDate;
+        });
+
+        const admissionsMap = {};
+        rawAdmissions.forEach(adm => {
+            if (adm.patient_id) {
+                if (!admissionsMap[adm.patient_id]) admissionsMap[adm.patient_id] = [];
+                admissionsMap[adm.patient_id].push(adm);
+            }
+        });
+
+        const filteredSurgeries = rawFiltered.map((s: any) => {
+            const hasRealEndTime = !s.actual_end_time;
+            let hasCompletedAdmission = false;
+            if (s.patient_id && s.surgery_date && s.actual_start_time) {
+                const sDate = new Date(s.surgery_date + 'T12:00:00Z');
+                const adms = admissionsMap[s.patient_id] || [];
+                hasCompletedAdmission = adms.some(adm => {
+                    if (!adm.check_in || !adm.check_out) return false;
+                    const checkInDate = new Date(adm.check_in.substring(0, 10) + 'T12:00:00Z');
+                    const diffDays = Math.abs(sDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24);
+                    return diffDays <= 2;
+                });
+            }
+            const isFinished = s.status === 'completed' || hasRealEndTime || hasCompletedAdmission;
+            return { ...s, status: isFinished ? 'completed' : s.status };
+        });
+
+        const total = filteredSurgeries.length;
+        const completedList = filteredSurgeries.filter((s: any) => s.status === 'completed');
+        const completedCount = completedList.length;
+        const suspendedCount = filteredSurgeries.filter((s: any) => s.status === 'suspended').length;
+        const suspRate = total > 0 ? ((suspendedCount / total) * 100).toFixed(1) : '0';
+        const succRate = total > 0 ? ((completedCount / total) * 100).toFixed(1) : '0';
+
+        const orOccupancyData = rawOrs.map(or => {
+            const orSurgeries = completedList.filter((s: any) => s.operating_room_id === or.id);
+            let usedMinutes = 0;
+            orSurgeries.forEach((s: any) => {
+                const actualStart = s.actual_start_time;
+                const actualEnd = s.actual_end_time;
+                if (actualStart && actualEnd) {
+                    const [startH, startM] = actualStart.split(':').map(Number);
+                    const [endH, endM] = actualEnd.split(':').map(Number);
+                    usedMinutes += Math.max(0, (endH * 60 + endM) - (startH * 60 + startM));
+                } else {
+                    usedMinutes += (s.estimated_duration || 0);
+                }
+            });
+            const value = usefulMinutes > 0 ? Math.round((usedMinutes / usefulMinutes) * 100) : 0;
+            return { name: or.name, value, goal: 100 };
+        });
+
+        const avgOcc = orOccupancyData.length > 0
+            ? Math.round(orOccupancyData.reduce((acc, curr) => acc + curr.value, 0) / orOccupancyData.length)
+            : 0;
+
+        let volumeInterval = [];
+        let displayFormat = 'MMM';
+        let checkSamefn = isSameMonth;
+        const activePeriod = isLocalVolumen ? periodVolumen : period;
+
+        if (activePeriod === 'Esta Semana') {
+            volumeInterval = eachDayOfInterval({ start: startDate, end: endDate });
+            displayFormat = 'dd/MM';
+            checkSamefn = isSameDay;
+        } else if (activePeriod === 'Este Mes') {
+            volumeInterval = eachDayOfInterval({ start: startDate, end: endDate });
+            displayFormat = 'dd/MM';
+            checkSamefn = isSameDay;
+        } else if (activePeriod === 'Este Trimestre') {
+            volumeInterval = eachMonthOfInterval({ start: startDate, end: endDate });
+            displayFormat = 'MMM';
+            checkSamefn = isSameMonth;
+        } else if (activePeriod === 'Este Año') {
+            volumeInterval = eachMonthOfInterval({ start: startDate, end: endDate });
+            displayFormat = 'MMM';
+            checkSamefn = isSameMonth;
+        } else {
+            const diffDays = differenceInDays(endDate, startDate);
+            if (diffDays <= 60) {
+                volumeInterval = eachDayOfInterval({ start: startDate, end: endDate });
+                displayFormat = 'dd/MM';
+                checkSamefn = isSameDay;
+            } else {
+                volumeInterval = eachMonthOfInterval({ start: startOfMonth(startDate), end: endDate });
+                displayFormat = 'MMM';
+                checkSamefn = isSameMonth;
+            }
+        }
+
+        const processedVolume = volumeInterval.map(date => {
+            const count = rawSurgeries.filter((s: any) => {
+                if (!s.surgery_date || s.status !== 'completed') return false;
+                const sDate = parseLocalDate(s.surgery_date);
+                return sDate && checkSamefn(sDate, date);
             }).length;
 
-            const usefulMinutes = usefulDays * 810; // 06:30 to 20:00 = 13.5h = 810m
+            return {
+                label: format(date, displayFormat, { locale: es }),
+                value: count,
+                isCurrent: checkSamefn(date, new Date()),
+                date: date
+            };
+        });
 
-            // 3. Filter surgeries for the period
-            const filteredSurgeries = (surgeries || []).filter((s: any) => {
-                if (!s.surgery_date) return false;
-                // Parse locally to avoid UTC-3 shifting it to the previous day
-                const sDate = parseLocalDate(s.surgery_date);
-                if (!sDate) return false;
-                return sDate >= startDate && sDate <= endDate;
-            });
-
-            const total = filteredSurgeries.length;
-            const completedList = filteredSurgeries.filter((s: any) => s.status === 'completed');
-            const completedCount = completedList.length;
-            const suspendedCount = filteredSurgeries.filter((s: any) => s.status === 'suspended').length;
-
-            // Calculate Stats
-            const suspRate = total > 0 ? ((suspendedCount / total) * 100).toFixed(1) : '0';
-            const succRate = total > 0 ? ((completedCount / total) * 100).toFixed(1) : '0';
-
-            // Calculate OR Occupancy
-            const orData = (ors || []).map(or => {
-                const orSurgeries = completedList.filter((s: any) => s.operating_room_id === or.id);
-
-                // Calculate total used minutes for this OR
-                let usedMinutes = 0;
-                orSurgeries.forEach((s: any) => {
-                    const actualStart = (s as any).actual_start_time;
-                    const actualEnd = (s as any).actual_end_time;
-
-                    if (actualStart && actualEnd) {
-                        const [startH, startM] = actualStart.split(':').map(Number);
-                        const [endH, endM] = actualEnd.split(':').map(Number);
-                        const duration = (endH * 60 + endM) - (startH * 60 + startM);
-                        usedMinutes += Math.max(0, duration);
-                    } else {
-                        usedMinutes += (s.estimated_duration || 0);
-                    }
-                });
-
-                const value = usefulMinutes > 0 ? Math.round((usedMinutes / usefulMinutes) * 100) : 0;
-                return { name: or.name, value, goal: 100 };
-            });
-
-            const avgOcc = orData.length > 0
-                ? Math.round(orData.reduce((acc, curr) => acc + curr.value, 0) / orData.length)
-                : 0;
-
-            setStats({
+        return {
+            volumeData: processedVolume,
+            orOccupancy: orOccupancyData,
+            stats: {
                 totalCompleted: completedCount,
                 successRate: `${succRate}%`,
                 suspensionRate: `${suspRate}%`,
                 avgOccupancy: `${avgOcc}%`,
                 totalPeriod: total
-            });
+            },
+            surgeries: filteredSurgeries
+        };
+    }, [rawSurgeries, rawOrs, rawAdmissions, isLocalVolumen, periodVolumen, customRangeVolumen, period, referenceDate, globalCustomRange, holidays]);
 
-            setOrOccupancy(orData);
+    // --- Reactively calculate Card 2 (Motivos de Suspensión) ---
+    const card2Data = useMemo(() => {
+        const { startDate, endDate } = isLocalSuspensiones
+            ? getPeriodDates(periodSuspensiones, new Date(), customRangeSuspensiones)
+            : getPeriodDates(period, referenceDate, globalCustomRange);
 
-            // Suspension Reasons
-            const suspendedList = filteredSurgeries.filter((s: any) => s.status === 'suspended');
-            const reasons = suspendedCount > 0 ? Object.entries(
-                suspendedList.filter((s: any) => s.suspension_reason)
-                    .reduce((acc: any, s: any) => {
-                        acc[s.suspension_reason] = (acc[s.suspension_reason] || 0) + 1;
-                        return acc;
-                    }, {})
-            ).map(([label, count]: [string, any]) => ({
-                label,
-                value: Math.round((count / suspendedCount) * 100),
-                color: label.includes('Material') ? 'bg-orange-500' : 'bg-blue-500'
-            })) : [];
+        const filtered = rawSurgeries.filter((s: any) => {
+            if (!s.surgery_date) return false;
+            const sDate = parseLocalDate(s.surgery_date);
+            return sDate && sDate >= startDate && sDate <= endDate;
+        });
 
-            setSuspensionReasons(reasons);
+        const suspendedList = filtered.filter((s: any) => s.status === 'suspended');
+        const suspendedCount = suspendedList.length;
 
-            // 3. Calculate Efficiency Data (Group by Doctor)
-            const doctorStats: Record<string, any> = {};
+        const reasons = suspendedCount > 0 ? Object.entries(
+            suspendedList.filter((s: any) => s.suspension_reason)
+                .reduce((acc: any, s: any) => {
+                    acc[s.suspension_reason] = (acc[s.suspension_reason] || 0) + 1;
+                    return acc;
+                }, {})
+        ).map(([label, count]) => ({
+            label,
+            value: Math.round((count / suspendedCount) * 100),
+            color: label.includes('Material') ? 'bg-orange-500' : 'bg-blue-500'
+        })) : [];
 
-            filteredSurgeries.forEach((s: any) => {
-                if (!s.doctor_id || !s.doctors) return;
-                const docName = (s.doctors as any).full_name || 'Desconocido';
-                const specialty = (s.doctors as any).specialty || 'General';
+        return reasons;
+    }, [rawSurgeries, isLocalSuspensiones, periodSuspensiones, customRangeSuspensiones, period, referenceDate, globalCustomRange]);
 
-                if (!doctorStats[s.doctor_id]) {
-                    doctorStats[s.doctor_id] = {
-                        doctor: docName,
-                        specialty: specialty,
-                        totalScheduled: 0, // Programadas (Total en el listado)
-                        totalPerformed: 0, // Realizadas (Completadas)
-                        totalDuration: 0,
-                        avgTime: 0,
-                        surgeries: [] // Store individual surgeries for drill-down
-                    };
-                }
+    // --- Reactively calculate Card 3 (Derivaciones) ---
+    const card3Data = useMemo(() => {
+        let referralStartDate = new Date();
+        let referralEndDate = new Date();
 
-                // Increment counts and store individual surgeries
-                doctorStats[s.doctor_id].totalScheduled += 1;
-                doctorStats[s.doctor_id].surgeries.push(s);
+        if (isReferralFilterIndependent) {
+            const { startDate, endDate } = getPeriodDates(periodDerivaciones, new Date(), { start: referralDateRange.start, end: referralDateRange.end });
+            referralStartDate = startDate;
+            referralEndDate = endDate;
+        } else {
+            const { startDate, endDate } = getPeriodDates(period, referenceDate, globalCustomRange);
+            referralStartDate = startDate;
+            referralEndDate = endDate;
+        }
 
-                if (s.status === 'completed') {
-                    doctorStats[s.doctor_id].totalPerformed += 1;
-                }
+        const referrals = rawSurgeries.filter((s: any) => {
+            if (!s.referring_doctor_id || !s.surgery_date) return false;
+            if (s.referring_doctor_id === s.doctor_id) return false;
+            const sDate = parseLocalDate(s.surgery_date);
+            return sDate && sDate >= referralStartDate && sDate <= referralEndDate;
+        });
 
-                doctorStats[s.doctor_id].totalDuration += (s.estimated_duration || 0);
-            });
+        const uniqueReferrers = Array.from(new Set(referrals.map((s: any) => s.referring_doctor_id)))
+            .map(id => {
+                const s = referrals.find((r: any) => r.referring_doctor_id === id);
+                return {
+                    id: id,
+                    name: s?.referring_doctor?.full_name || 'Desconocido'
+                };
+            }).sort((a, b) => a.name.localeCompare(b.name));
 
-            const processedEfficiency = Object.values(doctorStats).map((doc: any) => ({
-                doctor: doc.doctor,
-                specialty: doc.specialty,
-                scheduled: doc.totalScheduled,
-                performed: doc.totalPerformed,
-                avgTime: doc.totalScheduled > 0 ? `${Math.round(doc.totalDuration / doc.totalScheduled)} min` : '0 min',
-                complications: '0%', // Placeholder until complications tracking is added
-                performance: Math.min(5, Math.ceil(doc.totalPerformed / 5)), // Star logic based on performed
-                surgeries: doc.surgeries // Pass down the details
-            })).sort((a, b) => b.performed - a.performed);
+        return { referrals, uniqueReferrers, startDate: referralStartDate, endDate: referralEndDate };
+    }, [rawSurgeries, isReferralFilterIndependent, periodDerivaciones, referralDateRange, period, referenceDate, globalCustomRange]);
 
-            setEfficiencyData(processedEfficiency);
+    // --- Reactively calculate Card 4 (Operaciones por Cirujano) ---
+    const card4Data = useMemo(() => {
+        const { startDate, endDate } = isLocalCirujanos
+            ? getPeriodDates(periodCirujanos, new Date(), customRangeCirujanos)
+            : getPeriodDates(period, referenceDate, globalCustomRange);
 
-            // 4. Process Referral Data
-            // Determine the date range for referral data based on the independent filter
-            let referralStartDate = startDate;
-            let referralEndDate = endDate;
+        const filtered = rawSurgeries.filter((s: any) => {
+            if (!s.surgery_date) return false;
+            const sDate = parseLocalDate(s.surgery_date);
+            return sDate && sDate >= startDate && sDate <= endDate;
+        });
 
-            if (isReferralFilterIndependent) {
-                referralStartDate = parseLocalDate(referralDateRange.start) || startDate;
-                referralEndDate = parseLocalDate(referralDateRange.end) || endDate;
+        const doctorStats = {};
+        filtered.forEach((s: any) => {
+            if (!s.doctor_id || !s.doctors) return;
+            const docName = s.doctors.full_name || 'Desconocido';
+            const specialty = s.doctors.specialty || 'General';
+
+            if (!doctorStats[s.doctor_id]) {
+                doctorStats[s.doctor_id] = {
+                    doctor: docName,
+                    specialty: specialty,
+                    totalScheduled: 0,
+                    totalPerformed: 0,
+                    totalDuration: 0,
+                    surgeries: []
+                };
             }
 
-            const referrals = (surgeries || []).filter((s: any) => {
-                if (!s.referring_doctor_id || !s.surgery_date) return false;
+            doctorStats[s.doctor_id].totalScheduled += 1;
+            doctorStats[s.doctor_id].surgeries.push(s);
 
-                // Exclude self-referrals (referring doctor matches the surgeon)
-                if (s.referring_doctor_id === s.doctor_id) return false;
+            if (s.status === 'completed') {
+                doctorStats[s.doctor_id].totalPerformed += 1;
+            }
+            doctorStats[s.doctor_id].totalDuration += (s.estimated_duration || 0);
+        });
 
-                const sDate = parseLocalDate(s.surgery_date);
-                if (!sDate) return false;
-                return sDate >= referralStartDate && sDate <= referralEndDate;
-            });
-            setReferralData(referrals);
+        const processedEfficiency = Object.values(doctorStats).map((doc: any) => ({
+            doctor: doc.doctor,
+            specialty: doc.specialty,
+            scheduled: doc.totalScheduled,
+            performed: doc.totalPerformed,
+            avgTime: doc.totalScheduled > 0 ? `${Math.round(doc.totalDuration / doc.totalScheduled)} min` : '0 min',
+            complications: '0%',
+            performance: Math.min(5, Math.ceil(doc.totalPerformed / 5)),
+            surgeries: doc.surgeries
+        })).sort((a, b) => b.performed - a.performed);
 
-            // Extract unique referring doctors for dropdown
-            const uniqueReferrers = Array.from(new Set(referrals.map((s: any) => s.referring_doctor_id)))
-                .map(id => {
-                    const s = referrals.find((r: any) => r.referring_doctor_id === id);
-                    return {
-                        id: id as string,
-                        name: (s as any)?.referring_doctor?.full_name || 'Desconocido'
-                    };
-                }).sort((a, b) => a.name.localeCompare(b.name));
+        return processedEfficiency;
+    }, [rawSurgeries, isLocalCirujanos, periodCirujanos, customRangeCirujanos, period, referenceDate, globalCustomRange]);
 
-            setReferringDoctorsList(uniqueReferrers);
+    // --- Reactively calculate Card 5 (Inteligencia Predictiva) ---
+    const card5Data = useMemo(() => {
+        const { startDate, endDate } = isLocalPredictiva
+            ? getPeriodDates(periodPredictiva, new Date(), customRangePredictiva)
+            : getPeriodDates(period, referenceDate, globalCustomRange);
 
-            // 5. Calculate Volume Data (Time-series)
-            let volumeInterval: Date[] = [];
-            let displayFormat = 'MMM';
-            let checkSamefn = isSameMonth;
+        const predictiveList = rawSurgeries.filter((s: any) => 
+            s.status === 'completed' &&
+            s.actual_start_time && 
+            s.actual_end_time && 
+            (s.procedure_name || '').match(/\[(.*?)\]/) &&
+            parseLocalDate(s.surgery_date) &&
+            parseLocalDate(s.surgery_date) >= startDate &&
+            parseLocalDate(s.surgery_date) <= endDate
+        );
 
-            if (period === 'Esta Semana') {
-                const start = startOfWeek(anchor, { weekStartsOn: 1 });
-                const end = endOfWeek(anchor, { weekStartsOn: 1 });
-                volumeInterval = eachDayOfInterval({ start, end });
-                displayFormat = 'dd/MM';
-                checkSamefn = isSameDay;
-            } else if (period === 'Este Mes') {
-                const start = startOfMonth(anchor);
-                const end = endOfMonth(anchor);
-                volumeInterval = eachDayOfInterval({ start, end });
-                displayFormat = 'dd/MM';
-                checkSamefn = isSameDay;
-            } else if (period === 'Este Trimestre') {
-                const start = startOfQuarter(anchor);
-                const end = endOfQuarter(anchor);
-                volumeInterval = eachMonthOfInterval({ start, end });
-                displayFormat = 'MMM';
-                checkSamefn = isSameMonth;
-            } else if (period === 'Este Año') {
-                const start = startOfYear(anchor);
-                const end = endOfYear(anchor);
-                volumeInterval = eachMonthOfInterval({ start, end });
-                displayFormat = 'MMM';
-                checkSamefn = isSameMonth;
-            } else if (period === 'Personalizado') {
-                startDate = parseLocalDate(globalCustomRange.start) || startOfMonth(anchor);
-                endDate = parseLocalDate(globalCustomRange.end) || endOfMonth(anchor);
-                const diffDays = differenceInDays(endDate, startDate);
-                if (diffDays <= 60) {
-                    volumeInterval = eachDayOfInterval({ start: startDate, end: endDate });
-                    displayFormat = 'dd/MM';
-                    checkSamefn = isSameDay;
-                } else {
-                    volumeInterval = eachMonthOfInterval({ start: startOfMonth(startDate), end: endDate });
-                    displayFormat = 'MMM';
-                    checkSamefn = isSameMonth;
+        const deviationsByProcedure = {};
+
+        predictiveList.forEach((s: any) => {
+            const [startH, startM] = s.actual_start_time.split(':').map(Number);
+            const [endH, endM] = s.actual_end_time.split(':').map(Number);
+            const actualDuration = (endH * 60 + endM) - (startH * 60 + startM);
+            const deviation = actualDuration - (s.estimated_duration || 0);
+
+            const codeMatch = s.procedure_name.match(/\[(.*?)\]/);
+            if (!codeMatch) return;
+
+            let rawCode = codeMatch[1].trim();
+            let code = rawCode;
+            let cleanName = s.procedure_name.split('[')[0].trim();
+
+            const normalize = (c) => c.replace(/[\.\s]/g, '').toUpperCase();
+            const normalizedCode = normalize(rawCode);
+
+            const mappingKey = Object.keys(nomencladorMapping.mapping).find(k => normalize(k) === normalizedCode);
+            if (mappingKey) {
+                const unifiedId = nomencladorMapping.mapping[mappingKey];
+                code = unifiedId;
+                if (nomencladorMapping.descriptions[unifiedId]) {
+                    cleanName = nomencladorMapping.descriptions[unifiedId];
                 }
             }
 
-            const scheduledList = (surgeries || []).filter((s: any) => s.status === 'scheduled');
-            const totalSurgeriesCount = (surgeries || []).length;
+            if (!deviationsByProcedure[code]) {
+                deviationsByProcedure[code] = { 
+                    name: cleanName, 
+                    code: code, 
+                    total: 0, 
+                    count: 0, 
+                    max: 0,
+                    doctors: {},
+                    surgeries: []
+                };
+            }
 
-            const orUsage: Record<string, number> = {};
-            (surgeries || []).forEach((s: any) => {
-                const date = parseLocalDate(s.surgery_date);
-                if (date && date >= startDate && date <= endDate) {
-                    const or = s.operating_room || 'Sin Quirófano';
-                    orUsage[or] = (orUsage[or] || 0) + 1;
+            const procStats = deviationsByProcedure[code];
+            procStats.total += deviation;
+            procStats.count += 1;
+            procStats.max = Math.max(procStats.max, deviation);
+
+            if (s.doctor_id && s.doctors) {
+                const docId = s.doctor_id;
+                const docName = s.doctors.full_name || 'Desconocido';
+                
+                if (!procStats.doctors[docId]) {
+                    procStats.doctors[docId] = { name: docName, total: 0, count: 0 };
                 }
+                procStats.doctors[docId].total += actualDuration;
+                procStats.doctors[docId].count += 1;
+            }
+
+            procStats.surgeries.push({
+                id: s.id,
+                patient_name: s.patients?.full_name || 'N/A',
+                doctor_name: s.doctors?.full_name || 'N/A',
+                date: s.surgery_date,
+                actual_duration: actualDuration,
+                estimated_duration: s.estimated_duration || 0,
+                deviation: deviation
             });
-            const processedVolume = volumeInterval.map(date => {
-                const count = (surgeries || []).filter((s: any) => {
-                    if (!s.surgery_date || s.status !== 'completed') return false;
-                    const sDate = parseLocalDate(s.surgery_date);
-                    if (!sDate) return false;
-                    return checkSamefn(sDate, date);
-                }).length;
+        });
+
+        const allDeviations = Object.entries(deviationsByProcedure)
+            .map(([code, stats]) => {
+                const relatedCodes = Object.entries(nomencladorMapping.mapping)
+                    .filter(([orig, unified]) => unified === code)
+                    .map(([orig]) => orig);
+                
+                const allRelated = relatedCodes.length > 0 ? relatedCodes : [code];
 
                 return {
-                    label: format(date, displayFormat, { locale: es }),
-                    value: count,
-                    isCurrent: checkSamefn(date, anchor),
-                    date: date
-                };
-            });
-
-            setVolumeData(processedVolume);
-
-            // 6. Casuística por Procedimiento (Unificada v3.3.1)
-            const procedureStats: Record<string, { name: string, count: number, totalDuration: number, doctors: Record<string, { name: string, count: number }> }> = {};
-            
-            // Solo tener en cuenta los que tienen nomenclador asociado (código entre corchetes)
-            const listWithNomenclator = (surgeries || []).filter((s: any) => {
-                return s.status === 'completed' && (s.procedure_name || '').match(/\[(.*?)\]/);
-            });
-            
-            const totalForCasuistry = listWithNomenclator.length;
-
-            listWithNomenclator.forEach((s: any) => {
-                let code = '';
-                const codeMatch = s.procedure_name.match(/\[(.*?)\]/);
-                if (codeMatch) code = codeMatch[1];
-
-                let unifiedCode = code;
-                let finalName = s.procedure_name.split('[')[0].trim();
-
-                // Unificar usando el mapeo maestro
-                if (code && nomencladorMapping.mapping[code as keyof typeof nomencladorMapping.mapping]) {
-                    unifiedCode = nomencladorMapping.mapping[code as keyof typeof nomencladorMapping.mapping];
-                    if (nomencladorMapping.descriptions[unifiedCode as keyof typeof nomencladorMapping.descriptions]) {
-                        finalName = nomencladorMapping.descriptions[unifiedCode as keyof typeof nomencladorMapping.descriptions];
-                    }
-                }
-
-                if (!procedureStats[unifiedCode]) {
-                    procedureStats[unifiedCode] = { name: finalName, count: 0, totalDuration: 0, doctors: {} };
-                }
-
-                procedureStats[unifiedCode].count += 1;
-
-                // Calcular duración real si existe, o usar estimada
-                let duration = 0;
-                if (s.actual_start_time && s.actual_end_time) {
-                    const [startH, startM] = s.actual_start_time.split(':').map(Number);
-                    const [endH, endM] = s.actual_end_time.split(':').map(Number);
-                    duration = (endH * 60 + endM) - (startH * 60 + startM);
-                } else {
-                    duration = s.estimated_duration || 0;
-                }
-                procedureStats[unifiedCode].totalDuration += duration;
-
-                // Desglose por médico
-                if (s.doctor_id && s.doctors) {
-                    const docId = s.doctor_id;
-                    const docName = (s.doctors as any).full_name || 'Desconocido';
-                    if (!procedureStats[unifiedCode].doctors[docId]) {
-                        procedureStats[unifiedCode].doctors[docId] = { name: docName, count: 0, totalDuration: 0 };
-                    }
-                    procedureStats[unifiedCode].doctors[docId].count += 1;
-                    procedureStats[unifiedCode].doctors[docId].totalDuration += duration;
-                }
-            });
-
-            const processedCasuistry = Object.entries(procedureStats)
-                .map(([code, data]) => ({
-                    code,
-                    name: data.name,
-                    count: data.count,
-                    avgDuration: Math.round(data.totalDuration / data.count),
-                    percentage: totalForCasuistry > 0 ? Math.round((data.count / totalForCasuistry) * 100) : 0,
-                    doctors: Object.values(data.doctors).map((d: any) => ({
+                    name: stats.name,
+                    code: stats.code,
+                    relatedCodes: allRelated,
+                    avg: Math.round(stats.total / stats.count),
+                    avg_total_time: Math.round(Object.values(stats.doctors).reduce((acc, d) => acc + d.total, 0) / stats.count),
+                    max: stats.max,
+                    count: stats.count,
+                    doctors: Object.values(stats.doctors).map(d => ({
                         name: d.name,
-                        count: d.count,
-                        avg: Math.round(d.totalDuration / d.count)
-                    })).sort((a, b) => b.count - a.count)
-                }))
-                .sort((a, b) => b.count - a.count);
+                        avg: Math.round(d.total / d.count),
+                        count: d.count
+                    })).sort((a, b) => b.count - a.count),
+                    surgeries: stats.surgeries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                };
+            })
+            .filter(d => d.count >= 1) 
+            .sort((a, b) => b.avg - a.avg);
 
-            setProcedureCasuistry(processedCasuistry);
+        const topDeviations = allDeviations.slice(0, 5);
 
-            // --- Predictive Analytics (SuperAdmin Only) ---
-            if (user?.role === 'SuperAdmin') {
-                const predictiveList = (surgeries || []).filter(s => 
-                    s.status === 'completed' &&
-                    s.actual_start_time && 
-                    s.actual_end_time && 
-                    (s.procedure_name || '').match(/\[(.*?)\]/)
-                );
+        const accuracyData = [...predictiveList]
+            .sort((a, b) => new Date(a.surgery_date).getTime() - new Date(b.surgery_date).getTime())
+            .map((s: any) => {
+                const [startH, startM] = s.actual_start_time.split(':').map(Number);
+                const [endH, endM] = s.actual_end_time.split(':').map(Number);
+                const actual = (endH * 60 + endM) - (startH * 60 + startM);
+                return {
+                    label: s.procedure_name?.split('[')[0].trim() || 'Cirugía',
+                    fullProcedure: s.procedure_name || 'Sin nombre',
+                    date: s.surgery_date ? format(new Date(s.surgery_date + 'T12:00:00'), 'dd/MM') : 'N/A',
+                    estimated: s.estimated_duration || 0,
+                    actual: actual,
+                    deviation: actual - (s.estimated_duration || 0)
+                };
+            }).slice(-10);
 
-                // Calculate deviations
-                const deviationsByProcedure: Record<string, { 
-                    name: string, 
-                    code: string, 
-                    total: number, 
-                    count: number, 
-                    max: number,
-                    doctors: Record<string, { name: string, total: number, count: number }>,
-                    surgeries: any[] 
-                }> = {};
+        return {
+            topDeviations,
+            allDeviations,
+            accuracyData,
+            avgDeviation: predictiveList.length > 0
+                ? Math.round(predictiveList.reduce((acc, s) => {
+                    const [sh, sm] = s.actual_start_time.split(':').map(Number);
+                    const [eh, em] = s.actual_end_time.split(':').map(Number);
+                    return acc + ((eh * 60 + em) - (sh * 60 + sm) - (s.estimated_duration || 0));
+                }, 0) / predictiveList.length)
+                : 0
+        };
+    }, [rawSurgeries, isLocalPredictiva, periodPredictiva, customRangePredictiva, period, referenceDate, globalCustomRange, user?.role]);
 
-                predictiveList.forEach((s: any) => {
-                    const [startH, startM] = (s as any).actual_start_time.split(':').map(Number);
-                    const [endH, endM] = (s as any).actual_end_time.split(':').map(Number);
-                    const actualDuration = (endH * 60 + endM) - (startH * 60 + startM);
-                    const deviation = actualDuration - (s.estimated_duration || 0);
+    // --- Reactively calculate Card 6 (Casuística por Procedimiento) ---
+    const card6Data = useMemo(() => {
+        const { startDate, endDate } = isLocalCasuistica
+            ? getPeriodDates(periodCasuistica, new Date(), customRangeCasuistica)
+            : getPeriodDates(period, referenceDate, globalCustomRange);
 
-                    // Extraer código del nomenclador [CÓDIGO]
-                    const codeMatch = (s.procedure_name || '').match(/\[(.*?)\]/);
-                    if (!codeMatch) return; // Solo procesar si tiene código
+        const filtered = rawSurgeries.filter((s: any) => {
+            if (!s.surgery_date) return false;
+            const sDate = parseLocalDate(s.surgery_date);
+            return sDate && sDate >= startDate && sDate <= endDate;
+        });
 
-                    let rawCode = codeMatch[1].trim();
-                    let code = rawCode;
-                    let cleanName = s.procedure_name.split('[')[0].trim();
+        const procedureStats = {};
+        
+        const listWithNomenclator = filtered.filter((s: any) => {
+            return s.status === 'completed' && (s.procedure_name || '').match(/\[(.*?)\]/);
+        });
+        
+        const totalForCasuistry = listWithNomenclator.length;
 
-                    // Función para normalizar códigos (quitar puntos y espacios para comparar)
-                    const normalize = (c: string) => c.replace(/[\.\s]/g, '').toUpperCase();
-                    const normalizedCode = normalize(rawCode);
+        listWithNomenclator.forEach((s: any) => {
+            let code = '';
+            const codeMatch = s.procedure_name.match(/\[(.*?)\]/);
+            if (codeMatch) code = codeMatch[1];
 
-                    // v3.2.8: Unificar códigos usando el mapeo de nomencladores para Inteligencia Predictiva
-                    // Buscamos coincidencia normalizada en el mapeo
-                    const mappingKey = Object.keys(nomencladorMapping.mapping).find(k => normalize(k) === normalizedCode);
+            let unifiedCode = code;
+            let finalName = s.procedure_name.split('[')[0].trim();
 
-                    if (mappingKey) {
-                        const unifiedId = (nomencladorMapping.mapping as any)[mappingKey];
-                        code = unifiedId;
-                        // Opcional: Usar la descripción unificada si existe para que el nombre sea consistente
-                        if ((nomencladorMapping.descriptions as any)[unifiedId]) {
-                            cleanName = (nomencladorMapping.descriptions as any)[unifiedId];
-                        }
-                    }
-
-                    if (!deviationsByProcedure[code]) {
-                        deviationsByProcedure[code] = { 
-                            name: cleanName, 
-                            code: code, 
-                            total: 0, 
-                            count: 0, 
-                            max: 0,
-                            doctors: {},
-                            surgeries: []
-                        };
-                    }
-
-                    const procStats = deviationsByProcedure[code];
-                    procStats.total += deviation;
-                    procStats.count += 1;
-                    procStats.max = Math.max(procStats.max, deviation);
-
-                    if (s.doctor_id && s.doctors) {
-                        const docId = s.doctor_id;
-                        const docName = (s.doctors as any).full_name || 'Desconocido';
-                        
-                        if (!procStats.doctors[docId]) {
-                            procStats.doctors[docId] = { name: docName, total: 0, count: 0 };
-                        }
-                        procStats.doctors[docId].total += actualDuration;
-                        procStats.doctors[docId].count += 1;
-                    }
-
-                    // Guardar datos de la cirugía individual para el drill-down
-                    procStats.surgeries.push({
-                        id: s.id,
-                        patient_name: s.patients?.full_name || 'N/A',
-                        doctor_name: (s.doctors as any)?.full_name || 'N/A',
-                        date: s.surgery_date,
-                        actual_duration: actualDuration,
-                        estimated_duration: s.estimated_duration || 0,
-                        deviation: deviation
-                    });
-                });
-
-                const allDeviations = Object.entries(deviationsByProcedure)
-                    .map(([code, stats]) => {
-                        const relatedCodes = Object.entries(nomencladorMapping.mapping)
-                            .filter(([orig, unified]) => unified === code)
-                            .map(([orig]) => orig);
-                        
-                        const allRelated = relatedCodes.length > 0 ? relatedCodes : [code];
-
-                        return {
-                            name: stats.name,
-                            code: stats.code,
-                            relatedCodes: allRelated,
-                            avg: Math.round(stats.total / stats.count),
-                            avg_total_time: Math.round(Object.values(stats.doctors).reduce((acc, d) => acc + d.total, 0) / stats.count),
-                            max: stats.max,
-                            count: stats.count,
-                            doctors: Object.values(stats.doctors).map(d => ({
-                                name: d.name,
-                                avg: Math.round(d.total / d.count),
-                                count: d.count
-                            })).sort((a, b) => b.count - a.count),
-                            surgeries: stats.surgeries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                        };
-                    })
-                    .filter(d => d.count >= 1) 
-                    .sort((a, b) => b.avg - a.avg);
-
-                const topDeviations = allDeviations.slice(0, 5);
-
-                const accuracyData = [...predictiveList]
-                    .sort((a, b) => new Date(a.surgery_date).getTime() - new Date(b.surgery_date).getTime())
-                    .map((s: any) => {
-                        const [startH, startM] = (s as any).actual_start_time.split(':').map(Number);
-                        const [endH, endM] = (s as any).actual_end_time.split(':').map(Number);
-                        const actual = (endH * 60 + endM) - (startH * 60 + startM);
-                        return {
-                            label: s.procedure_name?.split('[')[0].trim() || 'Cirugía',
-                            fullProcedure: s.procedure_name || 'Sin nombre',
-                            date: s.surgery_date ? format(new Date(s.surgery_date + 'T12:00:00'), 'dd/MM') : 'N/A',
-                            estimated: s.estimated_duration || 0,
-                            actual: actual,
-                            deviation: actual - (s.estimated_duration || 0)
-                        };
-                    }).slice(-10); // Last 10 for chart
-
-                setPredictiveStats({
-                    topDeviations,
-                    allDeviations, // Added for the global explorer
-                    accuracyData,
-                    avgDeviation: predictiveList.length > 0
-                        ? Math.round(predictiveList.reduce((acc: any, s: any) => {
-                            const [sh, sm] = (s as any).actual_start_time.split(':').map(Number);
-                            const [eh, em] = (s as any).actual_end_time.split(':').map(Number);
-                            return acc + ((eh * 60 + em) - (sh * 60 + sm) - (s.estimated_duration || 0));
-                        }, 0) / predictiveList.length)
-                        : 0
-                });
+            if (code && nomencladorMapping.mapping[code]) {
+                unifiedCode = nomencladorMapping.mapping[code];
+                if (nomencladorMapping.descriptions[unifiedCode]) {
+                    finalName = nomencladorMapping.descriptions[unifiedCode];
+                }
             }
 
-        } catch (err) {
-            console.error('Error fetching results:', err);
-        } finally {
-            setLoading(false);
+            if (!procedureStats[unifiedCode]) {
+                procedureStats[unifiedCode] = { name: finalName, count: 0, totalDuration: 0, doctors: {} };
+            }
+
+            procedureStats[unifiedCode].count += 1;
+
+            let duration = 0;
+            if (s.actual_start_time && s.actual_end_time) {
+                const [startH, startM] = s.actual_start_time.split(':').map(Number);
+                const [endH, endM] = s.actual_end_time.split(':').map(Number);
+                duration = (endH * 60 + endM) - (startH * 60 + startM);
+            } else {
+                duration = s.estimated_duration || 0;
+            }
+            procedureStats[unifiedCode].totalDuration += duration;
+
+            if (s.doctor_id && s.doctors) {
+                const docId = s.doctor_id;
+                const docName = s.doctors.full_name || 'Desconocido';
+                if (!procedureStats[unifiedCode].doctors[docId]) {
+                    procedureStats[unifiedCode].doctors[docId] = { name: docName, count: 0, totalDuration: 0 };
+                }
+                procedureStats[unifiedCode].doctors[docId].count += 1;
+                procedureStats[unifiedCode].doctors[docId].totalDuration += duration;
+            }
+        });
+
+        const processedCasuistry = Object.entries(procedureStats)
+            .map(([code, data]) => ({
+                code,
+                name: data.name,
+                count: data.count,
+                avgDuration: Math.round(data.totalDuration / data.count),
+                percentage: totalForCasuistry > 0 ? Math.round((data.count / totalForCasuistry) * 100) : 0,
+                doctors: Object.values(data.doctors).map((d: any) => ({
+                    name: d.name,
+                    count: d.count,
+                    avg: Math.round(d.totalDuration / d.count)
+                })).sort((a, b) => b.count - a.count)
+            }))
+            .sort((a, b) => b.count - a.count);
+
+        return processedCasuistry;
+    }, [rawSurgeries, isLocalCasuistica, periodCasuistica, customRangeCasuistica, period, referenceDate, globalCustomRange]);
+
+    // --- Sync computed data with states used in JSX ---
+    useEffect(() => {
+        setStats(globalStats);
+    }, [globalStats]);
+
+    useEffect(() => {
+        setVolumeData(card1Data.volumeData);
+        setOrOccupancy(card1Data.orOccupancy);
+        setCurrentPeriodSurgeries(card1Data.surgeries);
+    }, [card1Data]);
+
+    useEffect(() => {
+        setSuspensionReasons(card2Data);
+    }, [card2Data]);
+
+    useEffect(() => {
+        setReferralData(card3Data.referrals);
+        setReferringDoctorsList(card3Data.uniqueReferrers);
+    }, [card3Data]);
+
+    useEffect(() => {
+        setEfficiencyData(card4Data);
+    }, [card4Data]);
+
+    useEffect(() => {
+        setPredictiveStats(card5Data);
+    }, [card5Data]);
+
+    useEffect(() => {
+        setProcedureCasuistry(card6Data);
+    }, [card6Data]);
+
+    // Calculate Referral Stats when selection changes
+    useEffect(() => {
+        const referrals = card3Data.referrals;
+        if (referrals.length === 0) {
+            setTargetSurgeonStats([]);
+            return;
         }
-    };
+
+        const statsByGroup = {};
+        let totalCount = 0;
+
+        if (selectedReferrerId) {
+            const myReferrals = referrals.filter(s => s.referring_doctor_id === selectedReferrerId);
+            totalCount = myReferrals.length;
+            myReferrals.forEach((s: any) => {
+                const surgeonName = s.doctors?.full_name || 'Sin Asignar';
+                if (!statsByGroup[surgeonName]) statsByGroup[surgeonName] = [];
+                statsByGroup[surgeonName].push(s);
+            });
+        } else {
+            totalCount = referrals.length;
+            referrals.forEach((s: any) => {
+                const groupName = referralSummaryMode === 'Referring'
+                    ? s.referring_doctor?.full_name || 'Desconocido'
+                    : s.doctors?.full_name || 'Sin Asignar';
+                if (!statsByGroup[groupName]) statsByGroup[groupName] = [];
+                statsByGroup[groupName].push(s);
+            });
+        }
+
+        const processed = Object.entries(statsByGroup).map(([name, list]) => ({
+            name,
+            count: list.length,
+            percentage: totalCount > 0 ? Math.round((list.length / totalCount) * 100) : 0,
+            surgeries: list
+        })).sort((a, b) => b.count - a.count);
+
+        setTargetSurgeonStats(processed);
+    }, [card3Data.referrals, selectedReferrerId, referralSummaryMode]);
+
 
     // Calculate Referral Stats when selection changes
     useEffect(() => {
@@ -818,40 +1111,78 @@ const ResultsDashboard: React.FC = () => {
                             <span className="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">Dirección</span>
                             <span className="text-slate-400 text-xs font-medium">Acceso Ejecutivo</span>
                         </div>
-                        <h1 className="text-2xl font-bold text-slate-900">Resultados Quirúrgicos</h1>
-                        <p className="text-slate-500 text-sm">Análisis de rendimiento, eficiencia y calidad de atención.</p>
+                        <h1 className="text-2xl font-bold text-slate-900">
+                            {activeTab === 'surgeries' ? 'Resultados Quirúrgicos' : 'Estadísticas de Internación y Enfermería'}
+                        </h1>
+                        <p className="text-slate-500 text-sm">
+                            {activeTab === 'surgeries' 
+                                ? 'Análisis de rendimiento, eficiencia y calidad de atención.' 
+                                : 'Estadísticas de ocupación de camas, tiempos de limpieza y flujo de internación.'}
+                        </p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200 backdrop-blur-sm">
-                        {['Esta Semana', 'Este Mes', 'Este Trimestre', 'Este Año', 'Personalizado'].map((p) => (
+                        {/* Selector de Sección */}
+                        <div className="flex bg-slate-200/60 p-0.5 rounded-xl border border-slate-300/30 mr-2">
                             <button
-                                key={p}
-                                onClick={() => setPeriod(p)}
-                                className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 active:scale-95 ${period === p
-                                    ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/20 translate-y-[-1px]'
-                                    : 'text-slate-500 hover:text-slate-900 hover:bg-white/80 hover:shadow-sm'
-                                    }`}
+                                onClick={() => setActiveTab('surgeries')}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${
+                                    activeTab === 'surgeries'
+                                        ? 'bg-white text-slate-900 shadow-sm'
+                                        : 'text-slate-500 hover:text-slate-900'
+                                }`}
                             >
-                                {p}
+                                Área Quirúrgica
                             </button>
-                        ))}
-
-                        <div className="w-[1px] h-6 bg-slate-300 mx-1 hidden md:block" />
-
-                        {(period !== 'Este Mes' || !isSameMonth(referenceDate, new Date())) && (
                             <button
-                                onClick={handleBackToToday}
-                                className="px-5 py-2.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 transition-all duration-300 flex items-center gap-2 border border-indigo-200 active:scale-95 shadow-sm font-bold"
-                                title="Volver a Hoy"
+                                onClick={() => setActiveTab('nursing')}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-black transition-all ${
+                                    activeTab === 'nursing'
+                                        ? 'bg-white text-slate-900 shadow-sm'
+                                        : 'text-slate-500 hover:text-slate-900'
+                                }`}
                             >
-                                <Calendar className="w-4 h-4" />
-                                <span className="text-xs">Volver a Hoy</span>
+                                Internación / Enfermería
                             </button>
+                        </div>
+
+                        {activeTab === 'surgeries' && (
+                            <>
+                                {['Esta Semana', 'Este Mes', 'Este Trimestre', 'Este Año', 'Personalizado'].map((p) => (
+                                    <button
+                                        key={p}
+                                        onClick={() => setPeriod(p)}
+                                        className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 active:scale-95 ${period === p
+                                            ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/20 translate-y-[-1px]'
+                                            : 'text-slate-500 hover:text-slate-900 hover:bg-white/80 hover:shadow-sm'
+                                            }`}
+                                    >
+                                        {p}
+                                    </button>
+                                ))}
+
+                                <div className="w-[1px] h-6 bg-slate-300 mx-1 hidden md:block" />
+
+                                {(period !== 'Este Mes' || !isSameMonth(referenceDate, new Date())) && (
+                                    <button
+                                        onClick={handleBackToToday}
+                                        className="px-5 py-2.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 transition-all duration-300 flex items-center gap-2 border border-indigo-200 active:scale-95 shadow-sm font-bold"
+                                        title="Volver a Hoy"
+                                    >
+                                        <Calendar className="w-4 h-4" />
+                                        <span className="text-xs">Volver a Hoy</span>
+                                    </button>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>
 
-                {period === 'Personalizado' && (
+                {activeTab === 'nursing' ? (
+                    <HospitalizationStats />
+                ) : (
+                    <>
+                        {period === 'Personalizado' && (
                     <div className="flex flex-wrap items-center gap-6 p-5 bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/20 animate-in slide-in-from-top duration-500 ease-out">
                         <div className="flex items-center gap-3 group">
                             <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Desde</span>
@@ -916,6 +1247,7 @@ const ResultsDashboard: React.FC = () => {
                                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                                     {chartMode === 'Volume' ? 'Cirugías por periodo' : 'Ocupación por quirófano'}
                                 </p>
+                                {renderCardFilterControls(isLocalVolumen, setIsLocalVolumen, periodVolumen, setPeriodVolumen, customRangeVolumen, setCustomRangeVolumen)}
                             </div>
                             <div className="bg-slate-100 p-1 rounded-lg flex gap-1">
                                 <button
@@ -1022,8 +1354,9 @@ const ResultsDashboard: React.FC = () => {
 
                     {/* Chart: Suspension Reasons */}
                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
-                        <h3 className="font-bold text-slate-900 mb-6">Motivos de Suspensión</h3>
-                        <div className="flex-1 flex flex-col justify-center gap-6">
+                        <h3 className="font-bold text-slate-900">Motivos de Suspensión</h3>
+                        {renderCardFilterControls(isLocalSuspensiones, setIsLocalSuspensiones, periodSuspensiones, setPeriodSuspensiones, customRangeSuspensiones, setCustomRangeSuspensiones)}
+                        <div className="flex-1 flex flex-col justify-center gap-6 mt-4">
                             {suspensionReasons.map((reason, suspensionIndex) => (
                                 <div key={suspensionIndex}>
                                     <div className="flex justify-between text-xs mb-1 font-medium">
@@ -1097,7 +1430,21 @@ const ResultsDashboard: React.FC = () => {
 
                                 {isReferralFilterIndependent && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-white rounded-2xl border border-slate-200 shadow-lg shadow-slate-200/20 animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <div className="space-y-1.5">
+                                        <div className="md:col-span-2 space-y-1.5">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Periodo</label>
+                                            <select
+                                                value={periodDerivaciones}
+                                                onChange={(e) => setPeriodDerivaciones(e.target.value)}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm text-slate-900 font-bold outline-none focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 transition-all"
+                                            >
+                                                {['Esta Semana', 'Este Mes', 'Este Trimestre', 'Este Año', 'Personalizado'].map(p => (
+                                                    <option key={p} value={p}>{p}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {periodDerivaciones === 'Personalizado' && (
+                                            <>
+                                                <div className="space-y-1.5">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Fecha Inicio</label>
                                             <input
                                                 type="date"
@@ -1115,8 +1462,13 @@ const ResultsDashboard: React.FC = () => {
                                                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm text-slate-900 outline-none focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 font-bold transition-all"
                                             />
                                         </div>
+                                            </>
+                                        )}
                                         <button
-                                            onClick={() => setReferralDateRange({ start: '2020-01-01', end: format(new Date(), 'yyyy-MM-dd') })}
+                                            onClick={() => {
+                                                setPeriodDerivaciones('Personalizado');
+                                                setReferralDateRange({ start: '2020-01-01', end: format(new Date(), 'yyyy-MM-dd') });
+                                            }}
                                             className="md:col-span-2 py-2.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all border border-indigo-100 active:scale-[0.98]"
                                         >
                                             Ver Histórico Completo
@@ -1232,7 +1584,10 @@ const ResultsDashboard: React.FC = () => {
                 {/* Efficiency Table */}
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                        <h3 className="font-bold text-slate-900">Operaciones por Cirujano</h3>
+                        <div>
+                            <h3 className="font-bold text-slate-900">Operaciones por Cirujano</h3>
+                            {renderCardFilterControls(isLocalCirujanos, setIsLocalCirujanos, periodCirujanos, setPeriodCirujanos, customRangeCirujanos, setCustomRangeCirujanos)}
+                        </div>
                         <button
                             onClick={() => {
                                 const exportData = efficiencyData.map(row => ({
@@ -1316,6 +1671,7 @@ const ResultsDashboard: React.FC = () => {
                                 </div>
                                 <div>
                                     <h3 className="text-xl font-black uppercase tracking-tight">Inteligencia Predictiva</h3>
+                                    {renderCardFilterControls(isLocalPredictiva, setIsLocalPredictiva, periodPredictiva, setPeriodPredictiva, customRangePredictiva, setCustomRangePredictiva, true)}
                                     <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Análisis de precisión y optimización</p>
                                 </div>
                             </div>
@@ -1471,6 +1827,7 @@ const ResultsDashboard: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none mb-2">Casuística por Procedimiento</h3>
+                                {renderCardFilterControls(isLocalCasuistica, setIsLocalCasuistica, periodCasuistica, setPeriodCasuistica, customRangeCasuistica, setCustomRangeCasuistica)}
                                 <div className="flex items-center gap-2">
                                     <span className="text-emerald-600 font-black text-[10px] uppercase tracking-widest bg-emerald-50 py-0.5 px-2 rounded-full">Inteligencia de Datos</span>
                                     <span className="w-1 h-1 rounded-full bg-slate-300"></span>
@@ -1815,6 +2172,8 @@ const ResultsDashboard: React.FC = () => {
                     )}
                 </div>
 
+                    </>
+                )}
             </div>
 
             {/* Drill-down Modal */}

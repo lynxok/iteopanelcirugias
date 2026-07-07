@@ -228,7 +228,7 @@ const AlertsHistory: React.FC = () => {
             } else if (actingRole === 'Ortopedia') {
                 // If it's for Ortopedia role, check if it has a targetVendorId
                 // If it has, user must match it. If not, it's a general ortho alert.
-                if (alert.targetVendorId) {
+                if (alert.targetVendorId && !user?.can_view_all_vendors) {
                     roleMatch = roleMatch && alert.targetVendorId === user?.vendorId;
                 }
             }

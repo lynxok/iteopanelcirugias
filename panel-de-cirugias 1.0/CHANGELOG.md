@@ -1,5 +1,74 @@
 # CHANGELOG
 
+## v3.10.29 (2026-07-07)
+- **Resultados y Dashboard (Filtros por Tarjeta)**:
+    - Se agregaron controles de filtro independientes para las tarjetas de Volumen, Motivos de Suspensión, Operaciones por Cirujano, Inteligencia Predictiva y Casuística.
+    - Soporte para selección de periodos predefinidos (Esta Semana, Este Mes, Este Trimestre, Este Año) y Rango Personalizado.
+- **Historial de Alertas (Ortopedias)**:
+    - Se limitó el filtrado de alertas para el rol `Ortopedia` de modo que solo vean las correspondientes a su proveedor (`vendorId`), a menos que tengan el permiso `can_view_all_vendors`.
+- **Proceso Principal de Electron (main.cjs)**:
+    - Puerto de desarrollo modificado a `3005`.
+    - Corrección en la impresión de pulseras en producción, utilizando `loadFile` con hash en lugar de `loadURL` con protocolo de archivo, evitando fallas de enrutamiento interno.
+
+## v3.10.25 (2026-06-29)
+- **Control de Accesos para Configuración de Guardias**:
+    - **Permiso en Configuración**: Se agregó "Guardias (Calendario)" (`on_duty`) como un módulo configurable en la tabla de control de accesos (Permisos por Rol).
+    - **Visibilidad Dinámica**: Se reemplazó la restricción fija al rol `SuperAdmin` en el calendario, permitiendo ahora que cualquier rol habilitado con el permiso `on_duty` pueda ver la columna lateral, el botón para configurar médicos de guardia semanal, y los indicadores diarios de guardia en el calendario mensual.
+
+## v3.10.24 (2026-06-29)
+- **Visualización de Cirugías sin Quirófano**:
+    - **Nueva pestaña en Vista Diaria**: Se agregó la pestaña "Sin Quirófano" en la barra de selección de quirófanos de la vista diaria.
+    - **Soporte de Filtro**: Permite visualizar y reordenar todas las cirugías que tienen fecha y hora agendada pero no cuentan con un quirófano asignado (`operating_room_id: null`), evitando que queden invisibles en la agenda diaria.
+
+## v3.10.23 (2026-06-29)
+- **Control de NUCs Duplicados**:
+    - **Validación en Edición y Creación**: Se extendió la regla de validación de número de NUC para que se aplique tanto al crear una cirugía como al editar una existente.
+    - **Filtrado de Historial**: El sistema ahora solo busca y bloquea si el NUC duplicado corresponde a otra cirugía **activa** (excluyendo la misma que se está editando y cirugías con estado *Completada*, *Cancelada* o *Suspendida*), permitiendo así que un paciente tenga múltiples cirugías a lo largo del tiempo pero no de forma simultánea en estado activo.
+
+## v3.10.21 (2026-06-29)
+- **Correcciones en el Calendario**:
+    - **Alineación de Grilla**: Se agregó `min-w-0` a las celdas del calendario y los eventos para evitar la deformación de las columnas del grid (como el Sábado 27) provocada por contenidos con textos e íconos largos.
+    - **TypeScript**: Se corrigió un error de variable no definida (`dateStr`) en la vista semanal.
+
+## v3.10.16 (2026-06-24)
+- **Corrección en Simulación de Residentes**:
+    - **Visualización de Camas**: Al simular a un médico residente (especialidad "Residencia" o "Residente") desde una cuenta administradora, ahora se muestra correctamente la lista completa de pacientes en cama, en lugar de filtrar por el ID del médico.
+
+## v3.10.15 (2026-06-24)
+- **Indicaciones S.O.S y Observaciones en Medicación**:
+    - **Esquema de Medicación**: Se agregó un checkbox `¿Es S.O.S (si es necesario)?` y un campo de `Observaciones` al programar un esquema de medicamentos.
+    - **Guardado y Visualización**: Estos campos se guardan en la base de datos y se muestran con badges de color y recuadros de texto formateado en el panel.
+
+## v3.10.14 (2026-06-24)
+- **Filtro de "Mis Pacientes" por especialidad y rol**:
+    - **Clínicos y Residentes**: Los usuarios con especialidad "Clínico" o rol "Residente" ahora visualizan a **todos** los pacientes internados (en cama) en el listado "Mis Pacientes" de su panel.
+    - **Médicos de otras especialidades**: Siguen visualizando únicamente a los pacientes que ellos mismos han operado.
+
+## v3.10.13 (2026-06-24)
+- **Impresión de Firmas y Acceso a Ficha**:
+    - **Firma de Cirujano Oculta en Impresión**: Al imprimir la ficha quirúrgica, se oculta el recuadro de la firma del médico cirujano y se centra el bloque del anestesista de forma automática.
+    - **Acceso a Ficha de Cirugía**: Se habilitó la vista de la ficha para médicos, residentes, dirección y enfermería desde el resumen del calendario y desde la vista de detalle.
+    - **Restricción de Solo Lectura**: Se garantiza que la ficha sea de solo lectura para todos los roles, exceptuando a los Técnicos y Superadmins.
+    - **Polyfill de Buffer**: Se solucionó el error `Buffer is not defined` en navegadores inyectando un polyfill al inicio del index para `@react-pdf/renderer`.
+
+## v3.10.12 (2026-06-24)
+- **Modo Visor para Enfermería y Médicos**:
+    - Se implementó un control de acceso estricto en la ficha de cirugía (`SurgeryDetail`).
+    - Los usuarios con rol de **Enfermería** y **Médico** ahora visualizan la ficha exclusivamente en modo de solo lectura (visor), impidiendo cualquier edición de campos, subida/eliminación de documentos o confirmación de cambios.
+
+## v3.10.8 (2026-06-23)
+- **Corrección en Script de Apertura OSER (open_oser.py)**:
+    - **Creación Automática de Directorios**: Se agregó la creación automática del directorio de sesión (`base_dir`) si no existe en la máquina cliente. Esto soluciona el error `Errno 2: No such file or directory` al intentar guardar el estado de sesión (`oser_session_state.json`) en computadoras que no tengan previamente creada la carpeta `ITEO_Oser_Sync` en `AppData\Local`.
+
+## v3.10.7 (2026-06-23)
+- **Corrección en Sincronización OSER**:
+    - **Prioridad de Búsqueda de Pendientes**: Se reordenó la secuencia de búsqueda de contingencia (fallback) del scraper de OSER. Ahora, si una internación no se encuentra en estado "Abiertas", se busca primero en el estado "Pendientes" antes de buscar en "Cerradas". Esto evita que internaciones activas en estado pendiente (por ejemplo, con ingreso no registrado aún) sean detectadas erróneamente como "Cerradas".
+
+## v3.10.3 (2026-06-22)
+- **Gestión de Guardias de Residentes**:
+    - **Carga Continua**: Ahora la asignación y eliminación de guardias de residentes se realiza localmente dentro del modal sin provocar cierres inesperados ni refrescar la pantalla completa tras cada acción.
+    - **Refresco al Cerrar**: La pantalla del calendario mensual se actualiza de forma automática recién cuando se cierra el modal de asignación de guardias.
+
 ## v3.9.5 (2026-06-18)
 - **Gestión Avanzada de Guardias (Instrumentadores y Anestesistas)**:
     - **Nuevos Perfiles Habilitados**: Ahora es posible designar si un **Técnico (Instrumentador)** o un **Anestesista** realiza guardias desde su panel de configuración de usuario/médico.

@@ -64,7 +64,7 @@ function createWindow() {
     // En desarrollo usamos el servidor de Vite, en producción el archivo index.html
     const isDev = process.env.NODE_ENV === 'development';
     if (isDev) {
-        mainWindow.loadURL('http://localhost:3000');
+        mainWindow.loadURL('http://localhost:3005');
     } else {
         mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
     }
@@ -72,7 +72,7 @@ function createWindow() {
     // Abrir enlaces externos en el navegador predeterminado del sistema
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         if (url.startsWith('http://') || url.startsWith('https://')) {
-            if (!url.includes('localhost:3000') && !url.includes('127.0.0.1')) {
+            if (!url.includes('localhost:3005') && !url.includes('127.0.0.1')) {
                 const { shell } = require('electron');
                 shell.openExternal(url);
                 return { action: 'deny' };
@@ -666,11 +666,11 @@ ipcMain.handle('print-wristband', async (event, surgeryId) => {
     printWindow.setMenu(null);
 
     if (isDev) {
-        printWindow.loadURL(`http://localhost:3000/#/print-wristband/${surgeryId}`);
+        printWindow.loadURL(`http://localhost:3005/#/print-wristband/${surgeryId}`);
     } else {
-        const { pathToFileURL } = require('url');
-        const fileUrl = pathToFileURL(path.join(__dirname, 'dist', 'index.html')).href;
-        printWindow.loadURL(`${fileUrl}#/print-wristband/${surgeryId}`);
+        printWindow.loadFile(path.join(__dirname, 'dist', 'index.html'), {
+            hash: `/print-wristband/${surgeryId}`
+        });
     }
 });
 
