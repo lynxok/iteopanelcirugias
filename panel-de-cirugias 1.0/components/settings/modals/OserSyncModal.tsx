@@ -337,6 +337,25 @@ const OserSyncModal: React.FC = () => {
                                 ) : (
                                     sortedResults.map((result, idx) => {
                                         const isSelected = selectedSurgeries.has(result.surgery.id);
+                                        const reasons = [];
+                                        if (result.diffs.date) {
+                                            reasons.push({ label: 'Cambio de Fecha', color: 'bg-blue-50 text-blue-700 border-blue-100', icon: 'calendar_today' });
+                                        }
+                                        if (result.diffs.practices?.some((p: any) => p.type === 'missing')) {
+                                            reasons.push({ label: 'Nueva Práctica', color: 'bg-indigo-50 text-indigo-700 border-indigo-100', icon: 'add_circle' });
+                                        }
+                                        if (result.diffs.practices?.some((p: any) => p.type === 'status_change')) {
+                                            reasons.push({ label: 'Cambio de Estado', color: 'bg-purple-50 text-purple-700 border-purple-100', icon: 'published_with_changes' });
+                                        }
+                                        if (result.isStale) {
+                                            reasons.push({ label: 'Sin Avances', color: 'bg-amber-50 text-amber-700 border-amber-100', icon: 'history' });
+                                        }
+                                        if (result.isClosedInOser) {
+                                            reasons.push({ label: 'Cerrada en OSER', color: 'bg-red-50 text-red-700 border-red-100', icon: 'lock' });
+                                        }
+                                        if (result.isAnnulledInOser) {
+                                            reasons.push({ label: 'Anulada en OSER', color: 'bg-red-50 text-red-700 border-red-100', icon: 'cancel' });
+                                        }
                                         return (
                                             <div 
                                                 key={result.surgery.id} 
@@ -353,8 +372,8 @@ const OserSyncModal: React.FC = () => {
                                                         <div>
                                                             <h4 className="text-lg font-black text-slate-800 leading-none mb-1">{result.surgery.patients.full_name}</h4>
                                                             <div className="flex items-center gap-3">
-                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">NUC: {result.surgery.patients.nuc}</p>
-                                                                {result.surgery.patients.nuc && typeof (window as any).electronAPI !== 'undefined' && (
+                                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">NUC: {result.surgery.patients.nuc}</p>
+                                                                 {result.surgery.patients.nuc && typeof (window as any).electronAPI !== 'undefined' && (
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleOpenOserPortal(String(result.surgery.patients.nuc))}
@@ -383,20 +402,15 @@ const OserSyncModal: React.FC = () => {
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        {result.isAnnulledInOser ? (
-                                                            <span className="bg-red-100 text-red-700 text-[10px] font-black px-3 py-1 rounded-full flex items-center gap-1.5 border border-red-200 animate-pulse">
-                                                                <span className="material-symbols-outlined text-xs">cancel</span> ANULADA EN OSER
+                                                        {reasons.map((r, rIdx) => (
+                                                            <span 
+                                                                key={rIdx} 
+                                                                className={`text-[10px] font-black px-3 py-1 rounded-full flex items-center gap-1.5 border uppercase tracking-wider ${r.color}`}
+                                                            >
+                                                                <span className="material-symbols-outlined text-xs">{r.icon}</span>
+                                                                {r.label}
                                                             </span>
-                                                        ) : result.isClosedInOser ? (
-                                                            <span className="bg-red-100 text-red-700 text-[10px] font-black px-3 py-1 rounded-full flex items-center gap-1.5 border border-red-200 animate-pulse">
-                                                                <span className="material-symbols-outlined text-xs">lock</span> CERRADA EN OSER
-                                                            </span>
-                                                        ) : null}
-                                                        {result.isStale && (
-                                                            <span className="bg-red-100 text-red-700 text-[10px] font-black px-3 py-1 rounded-full flex items-center gap-1.5 border border-red-200">
-                                                                <span className="material-symbols-outlined text-xs">history</span> SIN AVANCES
-                                                            </span>
-                                                        )}
+                                                        ))}
                                                     </div>
                                                 </div>
 

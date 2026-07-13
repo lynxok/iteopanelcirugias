@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v3.10.31 (2026-07-08)
+- **Sincronización OSER**:
+    - **Ignorado de Historial**: Se omiten del listado de discrepancias aquellas prácticas de OSER que no existen en la App y cuyo estado es inactivo/no-autorizable (ej. "Rechazada", "Anulada", "No autorizada").
+    - **Visualización de Motivos**: Se agregaron badges coloreados con íconos en el encabezado de cada tarjeta de cirugía en el modal de auditoría, indicando de forma explícita las razones (Cambio de fecha, Nueva práctica, Cambio de estado, Sin avances, Cerrada, Anulada) por las que se muestra en el listado.
+
+## v3.10.30 (2026-07-08)
+- **Monitor en Vivo (Colapso de Quirófanos Vacíos)**:
+    - Se implementó el colapso visual automático en vista desktop para quirófanos sin cirugías en el día (sin cirugías finalizadas, en curso ni siguientes).
+    - Los quirófanos colapsados se muestran como columnas delgadas con texto en vertical. Al hacer clic se expanden de forma manual.
+    - Se agregó un botón de colapso manual (`chevron_left`) en el encabezado de los quirófanos vacíos que han sido expandidos.
+    - Distribución dinámica mediante CSS Flexbox (`flex-grow`), adaptándose automáticamente al espacio disponible en pantalla.
+
 ## v3.10.29 (2026-07-07)
 - **Resultados y Dashboard (Filtros por Tarjeta)**:
     - Se agregaron controles de filtro independientes para las tarjetas de Volumen, Motivos de Suspensión, Operaciones por Cirujano, Inteligencia Predictiva y Casuística.

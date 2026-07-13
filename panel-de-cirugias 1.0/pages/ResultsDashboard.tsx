@@ -431,7 +431,7 @@ const ResultsDashboard: React.FC = () => {
         });
 
         const filteredSurgeries = rawFiltered.map((s: any) => {
-            const hasRealEndTime = !s.actual_end_time;
+            const hasRealEndTime = !!s.actual_end_time;
             let hasCompletedAdmission = false;
             if (s.patient_id && s.surgery_date && s.actual_start_time) {
                 const sDate = new Date(s.surgery_date + 'T12:00:00Z');
@@ -511,7 +511,7 @@ const ResultsDashboard: React.FC = () => {
         });
 
         const filteredSurgeries = rawFiltered.map((s: any) => {
-            const hasRealEndTime = !s.actual_end_time;
+            const hasRealEndTime = !!s.actual_end_time;
             let hasCompletedAdmission = false;
             if (s.patient_id && s.surgery_date && s.actual_start_time) {
                 const sDate = new Date(s.surgery_date + 'T12:00:00Z');
