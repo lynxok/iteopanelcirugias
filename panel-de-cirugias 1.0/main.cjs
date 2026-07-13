@@ -174,6 +174,55 @@ app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
 });
 
+// --- HELPER PARA CREDENCIALES SEGURAS ---
+function getOserCredentials() {
+    const { safeStorage } = require('electron');
+    const configDir = path.join(app.getPath('userData'), 'Config');
+    if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+    }
+    const configPath = path.join(configDir, 'oser_credentials.enc');
+
+    // Si ya existe el archivo cifrado localmente, descifrarlo
+    if (fs.existsSync(configPath)) {
+        try {
+            const encryptedData = fs.readFileSync(configPath);
+            if (safeStorage.isEncryptionAvailable()) {
+                const decryptedString = safeStorage.decryptString(encryptedData);
+                const creds = JSON.parse(decryptedString);
+                if (creds.user && creds.password) {
+                    return creds;
+                }
+            }
+        } catch (e) {
+            console.error('[Electron SafeStorage] Error al descifrar credenciales locales, re-migrando:', e);
+        }
+    }
+
+    // Fallback/Migración transparente:
+    // 1. Verificar variables de entorno
+    const envUser = process.env.OSER_USER;
+    const envPass = process.env.OSER_PASSWORD;
+    
+    // 2. Si no están en entorno, usar el hardcoded de respaldo actual
+    const defaultUser = envUser || 'iteo';
+    const defaultPass = envPass || 'iln518HB';
+
+    // Cifrar y guardar localmente para el futuro si la encriptación está disponible
+    try {
+        if (safeStorage.isEncryptionAvailable()) {
+            const credentialsJson = JSON.stringify({ user: defaultUser, password: defaultPass });
+            const encrypted = safeStorage.encryptString(credentialsJson);
+            fs.writeFileSync(configPath, encrypted);
+            console.log('[Electron SafeStorage] Credenciales de OSER cifradas y guardadas localmente.');
+        }
+    } catch (e) {
+        console.error('[Electron SafeStorage] Error al guardar credenciales cifradas:', e);
+    }
+
+    return { user: defaultUser, password: defaultPass };
+}
+
 // --- IPC HANDLERS PARA EL SCRAPER ---
 
 ipcMain.handle('run-oser-scraper', async (event, nuc, showBrowser, options = {}) => {
@@ -212,11 +261,12 @@ ipcMain.handle('run-oser-scraper', async (event, nuc, showBrowser, options = {})
         }
 
         // Inyectar de forma segura variables de entorno al proceso hijo
+        const oserCreds = getOserCredentials();
         const childEnv = {
             ...process.env,
             PYTHONUNBUFFERED: '1',
-            OSER_USER: process.env.OSER_USER || 'iteo',
-            OSER_PASSWORD: process.env.OSER_PASSWORD || 'iln518HB'
+            OSER_USER: oserCreds.user,
+            OSER_PASSWORD: oserCreds.password
         };
 
         const pythonProcess = spawn(pythonCommand, args, {
@@ -320,11 +370,12 @@ ipcMain.handle('run-oser-writer-scraper', async (event, action, nuc, patientName
         // Nota: Por defecto writer_scraper.py corre con show_browser=True, 
         // a menos que queramos pasar algún flag, pero lo dejamos visible por defecto.
 
+        const oserCreds = getOserCredentials();
         const childEnv = {
             ...process.env,
             PYTHONUNBUFFERED: '1',
-            OSER_USER: process.env.OSER_USER || 'iteo',
-            OSER_PASSWORD: process.env.OSER_PASSWORD || 'iln518HB'
+            OSER_USER: oserCreds.user,
+            OSER_PASSWORD: oserCreds.password
         };
 
         const pythonProcess = spawn(pythonCommand, args, {
@@ -395,11 +446,12 @@ ipcMain.handle('open-oser-portal', async (event, nuc) => {
         const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
         
         const args = [scraperPath, nuc];
+        const oserCreds = getOserCredentials();
         const childEnv = {
             ...process.env,
             PYTHONUNBUFFERED: '1',
-            OSER_USER: process.env.OSER_USER || 'iteo',
-            OSER_PASSWORD: process.env.OSER_PASSWORD || 'iln518HB'
+            OSER_USER: oserCreds.user,
+            OSER_PASSWORD: oserCreds.password
         };
 
         const pythonProcess = spawn(pythonCommand, args, {
