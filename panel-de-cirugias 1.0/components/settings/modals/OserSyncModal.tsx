@@ -40,18 +40,21 @@ const OserSyncModal: React.FC = () => {
 
     const filteredResults = results.filter(r => {
         const query = searchQuery.toLowerCase();
-        const patientName = String(r.surgery?.patients?.full_name || '').toLowerCase();
-        const nuc = String(r.surgery?.patients?.nuc || '').toLowerCase();
+        const patientObj = Array.isArray(r.surgery?.patients) ? r.surgery.patients[0] : r.surgery?.patients;
+        const patientName = String(patientObj?.full_name || '').toLowerCase();
+        const nuc = String(r.surgery?.nuc || patientObj?.nuc || '').toLowerCase();
         const procedure = String(r.surgery?.procedure_name || '').toLowerCase();
         return patientName.includes(query) || nuc.includes(query) || procedure.includes(query);
     });
 
     const sortedResults = [...filteredResults].sort((a, b) => {
+        const pA = Array.isArray(a.surgery?.patients) ? a.surgery.patients[0] : a.surgery?.patients;
+        const pB = Array.isArray(b.surgery?.patients) ? b.surgery.patients[0] : b.surgery?.patients;
         if (sortOrder === 'asc') {
-            return String(a.surgery?.patients?.full_name || '').localeCompare(String(b.surgery?.patients?.full_name || ''));
+            return String(pA?.full_name || '').localeCompare(String(pB?.full_name || ''));
         }
         if (sortOrder === 'desc') {
-            return String(b.surgery?.patients?.full_name || '').localeCompare(String(a.surgery?.patients?.full_name || ''));
+            return String(pB?.full_name || '').localeCompare(String(pA?.full_name || ''));
         }
         return 0;
     });
@@ -370,35 +373,44 @@ const OserSyncModal: React.FC = () => {
                                                             className="size-6 rounded-lg border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                                         />
                                                         <div>
-                                                            <h4 className="text-lg font-black text-slate-800 leading-none mb-1">{result.surgery.patients.full_name}</h4>
-                                                            <div className="flex items-center gap-3">
-                                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">NUC: {result.surgery.patients.nuc}</p>
-                                                                 {result.surgery.patients.nuc && typeof (window as any).electronAPI !== 'undefined' && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleOpenOserPortal(String(result.surgery.patients.nuc))}
-                                                                        disabled={openingNuc !== null}
-                                                                        className={`text-[9px] font-black uppercase tracking-wider flex items-center gap-1 hover:underline ${
-                                                                            openingNuc === String(result.surgery.patients.nuc) 
-                                                                                ? 'text-slate-400 cursor-not-allowed' 
-                                                                                : 'text-sky-600 hover:text-sky-800'
-                                                                        }`}
-                                                                        title="Buscar y abrir en portal OSER"
-                                                                    >
-                                                                        {openingNuc === String(result.surgery.patients.nuc) ? (
-                                                                            <>
-                                                                                <span className="material-symbols-outlined text-[10px] animate-spin font-black">sync</span>
-                                                                                Buscando...
-                                                                            </>
-                                                                        ) : (
-                                                                            <>
-                                                                                <span className="material-symbols-outlined text-[10px] font-black">open_in_new</span>
-                                                                                Ver OSER
-                                                                            </>
-                                                                        )}
-                                                                    </button>
-                                                                )}
-                                                            </div>
+                                                            {(() => {
+                                                                const patientObj = Array.isArray(result.surgery?.patients) ? result.surgery.patients[0] : result.surgery?.patients;
+                                                                const patientName = (patientObj?.full_name || '').toUpperCase();
+                                                                const surgeryNuc = result.surgery?.nuc || patientObj?.nuc || '';
+                                                                return (
+                                                                    <>
+                                                                        <h4 className="text-lg font-black text-slate-800 leading-none mb-1">{patientName}</h4>
+                                                                        <div className="flex items-center gap-3">
+                                                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">NUC: {surgeryNuc}</p>
+                                                                             {surgeryNuc && typeof (window as any).electronAPI !== 'undefined' && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => handleOpenOserPortal(String(surgeryNuc))}
+                                                                                    disabled={openingNuc !== null}
+                                                                                    className={`text-[9px] font-black uppercase tracking-wider flex items-center gap-1 hover:underline ${
+                                                                                        openingNuc === String(surgeryNuc) 
+                                                                                            ? 'text-slate-400 cursor-not-allowed' 
+                                                                                            : 'text-sky-600 hover:text-sky-800'
+                                                                                    }`}
+                                                                                    title="Buscar y abrir en portal OSER"
+                                                                                >
+                                                                                    {openingNuc === String(surgeryNuc) ? (
+                                                                                        <>
+                                                                                            <span className="material-symbols-outlined text-[10px] animate-spin font-black">sync</span>
+                                                                                            Buscando...
+                                                                                        </>
+                                                                                    ) : (
+                                                                                        <>
+                                                                                            <span className="material-symbols-outlined text-[10px] font-black">open_in_new</span>
+                                                                                            Ver OSER
+                                                                                        </>
+                                                                                    )}
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    </>
+                                                                );
+                                                            })()}
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">

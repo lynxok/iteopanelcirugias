@@ -105,7 +105,26 @@ const extractProcedureCodeAndName = (procedureName: string) => {
         };
     }
     
-    // Format 2: CODE: Name
+    // Format 2: CODE followed by separator (colon, hyphen, or space) and Name
+    // A code starts with letters/numbers and has at least one dot or hyphen, e.g. PC.09.01 or 121.01.01
+    const genericMatch = procedureName.match(/^([A-Za-z0-9]+(?:[\.\-][A-Za-z0-9]+)+)\s*[\s\-:]\s*(.*)$/);
+    if (genericMatch) {
+        return {
+            code: genericMatch[1].trim(),
+            cleanName: genericMatch[2].trim()
+        };
+    }
+
+    // Format 3: Just the CODE (e.g. "PC.09.01")
+    const codeOnlyMatch = procedureName.match(/^([A-Za-z0-9]+(?:[\.\-][A-Za-z0-9]+)+)$/);
+    if (codeOnlyMatch) {
+        return {
+            code: codeOnlyMatch[1].trim(),
+            cleanName: ''
+        };
+    }
+
+    // Format 4: CODE: Name (fallback for codes without dots/hyphens but short prefix with colon)
     const colonMatch = procedureName.match(/^([^:]+?)\s*:\s*(.*)$/);
     if (colonMatch) {
         const prefix = colonMatch[1].trim();
@@ -227,9 +246,9 @@ const ResultsDashboard: React.FC = () => {
         totalPeriod: 0
     });
     const [predictiveStats, setPredictiveStats] = useState<{
-        topDeviations: { name: string, avg: number, max: number, count: number, doctors: any[] }[],
+        topDeviations: { name: string, avg: number, max: number, count: number, doctors: any[], avg_total_time?: number, code?: string, relatedCodes?: string[] }[],
         allDeviations: { name: string, avg: number, max: number, count: number, doctors: any[], avg_total_time: number, code: string, relatedCodes: string[] }[],
-        accuracyData: { label: string, estimated: number, actual: number, deviation: number }[],
+        accuracyData: { label: string, estimated: number, actual: number, deviation: number, date?: string, fullProcedure?: string }[],
         avgDeviation: number
     }>({
         topDeviations: [],
@@ -246,12 +265,12 @@ const ResultsDashboard: React.FC = () => {
     const [volumeData, setVolumeData] = useState<{ label: string, value: number, isCurrent: boolean }[]>([]);
 
     const [selectedDocDetails, setSelectedDocDetails] = useState<{ doctor: string, surgeries: any[] } | null>(null);
-    const [selectedProcedureDetails, setSelectedProcedureDetails] = useState<{ name: string, code: string, doctors: any[] } | null>(null);
+    const [selectedProcedureDetails, setSelectedProcedureDetails] = useState<{ name: string, code: string, doctors: any[], avgDuration?: number, relatedCodes?: string[] } | null>(null);
 
     // --- Referral Stats State ---
     const [referralData, setReferralData] = useState<any[]>([]);
     const [referringDoctorsList, setReferringDoctorsList] = useState<{ id: string, name: string }[]>([]);
-    const [procedureCasuistry, setProcedureCasuistry] = useState<{ name: string, count: number, percentage: number }[]>([]);
+    const [procedureCasuistry, setProcedureCasuistry] = useState<{ name: string, count: number, percentage: number, code?: string, avgDuration?: number, doctors?: any[] }[]>([]);
     const [selectedReferrerId, setSelectedReferrerId] = useState<string>('');
     const [referralDateRange, setReferralDateRange] = useState({
         start: format(subMonths(new Date(), 6), 'yyyy-MM-dd'),
