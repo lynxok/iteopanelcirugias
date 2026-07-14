@@ -79,6 +79,51 @@ const parseLocalDate = (dateStr: string) => {
     return new Date(year, month - 1, day);
 };
 
+// Helper to normalize procedure codes (remove dots, hyphens, brackets, spaces, and make uppercase)
+const normalizeCode = (code: string) => {
+    return code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+};
+
+// Pre-process nomenclador mapping with normalized keys
+const normalizedNomencladorMapping = Object.fromEntries(
+    Object.entries(nomencladorMapping.mapping).map(([key, val]) => [
+        normalizeCode(key),
+        val
+    ])
+);
+
+// Helper to parse procedure code and clean name
+const extractProcedureCodeAndName = (procedureName: string) => {
+    if (!procedureName) return { code: '', cleanName: '' };
+    
+    // Format 1: [CODE] Name
+    const bracketMatch = procedureName.match(/^\[(.*?)\]\s*(.*)$/);
+    if (bracketMatch) {
+        return {
+            code: bracketMatch[1].trim(),
+            cleanName: bracketMatch[2].trim()
+        };
+    }
+    
+    // Format 2: CODE: Name
+    const colonMatch = procedureName.match(/^([^:]+?)\s*:\s*(.*)$/);
+    if (colonMatch) {
+        const prefix = colonMatch[1].trim();
+        const suffix = colonMatch[2].trim();
+        if (/\d/.test(prefix) || prefix.length < 15) {
+            return {
+                code: prefix,
+                cleanName: suffix
+            };
+        }
+    }
+
+    return {
+        code: '',
+        cleanName: procedureName.trim()
+    };
+};
+
 const ResultsDashboard: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
@@ -640,7 +685,7 @@ const ResultsDashboard: React.FC = () => {
                     acc[s.suspension_reason] = (acc[s.suspension_reason] || 0) + 1;
                     return acc;
                 }, {})
-        ).map(([label, count]) => ({
+        ).map(([label, count]: [string, any]) => ({
             label,
             value: Math.round((count / suspendedCount) * 100),
             color: label.includes('Material') ? 'bg-orange-500' : 'bg-blue-500'
@@ -741,17 +786,15 @@ const ResultsDashboard: React.FC = () => {
             ? getPeriodDates(periodPredictiva, new Date(), customRangePredictiva)
             : getPeriodDates(period, referenceDate, globalCustomRange);
 
-        const predictiveList = rawSurgeries.filter((s: any) => 
-            s.status === 'completed' &&
-            s.actual_start_time && 
-            s.actual_end_time && 
-            (s.procedure_name || '').match(/\[(.*?)\]/) &&
-            parseLocalDate(s.surgery_date) &&
-            parseLocalDate(s.surgery_date) >= startDate &&
-            parseLocalDate(s.surgery_date) <= endDate
-        );
+        const predictiveList = rawSurgeries.filter((s: any) => {
+            if (s.status !== 'completed' || !s.actual_start_time || !s.actual_end_time) return false;
+            const sDate = parseLocalDate(s.surgery_date);
+            if (!sDate || sDate < startDate || sDate > endDate) return false;
+            const { code } = extractProcedureCodeAndName(s.procedure_name || '');
+            return !!code;
+        });
 
-        const deviationsByProcedure = {};
+        const deviationsByProcedure: Record<string, any> = {};
 
         predictiveList.forEach((s: any) => {
             const [startH, startM] = s.actual_start_time.split(':').map(Number);
@@ -759,33 +802,29 @@ const ResultsDashboard: React.FC = () => {
             const actualDuration = (endH * 60 + endM) - (startH * 60 + startM);
             const deviation = actualDuration - (s.estimated_duration || 0);
 
-            const codeMatch = s.procedure_name.match(/\[(.*?)\]/);
-            if (!codeMatch) return;
+            const { code: rawCode, cleanName } = extractProcedureCodeAndName(s.procedure_name || '');
+            if (!rawCode) return;
 
-            let rawCode = codeMatch[1].trim();
             let code = rawCode;
-            let cleanName = s.procedure_name.split('[')[0].trim();
+            let displayProcedureName = cleanName;
 
-            const normalize = (c) => c.replace(/[\.\s]/g, '').toUpperCase();
-            const normalizedCode = normalize(rawCode);
-
-            const mappingKey = Object.keys(nomencladorMapping.mapping).find(k => normalize(k) === normalizedCode);
-            if (mappingKey) {
-                const unifiedId = nomencladorMapping.mapping[mappingKey];
-                code = unifiedId;
-                if (nomencladorMapping.descriptions[unifiedId]) {
-                    cleanName = nomencladorMapping.descriptions[unifiedId];
+            const normalizedCode = normalizeCode(rawCode);
+            const mapped = normalizedNomencladorMapping[normalizedCode];
+            if (mapped) {
+                code = mapped;
+                if (nomencladorMapping.descriptions[code]) {
+                    displayProcedureName = nomencladorMapping.descriptions[code];
                 }
             }
 
             if (!deviationsByProcedure[code]) {
                 deviationsByProcedure[code] = { 
-                    name: cleanName, 
+                    name: displayProcedureName, 
                     code: code, 
                     total: 0, 
                     count: 0, 
                     max: 0,
-                    doctors: {},
+                    doctors: {} as Record<string, any>,
                     surgeries: []
                 };
             }
@@ -818,7 +857,7 @@ const ResultsDashboard: React.FC = () => {
         });
 
         const allDeviations = Object.entries(deviationsByProcedure)
-            .map(([code, stats]) => {
+            .map(([code, stats]: [string, any]) => {
                 const relatedCodes = Object.entries(nomencladorMapping.mapping)
                     .filter(([orig, unified]) => unified === code)
                     .map(([orig]) => orig);
@@ -830,19 +869,19 @@ const ResultsDashboard: React.FC = () => {
                     code: stats.code,
                     relatedCodes: allRelated,
                     avg: Math.round(stats.total / stats.count),
-                    avg_total_time: Math.round(Object.values(stats.doctors).reduce((acc, d) => acc + d.total, 0) / stats.count),
+                    avg_total_time: Math.round((Object.values(stats.doctors).reduce((acc: number, d: any) => acc + d.total, 0) as number) / stats.count),
                     max: stats.max,
                     count: stats.count,
-                    doctors: Object.values(stats.doctors).map(d => ({
+                    doctors: Object.values(stats.doctors).map((d: any) => ({
                         name: d.name,
                         avg: Math.round(d.total / d.count),
                         count: d.count
-                    })).sort((a, b) => b.count - a.count),
-                    surgeries: stats.surgeries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    })).sort((a: any, b: any) => b.count - a.count),
+                    surgeries: stats.surgeries.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
                 };
             })
-            .filter(d => d.count >= 1) 
-            .sort((a, b) => b.avg - a.avg);
+            .filter((d: any) => d.count >= 1) 
+            .sort((a: any, b: any) => b.avg - a.avg);
 
         const topDeviations = allDeviations.slice(0, 5);
 
@@ -852,8 +891,9 @@ const ResultsDashboard: React.FC = () => {
                 const [startH, startM] = s.actual_start_time.split(':').map(Number);
                 const [endH, endM] = s.actual_end_time.split(':').map(Number);
                 const actual = (endH * 60 + endM) - (startH * 60 + startM);
+                const { cleanName } = extractProcedureCodeAndName(s.procedure_name || '');
                 return {
-                    label: s.procedure_name?.split('[')[0].trim() || 'Cirugía',
+                    label: cleanName || 'Cirugía',
                     fullProcedure: s.procedure_name || 'Sin nombre',
                     date: s.surgery_date ? format(new Date(s.surgery_date + 'T12:00:00'), 'dd/MM') : 'N/A',
                     estimated: s.estimated_duration || 0,
@@ -888,31 +928,33 @@ const ResultsDashboard: React.FC = () => {
             return sDate && sDate >= startDate && sDate <= endDate;
         });
 
-        const procedureStats = {};
+        const procedureStats: Record<string, any> = {};
         
         const listWithNomenclator = filtered.filter((s: any) => {
-            return s.status === 'completed' && (s.procedure_name || '').match(/\[(.*?)\]/);
+            if (s.status !== 'completed') return false;
+            const { code } = extractProcedureCodeAndName(s.procedure_name || '');
+            return !!code;
         });
         
         const totalForCasuistry = listWithNomenclator.length;
 
         listWithNomenclator.forEach((s: any) => {
-            let code = '';
-            const codeMatch = s.procedure_name.match(/\[(.*?)\]/);
-            if (codeMatch) code = codeMatch[1];
+            const { code: rawCode, cleanName } = extractProcedureCodeAndName(s.procedure_name || '');
+            
+            let unifiedCode = rawCode;
+            let displayProcedureName = cleanName;
 
-            let unifiedCode = code;
-            let finalName = s.procedure_name.split('[')[0].trim();
-
-            if (code && nomencladorMapping.mapping[code]) {
-                unifiedCode = nomencladorMapping.mapping[code];
+            const normalizedCode = normalizeCode(rawCode);
+            const mapped = normalizedNomencladorMapping[normalizedCode];
+            if (mapped) {
+                unifiedCode = mapped;
                 if (nomencladorMapping.descriptions[unifiedCode]) {
-                    finalName = nomencladorMapping.descriptions[unifiedCode];
+                    displayProcedureName = nomencladorMapping.descriptions[unifiedCode];
                 }
             }
 
             if (!procedureStats[unifiedCode]) {
-                procedureStats[unifiedCode] = { name: finalName, count: 0, totalDuration: 0, doctors: {} };
+                procedureStats[unifiedCode] = { name: displayProcedureName, count: 0, totalDuration: 0, doctors: {} as Record<string, any> };
             }
 
             procedureStats[unifiedCode].count += 1;
@@ -996,7 +1038,7 @@ const ResultsDashboard: React.FC = () => {
             return;
         }
 
-        const statsByGroup = {};
+        const statsByGroup: Record<string, any[]> = {};
         let totalCount = 0;
 
         if (selectedReferrerId) {
