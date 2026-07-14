@@ -47,6 +47,7 @@ if (!gotTheLock) {
 // Configuración de logs simples para depuración de actualizaciones
 autoUpdater.logger = require('electron-log');
 autoUpdater.logger.transports.file.level = 'info';
+autoUpdater.verifyUpdateCodeSignature = false;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
