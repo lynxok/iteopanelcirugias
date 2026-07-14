@@ -1907,7 +1907,9 @@ const ResultsDashboard: React.FC = () => {
                                 <div className="bg-slate-50 px-6 py-3 rounded-2xl border border-slate-100 flex items-center gap-4">
                                 <div className="text-right">
                                     <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Muestra Total</p>
-                                    <p className="text-xl font-black text-slate-900 leading-none">{stats.totalPeriod} <span className="text-[10px] text-slate-500">Eventos</span></p>
+                                    <p className="text-xl font-black text-slate-900 leading-none">
+                                        {procedureCasuistry.reduce((acc, p) => acc + p.count, 0)} <span className="text-[10px] text-slate-500">Eventos</span>
+                                    </p>
                                 </div>
                                 <div className="w-px h-8 bg-slate-200"></div>
                                 <div className="p-2 bg-white rounded-xl shadow-sm">
