@@ -848,3 +848,78 @@ ipcMain.handle('save-file', async (event, fileContent, defaultName, fileType) =>
         return { success: false, error: error.message };
     }
 });
+
+// Handler to move and rename OBS video files into doctor-specific subfolders
+ipcMain.handle('obs:rename-video', async (event, tempFilePath, globalDestFolder, doctorName, patientName) => {
+    try {
+        if (!tempFilePath || !globalDestFolder || !doctorName || !patientName) {
+            throw new Error('Faltan parámetros requeridos para renombrar el video.');
+        }
+
+        // Check if the temporary recording exists
+        if (!fs.existsSync(tempFilePath)) {
+            throw new Error(`El archivo de grabación temporal no existe en la ruta: ${tempFilePath}`);
+        }
+
+        // Sanitizer helper for directory and file names (valid names on Windows)
+        const sanitize = (name) => {
+            return name
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "") // Remove accents/diacritics
+                .replace(/[^a-zA-Z0-9_\-\s]/g, '') // Remove illegal characters
+                .trim()
+                .replace(/\s+/g, '_'); // Replace spaces with underscores
+        };
+
+        const cleanDoctorName = sanitize(doctorName) || 'Medico_No_Especificado';
+        const cleanPatientName = sanitize(patientName) || 'Paciente_No_Especificado';
+
+        // Format date/timestamp for uniqueness
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}`;
+
+        // Create the doctor-specific subfolder if it doesn't exist
+        const doctorFolderPath = path.join(globalDestFolder, cleanDoctorName);
+        if (!fs.existsSync(doctorFolderPath)) {
+            fs.mkdirSync(doctorFolderPath, { recursive: true });
+        }
+
+        // Extract original extension (usually .mp4, .mkv, etc.)
+        const ext = path.extname(tempFilePath) || '.mp4';
+        
+        // Final filename
+        const finalFileName = `Artroscopia_${cleanPatientName}_${timestamp}${ext}`;
+        const finalFilePath = path.join(doctorFolderPath, finalFileName);
+
+        // Move and rename
+        fs.renameSync(tempFilePath, finalFilePath);
+
+        console.log(`[OBS Integration] Video renombrado exitosamente: ${finalFilePath}`);
+        return { success: true, path: finalFilePath };
+    } catch (error) {
+        console.error('[OBS Integration] Error al renombrar el video:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Handler to open directory selection dialog
+ipcMain.handle('select-directory', async () => {
+    try {
+        const { filePaths } = await dialog.showOpenDialog(mainWindow, {
+            title: 'Seleccionar Carpeta de Destino de Grabaciones',
+            properties: ['openDirectory', 'createDirectory']
+        });
+        return filePaths[0] || null;
+    } catch (error) {
+        console.error('Error al seleccionar directorio:', error);
+        return null;
+    }
+});
+
+

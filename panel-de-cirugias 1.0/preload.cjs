@@ -24,5 +24,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     print: (printerName) => ipcRenderer.send('ready-to-print', printerName),
     getPrinters: () => ipcRenderer.invoke('get-printers'),
     savePDF: (defaultName) => ipcRenderer.invoke('save-pdf', defaultName),
-    saveFile: (fileContent, defaultName, fileType) => ipcRenderer.invoke('save-file', fileContent, defaultName, fileType)
+    saveFile: (fileContent, defaultName, fileType) => ipcRenderer.invoke('save-file', fileContent, defaultName, fileType),
+    obsRenameVideo: (tempFilePath, globalDestFolder, doctorName, patientName) => ipcRenderer.invoke('obs:rename-video', tempFilePath, globalDestFolder, doctorName, patientName),
+    selectDirectory: () => ipcRenderer.invoke('select-directory')
 });
