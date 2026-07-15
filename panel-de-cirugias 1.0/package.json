@@ -1,7 +1,7 @@
 {
   "name": "panel-de-cirugias",
   "private": true,
-  "version": "3.10.43",
+  "version": "3.10.44",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
@@ -28,7 +28,7 @@
     "jsbarcode": "^3.12.3",
     "jspdf": "^3.0.4",
     "lucide-react": "^0.344.0",
-    "obs-websocket-js": "^5.0.8",
+    "obs-websocket-js": "^5.0.6",
     "qrcode.react": "^4.2.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -57,6 +57,14 @@
     "appId": "com.iteo.panelcirugias",
     "productName": "Panel de Cirugias ITEO",
     "artifactName": "PanelCirugias_ITEO_Setup.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "lynxok",
+        "repo": "iteopanelcirugias",
+        "releaseType": "release"
+      }
+    ],
     "directories": {
       "output": "release"
     },
@@ -81,15 +89,7 @@
     ],
     "win": {
       "icon": "dist/favicon.png",
-      "target": "nsis",
-      "publish": [
-        {
-          "provider": "github",
-          "owner": "lynxok",
-          "repo": "iteopanelcirugias",
-          "releaseType": "release"
-        }
-      ]
+      "target": "nsis"
     },
     "nsis": {
       "oneClick": true,
