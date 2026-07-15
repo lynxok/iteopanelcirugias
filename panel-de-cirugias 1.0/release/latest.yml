@@ -1,9 +1,9 @@
 version: 3.10.39
 files:
   - url: PanelCirugias_ITEO_Setup.exe
-    sha512: oHueyrPLRMTFQkiUEjs2CbC10gp8qme2z4vOoQTfXHJhSSVPbKqGV+jzjl2I0awrYMko6BEtZtPFNZOSshXkTg==
-    size: 96595783
+    sha512: rFbkHx5c4+p7AY63+Pn0cIPsSUNzwvwGlK0Whg/F0jC5IXVhCT49+EWgwQgdxI7VF86lOjxNqmgR55Fpm5gR8A==
+    size: 96483371
     isAdminRightsRequired: true
 path: PanelCirugias_ITEO_Setup.exe
-sha512: oHueyrPLRMTFQkiUEjs2CbC10gp8qme2z4vOoQTfXHJhSSVPbKqGV+jzjl2I0awrYMko6BEtZtPFNZOSshXkTg==
-releaseDate: '2026-07-14T18:18:09.173Z'
+sha512: rFbkHx5c4+p7AY63+Pn0cIPsSUNzwvwGlK0Whg/F0jC5IXVhCT49+EWgwQgdxI7VF86lOjxNqmgR55Fpm5gR8A==
+releaseDate: '2026-07-15T11:34:53.985Z'
