@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, Menu, Tray } = require('electron');
 const path = require('path');
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
@@ -25,6 +25,82 @@ if (fs.existsSync(envPath)) {
     } catch (e) {
         console.error('[Electron] Error al leer .env.local:', e);
     }
+}
+
+// --- CARGAR CONFIGURACIÓN DE TRAY Y AUTO-LAUNCH ---
+const configPath = path.join(app.getPath('userData'), 'app-config.json');
+let appConfig = {
+    autoLaunch: false,
+    closeToTray: false
+};
+
+try {
+    if (fs.existsSync(configPath)) {
+        appConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    }
+} catch (e) {
+    console.error('Error al leer app-config.json:', e);
+}
+
+// Handlers de IPC para preferencias
+ipcMain.handle('set-app-preference', (event, key, value) => {
+    appConfig[key] = value;
+    try {
+        fs.writeFileSync(configPath, JSON.stringify(appConfig, null, 2), 'utf8');
+        if (key === 'autoLaunch') {
+            app.setLoginItemSettings({
+                openAtLogin: value,
+                args: value ? ['--hidden'] : []
+            });
+        }
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('get-app-preference', (event, key) => {
+    return appConfig[key];
+});
+
+let tray = null;
+function createTray() {
+    const iconPath = path.join(__dirname, 'dist', 'favicon.png');
+    if (!fs.existsSync(iconPath)) {
+        console.log('[System Tray] No se encontró el favicon.png, no se inicia el Tray.');
+        return;
+    }
+
+    tray = new Tray(iconPath);
+    const contextMenu = Menu.buildFromTemplate([
+        {
+            label: 'Abrir Panel de Cirugías',
+            click: () => {
+                if (mainWindow) {
+                    mainWindow.show();
+                    mainWindow.focus();
+                }
+            }
+        },
+        { type: 'separator' },
+        {
+            label: 'Salir de la aplicación',
+            click: () => {
+                app.isQuitting = true;
+                app.quit();
+            }
+        }
+    ]);
+
+    tray.setToolTip('Panel de Cirugías ITEO');
+    tray.setContextMenu(contextMenu);
+
+    tray.on('double-click', () => {
+        if (mainWindow) {
+            mainWindow.show();
+            mainWindow.focus();
+        }
+    });
 }
 
 let activeScraperProcess = null;
@@ -55,10 +131,20 @@ function createWindow() {
         height: 800,
         title: "Panel de Cirugías ITEO",
         icon: path.join(__dirname, 'dist', 'favicon.png'),
+        show: !process.argv.includes('--hidden'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            backgroundThrottling: false
+        }
+    });
+
+    // Controlar evento close para ocultar en Tray en lugar de cerrar
+    mainWindow.on('close', (event) => {
+        if (appConfig.closeToTray && !app.isQuitting) {
+            event.preventDefault();
+            mainWindow.hide();
         }
     });
 
@@ -107,6 +193,7 @@ app.whenReady().then(() => {
     });
 
     createWindow();
+    createTray();
     
     // Solo buscamos actualizaciones si la app está empaquetada
     if (app.isPackaged) {
@@ -172,7 +259,11 @@ autoUpdater.on('update-downloaded', (info) => {
 });
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
+    if (process.platform !== 'darwin') {
+        if (!appConfig.closeToTray) {
+            app.quit();
+        }
+    }
 });
 
 // --- HELPER PARA CREDENCIALES SEGURAS ---
@@ -897,13 +988,75 @@ ipcMain.handle('obs:rename-video', async (event, tempFilePath, globalDestFolder,
         const finalFileName = `Artroscopia_${cleanPatientName}_${timestamp}${ext}`;
         const finalFilePath = path.join(doctorFolderPath, finalFileName);
 
-        // Move and rename
-        fs.renameSync(tempFilePath, finalFilePath);
+        // Move and rename with async retry logic (prevents EBUSY/lock errors from OBS muxer)
+        let retries = 10;
+        let delay = 500;
+        let success = false;
+        let lastError = null;
+
+        for (let i = 0; i < retries; i++) {
+            try {
+                fs.renameSync(tempFilePath, finalFilePath);
+                success = true;
+                break;
+            } catch (err) {
+                lastError = err;
+                console.warn(`[OBS Integration] Intento ${i + 1} de renombrado falló (archivo ocupado). Reintentando en ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+
+        if (!success) {
+            throw lastError || new Error('No se pudo renombrar el archivo de grabación después de varios intentos (bloqueado por OBS).');
+        }
 
         console.log(`[OBS Integration] Video renombrado exitosamente: ${finalFilePath}`);
         return { success: true, path: finalFilePath };
     } catch (error) {
         console.error('[OBS Integration] Error al renombrar el video:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// Handler to generate safe screenshot path and create doctor folder
+ipcMain.handle('obs:get-screenshot-path', async (event, globalDestFolder, doctorName, patientName) => {
+    try {
+        if (!globalDestFolder || !doctorName || !patientName) {
+            throw new Error('Faltan parámetros requeridos para generar la ruta de captura.');
+        }
+
+        const sanitize = (name) => {
+            return name
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "") // Remove accents/diacritics
+                .replace(/[^a-zA-Z0-9_\-\s]/g, '') // Remove illegal characters
+                .trim()
+                .replace(/\s+/g, '_'); // Replace spaces with underscores
+        };
+
+        const cleanDoctorName = sanitize(doctorName) || 'Medico_No_Especificado';
+        const cleanPatientName = sanitize(patientName) || 'Paciente_No_Especificado';
+
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}`;
+
+        const doctorFolderPath = path.join(globalDestFolder, cleanDoctorName);
+        if (!fs.existsSync(doctorFolderPath)) {
+            fs.mkdirSync(doctorFolderPath, { recursive: true });
+        }
+
+        const finalFileName = `Captura_${cleanPatientName}_${timestamp}.png`;
+        const finalFilePath = path.join(doctorFolderPath, finalFileName);
+
+        return { success: true, path: finalFilePath };
+    } catch (error) {
+        console.error('[OBS Integration] Error al generar ruta de captura:', error);
         return { success: false, error: error.message };
     }
 });

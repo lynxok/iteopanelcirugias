@@ -26,5 +26,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     savePDF: (defaultName) => ipcRenderer.invoke('save-pdf', defaultName),
     saveFile: (fileContent, defaultName, fileType) => ipcRenderer.invoke('save-file', fileContent, defaultName, fileType),
     obsRenameVideo: (tempFilePath, globalDestFolder, doctorName, patientName) => ipcRenderer.invoke('obs:rename-video', tempFilePath, globalDestFolder, doctorName, patientName),
-    selectDirectory: () => ipcRenderer.invoke('select-directory')
+    obsGetScreenshotPath: (globalDestFolder, doctorName, patientName) => ipcRenderer.invoke('obs:get-screenshot-path', globalDestFolder, doctorName, patientName),
+    selectDirectory: () => ipcRenderer.invoke('select-directory'),
+    setAppPreference: (key, value) => ipcRenderer.invoke('set-app-preference', key, value),
+    getAppPreference: (key) => ipcRenderer.invoke('get-app-preference', key)
 });
