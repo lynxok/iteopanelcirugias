@@ -798,12 +798,17 @@ ipcMain.handle('print-wristband', async (event, surgeryId) => {
     const printWindow = new BrowserWindow({
         width: 850,
         height: 450,
-        title: 'Imprimir Pulsera - ITEO',
+        title: ' ',
         webPreferences: {
             preload: path.join(__dirname, 'preload.cjs'),
             contextIsolation: true,
             nodeIntegration: false
         }
+    });
+
+    // Evitar que la página cambie el título de la ventana de impresión
+    printWindow.on('page-title-updated', (e) => {
+        e.preventDefault();
     });
 
     // Deshabilitar menú por defecto
