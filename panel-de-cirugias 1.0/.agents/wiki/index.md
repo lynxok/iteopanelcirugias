@@ -1,0 +1,64 @@
+# Wiki de Desarrollo - Coordinación de Quirófano ITEO
+
+Bienvenido a la base de conocimiento modular de la aplicación. Esta estructura reemplaza al antiguo archivo monolítico `KNOWLEDGE.md` para optimizar el uso de tokens y permitir consultas rápidas y específicas.
+
+## Estructura del Wiki
+
+El wiki está dividido en las siguientes secciones lógicas:
+
+1.  **[Decisiones Técnicas](file:///.agents/wiki/decisiones_tecnicas.md)**: Configuración del entorno, integraciones (Telegram, Scraper, Electron), y elecciones de arquitectura.
+2.  **[Base de Datos](file:///.agents/wiki/base_de_datos.md)**: Esquema de Supabase (`quirofano`), RLS, triggers de auditoría, columnas manuales e histórico de parches SQL.
+3.  **[Reglas de Negocio](file:///.agents/wiki/reglas_de_negocio.md)**: Lógica de estados de cirugías, mapeo de validaciones (Kanban), lógica de alertas críticas, reglas de residentes y guardias.
+4.  **[Historial de Versiones](file:///.agents/wiki/historial_versiones.md)**: Registro cronológico de cambios aplicados en cada release (v1.0.x a v3.10.x).
+
+---
+
+## Log de Cambios del Wiki (log.md)
+
+*   `[2026-07-08]`: Creación del Wiki modular y migración inicial desde `KNOWLEDGE.md`.
+*   `[2026-07-08]`: Actualizada la lógica de discrepancias de OSER en `reglas_de_negocio.md` para ignorar prácticas no autorizadas o anuladas del historial.
+*   `[2026-07-08]`: Modificada la lógica de cobertura en `ResidentShifts.tsx` (semana: 17:00-07:00, 14hs; finde/feriado: 08:00 a 08:00 del día siguiente, 24hs) y flexibilizada la regla de las 16hs de descanso a advertencia. Actualizado `reglas_de_negocio.md`.
+*   `[2026-07-08]`: Agregado checkbox "Realiza guardias médicas" para médicos en `UserModal.tsx`, persistiendo el estado en `users.does_guardias_medicas` en la DB, e integrando a dichos médicos en la asignación de guardias de residentes.
+*   `[2026-07-10]`: Reestructurada la 'Planilla Internaciones' in `Billing.tsx`. Ahora la fecha principal mostrada y filtrada es la fecha de la práctica (`surgery_date`) en lugar de la fecha de ingreso (`check_in`) cuando hay una cirugía asociada. Se incorporaron 5 nuevos tipos de filtros de facturación y AOTER según solicitud (sin fecha factura, con fecha factura, sin fecha aoter, con fecha aoter, con ambas fechas).
+*   `[2026-07-10]`: Agregado botón en cada día del calendario (`Calendar.tsx`) para visualizar las cirugías canceladas de dicho día a través de un modal interactivo con acceso a la ficha detallada.
+*   `[2026-07-10]`: Implementado el motor de recopilación y estimación de camas. Creada la tabla `practice_bed_occupancy_stats` en Supabase con triggers y funciones de Postgres para recálculo automático de estancias reales de pacientes (excluyendo atípicos). Añadido el tab de Ajustes `BedStatsTab.tsx` para SuperAdmins con grado de avance, y agregada la restricción de seguridad de cama en `HospitalizationMap.tsx` que bloquea admisiones si no se cuenta con al menos 10 muestras históricas del procedimiento.
+*   `[2026-07-13]`: Modificada la sección de estadísticas en `Billing.tsx` según anotaciones: se cambió el KPI de facturación a "Internaciones Facturadas" con desglose por período, se eliminó la tarjeta de cirugías de urgencia, se rediseñó el gráfico de volumen con ComposedChart para mostrar internaciones totales, facturaciones totales e internaciones facturadas de períodos anteriores (línea punteada), y se comparan los totales en el gráfico de barras.
+*   `[2026-07-13]`: Flexibilizado el bloqueo de seguridad de camas en `HospitalizationMap.tsx`: se cambió la restricción de 10 casos requeridos de un bloqueo estricto a una advertencia interactiva (`confirm`) para que los usuarios puedan continuar con el ingreso manualmente si lo desean.
+*   `[2026-07-22]`: Restaurado el bloque `return` en el subcomponente `OserButtonsSection` de `PatientSection.tsx` para restablecer los botones de "Registrar Ingreso" e "Imprimir Compromiso" que no se renderizaban. (v3.10.63)
+*   `[2026-07-23]`: Implementada la unificación de estadísticas de estimación de camas mediante el mapeo de equivalencias de códigos (AOTER/OSER) en `BedStatsTab.tsx` y `HospitalizationMap.tsx`, agrupando las muestras por procedimiento utilizando `nomenclador_mapping.json`.
+*   `[2026-07-13]`: Corregido el bug lógico en `ResultsDashboard.tsx` donde se evaluaba de forma invertida el estado `actual_end_time` (usando `!s.actual_end_time` en lugar de `!!s.actual_end_time`), lo cual provocaba que todas las cirugías sin hora de finalización (pendientes/programadas) se contaran incorrectamente como Realizadas.
+*   `[2026-07-13]`: Implementada la migración transparente de credenciales en `main.cjs` utilizando la API de `safeStorage` de Electron para cifrar y guardar las credenciales locales de OSER de manera automática sin interrupciones del servicio.
+*   `[2026-07-14]`: Corregido el filtrado de procedimientos en `ResultsDashboard.tsx` (Casuística e Inteligencia Predictiva) para admitir tanto el formato estándar `[Código] Descripción` como el alternativo `Código: Descripción` mediante una extracción flexible y normalización alfanumérica contra el nomenclador, evitando la pérdida de estadísticas por diferencias de formato.
+*   `[2026-07-14]`: Ajustado el indicador "Muestra Total" de la tarjeta de Casuística por Procedimiento para responder dinámicamente a los filtros locales/globales activos sumando los eventos en lugar de heredar los del período global.
+*   `[2026-07-14]`: Expandida la flexibilidad del extractor de códigos en `ResultsDashboard.tsx` para aceptar formatos sin corchetes separados por guiones o espacios, resolviendo discrepancias de conteo en la base de datos, y ajustados los tipos de TypeScript en los estados correspondientes para garantizar compilación limpia.
+*   `[2026-07-14]`: Corregido error en la sincronización de OSER que utilizaba el NUC anterior del paciente (desde `patients.nuc`) si la cirugía activa no tenía NUC registrado. Ahora solo se sincroniza si la cirugía tiene su propio NUC (`surgeries.nuc`), y se formatean los nombres a mayúsculas.
+*   `[2026-07-14]`: Deshabilitada la comprobación de firma digital en el auto-updater para corregir el bloqueo de instalación en descargas al 100% de la aplicación instalada en computadoras finales de Windows.
+*   `[2026-07-15]`: Integración de control de grabaciones con OBS Studio. Implementados los controladores IPC en `main.cjs` y `preload.cjs` para crear subcarpetas por médico bajo un directorio global y renombrar videos usando el nombre del paciente y fecha. Creado el componente de configuración `ObsConfigTab.tsx` (con testeo de conexión por WebSocket) y el widget interactivo de control de grabación `ObsRecordingSection.tsx` en el detalle de la cirugía, integrados con el control de acceso y permisos (`obs_recording`).
+*   `[2026-07-15]`: Condicionada la visualización del panel de grabación en `SurgeryDetail.tsx` para que aparezca exclusivamente cuando al menos uno de los procedimientos seleccionados en la cirugía sea una Artroscopía.
+*   `[2026-07-15]`: Implementado el control remoto de grabación de OBS vía Supabase Realtime (canales Broadcast). Permite que una tablet (modo web) controle la grabación de OBS en la PC asociada al quirófano de la cirugía. Añadido el selector de quirófano en la pestaña de Ajustes de OBS.
+*   `[2026-07-16]`: Lanzada la versión **v3.10.60**. Se modificó el punto de montaje de `ObsBackgroundController` en `App.tsx` para ubicarlo a nivel global de la aplicación (fuera del componente `<Layout>`). Esto permite que el puente de fondo y la conexión remota con OBS se inicialicen e inicien inmediatamente en cuanto se enciende el equipo, **incluso cuando no hay ningún usuario de la app logueado (pantalla de Login)**, permitiendo un funcionamiento 100% autónomo y desatendido.
+*   `[2026-07-20]`: Lanzada la versión **v3.10.61**. Solucionado el error crítico de precarga de chunks/módulos (`Importing a module script failed.`) mediante la implementación del cargador resiliente `lazyWithRetry` en `App.tsx` para recargar la aplicación automáticamente ante cambios de compilación en el servidor. Marcada la incidencia como resuelta en `system_errors`.
+*   `[2026-07-22]`: Lanzada la versión **v3.10.62**. Implementada la funcionalidad de captura de imágenes instantáneas (capturas de pantalla) de la señal de OBS de forma remota, permitiendo tomar fotos en cualquier estado (grabación activa, pausa o detenido) y guardándolas directamente en la carpeta del cirujano con el formato `Captura_Paciente_Fecha.png`.
+*   `[2026-07-22]`: Ajustada la regla de control de tiempos en `SurgeryForm.tsx` de la Ficha Técnica de Cirugía: si el horario de fin de anestesia (`hfa`) es posterior al fin de cirugía (`hfc`), el fin de cirugía adopta automáticamente el valor de fin de anestesia. Actualizado `reglas_de_negocio.md`.
+*   `[2026-07-22]`: Lanzada la versión **v3.10.63**. Resuelto problema de impresión de pulseras identificatorias en la app de escritorio (supresión de márgenes, cabeceras/pies de página y forzado de orientación landscape).
+*   `[2026-07-22]`: Documentada en `decisiones_tecnicas.md` la solución para la persistencia del IP/Host de OBS WebSocket tras reiniciar la notebook (uso de `localhost`/`127.0.0.1` o IP estática/reserva DHCP).
+*   `[2026-07-24]`: Optimizado el tiempo de arranque de `markitdown-mcp` difiriendo importaciones de librerías pesadas (`markitdown`, `starlette`, `uvicorn`), reduciendo la carga en un 73% y solucionando el error `context deadline exceeded` en el cliente.
+*   `[2026-07-24]`: Modificada la planilla de facturación (`Billing.tsx`) para incluir todas las cirugías completadas de forma directa, vinculando internaciones existentes en una ventana ampliada de ±5 días. Se implementó la creación diferida/virtual de registros de internación para cirugías ambulatorias al cargar fechas de facturación o AOTER.
+*   `[2026-07-27]`: Habilitada la edición condicional de cirugías para el rol `Administrativo de Guardias`. Agregada la columna `created_by_role` en la tabla `quirofano.surgeries` para rastrear el rol creador, y adaptado `isReadOnly` in el frontend para permitir la edición de cirugías existentes solo si fueron creadas por su mismo rol. Eliminada la restricción que ocultaba el campo de Fecha de Autorización cuando la cobertura seleccionada es "Particular".
+*   `[2026-07-28]`: Implementada la nueva sección "Gestión de Técnicos" (`TecnicoPanel.tsx`) para registro de asistencia (fichadas con validación de IP pública del WiFi de la clínica), liquidación mensual de cirugías (piso de 30 min, bloques de 15 min, división al 50% por pareja de instrumentadores) y guardias (computando 5 días hábiles = 1 día guardia, sábados, domingos y feriados nacionales como 1 día extra). Añadidas las columnas `is_turno_tarde` y `has_tecnico_section_access` a la tabla `users`, y creadas las tablas de base de datos `tecnico_rates`, `tecnico_attendance` y `tecnico_monthly_consents` en el esquema `quirofano`.
+*   `[2026-07-30]`: Actualizado el módulo de Facturación (`Billing.tsx`) para incluir prácticas ambulatorias (`is_guardia = true`) en el listado de la planilla sin exigir el estado `completed` de quirófano. Verificado el control de permisos del rol `Administrativo de Guardias` para permitir la modificación de cirugías existentes creadas bajo su mismo rol (`created_by_role`).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
