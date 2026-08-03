@@ -1,0 +1,1725 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { supabase } from '../src/lib/supabase';
+import { useAuth } from '../src/lib/AuthContext';
+import nomencladorData from '../src/data/nomenclador_mapping.json';
+
+// Set de Feriados Nacionales de Argentina 2025 y 2026 (Reutilizado para cálculos)
+const ARGENTINA_HOLIDAYS = new Set([
+    // 2025
+    '2025-01-01', '2025-03-03', '2025-03-04', '2025-03-24', '2025-04-02', '2025-04-18',
+    '2025-05-01', '2025-05-25', '2025-06-16', '2025-06-20', '2025-07-09', '2025-08-17',
+    '2025-10-12', '2025-11-24', '2025-12-08', '2025-12-25',
+    // 2026
+    '2026-01-01', '2026-02-16', '2026-02-17', '2026-03-24', '2026-04-02', '2026-04-03',
+    '2026-05-01', '2026-05-25', '2026-06-15', '2026-06-20', '2026-07-09', '2026-08-17',
+    '2026-10-12', '2026-11-23', '2026-12-08', '2026-12-25',
+]);
+
+const getLocalStr = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
+
+const getWeekStartStr = (d: Date) => {
+    const start = new Date(d);
+    start.setDate(d.getDate() - d.getDay()); // Domingo como inicio de semana
+    return getLocalStr(start);
+};
+
+const isHoliday = (date: Date) => {
+    return ARGENTINA_HOLIDAYS.has(getLocalStr(date));
+};
+
+interface Rate {
+    id?: string;
+    rate_type: 'practice' | 'hour' | 'guard' | 'clinic_ip';
+    practice_code?: string;
+    value: number;
+}
+
+interface Attendance {
+    id: string;
+    user_id: string;
+    timestamp: string;
+    type: 'check_in' | 'break_out' | 'break_in' | 'check_out';
+    ip_address: string;
+}
+
+interface Consent {
+    id: string;
+    user_id: string;
+    period: string;
+    consented_at: string;
+    amount_calculated: number;
+    status: string;
+}
+
+export default function TecnicoPanel() {
+    const { user } = useAuth();
+    const isLevelAdmin = user?.role === 'SuperAdmin' || user?.role === 'Direccion';
+
+    // Tabs
+    const [activeTab, setActiveTab] = useState<'clock' | 'billing' | 'guards' | 'rates'>(
+        isLevelAdmin ? 'billing' : 'clock'
+    );
+
+    // Fechas y Selección de Período (Por defecto, mes actual)
+    const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+    const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth()); // 0-11
+    const [selectedTecnicoId, setSelectedTecnicoId] = useState<string>(user?.role === 'Tecnico' ? user.id : '');
+
+    // Listados de datos
+    const [tecnicos, setTecnicos] = useState<any[]>([]);
+    const [surgeries, setSurgeries] = useState<any[]>([]);
+    const [attendanceLogs, setAttendanceLogs] = useState<Attendance[]>([]);
+    const [allMonthAttendance, setAllMonthAttendance] = useState<Attendance[]>([]);
+    const [manualSurgeryIds, setManualSurgeryIds] = useState<string[]>([]);
+    const [allManualSurgeries, setAllManualSurgeries] = useState<{ user_id: string; surgery_id: string }[]>([]);
+    const [isAddManualModalOpen, setIsAddManualModalOpen] = useState<boolean>(false);
+    const [selectedManualSurgeryId, setSelectedManualSurgeryId] = useState<string>('');
+    const [isSavingManualSurgery, setIsSavingManualSurgery] = useState<boolean>(false);
+    const [isCoAssignModalOpen, setIsCoAssignModalOpen] = useState<boolean>(false);
+    const [coAssignSurgeryId, setCoAssignSurgeryId] = useState<string>('');
+    const [coAssignTecnicoId, setCoAssignTecnicoId] = useState<string>('');
+    const [currentConsent, setCurrentConsent] = useState<Consent | null>(null);
+    const [rates, setRates] = useState<Rate[]>([]);
+    const [onDutyTecnicosConfig, setOnDutyTecnicosConfig] = useState<Record<string, any>>({});
+    
+    // IP del cliente e IP de la clínica
+    const [clientIp, setClientIp] = useState<string>('');
+    const [clinicIp, setClinicIp] = useState<string>('');
+    const [loadingIp, setLoadingIp] = useState<boolean>(true);
+    const [isSavingRate, setIsSavingRate] = useState<boolean>(false);
+    const [todayUserLogs, setTodayUserLogs] = useState<Attendance[]>([]);
+    const [currentTime, setCurrentTime] = useState<Date>(new Date());
+
+    // Rate Form State
+    const [hourRate, setHourRate] = useState<number>(0);
+    const [guardRate, setGuardRate] = useState<number>(0);
+    const [inputClinicIp, setInputClinicIp] = useState<string>('');
+    const [practiceCodeInput, setPracticeCodeInput] = useState<string>('');
+    const [practiceValueInput, setPracticeValueInput] = useState<number>(0);
+
+    // Helpers de liquidación
+    const getRoundedDurationMinutes = (realMin: number) => {
+        if (realMin <= 0) return 0;
+        if (realMin <= 30) return 30;
+        return Math.ceil(realMin / 15) * 15;
+    };
+
+    const calculateDurationMinutes = (startStr: string, endStr: string) => {
+        if (!startStr || !endStr) return 0;
+        const getMinutes = (str: string) => {
+            if (str.includes('T') || str.includes('-')) {
+                const d = new Date(str);
+                return d.getHours() * 60 + d.getMinutes();
+            }
+            const [h, m] = str.split(':').map(Number);
+            return h * 60 + m;
+        };
+        const startMin = getMinutes(startStr);
+        const endMin = getMinutes(endStr);
+        let diff = endMin - startMin;
+        if (diff < 0) diff += 24 * 60; // Cruce de medianoche
+        return diff;
+    };
+
+    // Obtener IP pública del cliente
+    const fetchClientIp = async () => {
+        setLoadingIp(true);
+        try {
+            const res = await fetch('https://api.ipify.org?format=json');
+            const data = await res.json();
+            setClientIp(data.ip || '');
+        } catch (err) {
+            console.error('Error fetching client IP:', err);
+            setClientIp('');
+        } finally {
+            setLoadingIp(false);
+        }
+    };
+
+    const fetchData = useCallback(async () => {
+        try {
+            // 1. Obtener todos los técnicos activos
+            const { data: tecData } = await supabase
+                .from('users')
+                .select('id, name, email, is_turno_tarde, has_tecnico_section_access, does_guardias')
+                .eq('role', 'Tecnico')
+                .eq('active', true);
+            if (tecData) {
+                setTecnicos(tecData);
+                if (!selectedTecnicoId && tecData.length > 0 && isLevelAdmin) {
+                    setSelectedTecnicoId(tecData[0].id);
+                }
+            }
+
+            // 2. Obtener Tarifas
+            const { data: rateData } = await supabase
+                .from('tecnico_rates')
+                .select('*');
+            if (rateData) {
+                setRates(rateData);
+                const hr = rateData.find(r => r.rate_type === 'hour')?.value || 0;
+                const gr = rateData.find(r => r.rate_type === 'guard')?.value || 0;
+                const cip = rateData.find(r => r.rate_type === 'clinic_ip')?.practice_code || '';
+                setHourRate(hr);
+                setGuardRate(gr);
+                setClinicIp(cip);
+                setInputClinicIp(cip);
+            }
+
+            // 3. Configuración de guardias semanales de técnicos
+            const { data: onDutyData } = await supabase
+                .from('admin_settings')
+                .select('value')
+                .eq('key', 'on_duty_tecnicos')
+                .maybeSingle();
+            if (onDutyData?.value) {
+                setOnDutyTecnicosConfig(JSON.parse(onDutyData.value));
+            }
+
+            // 4. Cargar Fichadas del mes seleccionado para el técnico bajo consulta
+            if (selectedTecnicoId) {
+                const monthStr = String(selectedMonth + 1).padStart(2, '0');
+                const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+                const startStr = `${selectedYear}-${monthStr}-01T00:00:00`;
+                const endStr = `${selectedYear}-${monthStr}-${String(lastDayOfMonth).padStart(2, '0')}T23:59:59`;
+
+                const { data: attData } = await supabase
+                    .from('tecnico_attendance')
+                    .select('*')
+                    .eq('user_id', selectedTecnicoId)
+                    .gte('timestamp', startStr)
+                    .lte('timestamp', endStr)
+                    .order('timestamp', { ascending: false });
+                if (attData) setAttendanceLogs(attData);
+
+                // Cargar Consentimiento del período
+                const periodStr = `${selectedYear}-${monthStr}`;
+                const { data: conData } = await supabase
+                    .from('tecnico_monthly_consents')
+                    .select('*')
+                    .eq('user_id', selectedTecnicoId)
+                    .eq('period', periodStr)
+                    .maybeSingle();
+                setCurrentConsent(conData || null);
+            }
+
+            // 5. Cargar Cirugías completadas del mes
+            const monthStr = String(selectedMonth + 1).padStart(2, '0');
+            const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+            const surgStartStr = `${selectedYear}-${monthStr}-01`;
+            const surgEndStr = `${selectedYear}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
+
+            const { data: surgData } = await supabase
+                .from('surgeries')
+                .select('id, patient:patients(name), procedure:procedure_name, date:surgery_date, actual_start_time, actual_end_time')
+                .eq('status', 'completed')
+                .gte('surgery_date', surgStartStr)
+                .lte('surgery_date', surgEndStr);
+            if (surgData) setSurgeries(surgData);
+
+            // 5.b Cargar Mapeo de Cirugías Manuales y Asistencia del Mes
+            const { data: allManData } = await supabase
+                .from('tecnico_manual_surgeries')
+                .select('user_id, surgery_id');
+            if (allManData) {
+                setAllManualSurgeries(allManData);
+                if (selectedTecnicoId) {
+                    setManualSurgeryIds(allManData.filter(m => m.user_id === selectedTecnicoId).map(m => m.surgery_id));
+                }
+            } else {
+                setAllManualSurgeries([]);
+                setManualSurgeryIds([]);
+            }
+
+            if (selectedTecnicoId) {
+                const monthStr = String(selectedMonth + 1).padStart(2, '0');
+                const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+                const startStr = `${selectedYear}-${monthStr}-01T00:00:00`;
+                const endStr = `${selectedYear}-${monthStr}-${String(lastDayOfMonth).padStart(2, '0')}T23:59:59`;
+
+                const { data: monthAttData } = await supabase
+                    .from('tecnico_attendance')
+                    .select('*')
+                    .eq('user_id', selectedTecnicoId)
+                    .gte('timestamp', startStr)
+                    .lte('timestamp', endStr);
+                if (monthAttData) setAllMonthAttendance(monthAttData);
+                else setAllMonthAttendance([]);
+            }
+
+            // 6. Cargar fichadas de hoy del técnico seleccionado
+            if (selectedTecnicoId) {
+                const { data: userLogs } = await supabase
+                    .from('tecnico_attendance')
+                    .select('*')
+                    .eq('user_id', selectedTecnicoId)
+                    .order('timestamp', { ascending: false })
+                    .limit(20);
+                if (userLogs) {
+                    const todayStr = new Date().toDateString();
+                    const filtered = userLogs.filter(log => new Date(log.timestamp).toDateString() === todayStr);
+                    setTodayUserLogs(filtered);
+                } else {
+                    setTodayUserLogs([]);
+                }
+            }
+
+        } catch (err) {
+            console.error('Error fetching TecnicoPanel data:', err);
+        }
+    }, [selectedYear, selectedMonth, selectedTecnicoId, isLevelAdmin, user]);
+
+    useEffect(() => {
+        fetchClientIp();
+        fetchData();
+    }, [fetchData]);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // Helper: Verificar si un técnico registró fichaje de ingreso (check_in) en una fecha determinada
+    const hasCheckedInOnDate = useCallback((userId: string, dateStr: string) => {
+        return allMonthAttendance.some(att => {
+            if (att.user_id !== userId || att.type !== 'check_in') return false;
+            const attDateStr = getLocalStr(new Date(att.timestamp));
+            return attDateStr === dateStr;
+        });
+    }, [allMonthAttendance]);
+
+    // Cálculo de horas reales trabajadas (fichadas) en el mes
+    const attendanceHoursReport = useMemo(() => {
+        if (attendanceLogs.length === 0) return { totalHours: 0, amount: 0, details: [] };
+        
+        // Agrupar fichadas por día
+        const logsByDay: Record<string, Attendance[]> = {};
+        attendanceLogs.forEach(log => {
+            const dateStr = getLocalStr(new Date(log.timestamp));
+            if (!logsByDay[dateStr]) logsByDay[dateStr] = [];
+            logsByDay[dateStr].push(log);
+        });
+
+        let totalMinutes = 0;
+        const details = Object.entries(logsByDay).map(([dateStr, dayLogs]) => {
+            const sortedLogs = [...dayLogs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+            let dayMin = 0;
+            let currentCheckInTime: number | null = null;
+            let currentBreakOutTime: number | null = null;
+            let breakMinutes = 0;
+
+            sortedLogs.forEach(log => {
+                const time = new Date(log.timestamp).getTime();
+                if (log.type === 'check_in') {
+                    currentCheckInTime = time;
+                } else if (log.type === 'break_out') {
+                    currentBreakOutTime = time;
+                } else if (log.type === 'break_in') {
+                    if (currentBreakOutTime !== null) {
+                        breakMinutes += (time - currentBreakOutTime) / 60000;
+                        currentBreakOutTime = null;
+                    }
+                } else if (log.type === 'check_out') {
+                    if (currentCheckInTime !== null) {
+                        let diff = (time - currentCheckInTime) / 60000;
+                        dayMin += diff;
+                        currentCheckInTime = null;
+                    }
+                }
+            });
+
+            // Si quedó un check_in abierto (sin check_out)
+            if (currentCheckInTime !== null) {
+                const checkInDate = new Date(currentCheckInTime);
+                const defaultAutoOutTime = new Date(`${dateStr}T19:00:00`).getTime();
+                const cutoff22Time = new Date(`${dateStr}T22:00:00`).getTime();
+                const nowTime = new Date().getTime();
+
+                // Si ya pasaron las 22:00 del mismo día O es un día pasado, cerrar automáticamente a las 19:00 hs
+                if (nowTime >= cutoff22Time || getLocalStr(new Date()) > dateStr) {
+                    if (defaultAutoOutTime > currentCheckInTime) {
+                        let diff = (defaultAutoOutTime - currentCheckInTime) / 60000;
+                        dayMin += diff;
+                    }
+                }
+            }
+
+            const netMinutes = Math.max(0, dayMin - breakMinutes);
+            totalMinutes += netMinutes;
+            const hours = netMinutes / 60;
+            return {
+                date: dateStr,
+                hours,
+                amount: hours * hourRate
+            };
+        });
+
+        const totalHours = totalMinutes / 60;
+        return {
+            totalHours,
+            amount: totalHours * hourRate,
+            details
+        };
+    }, [attendanceLogs, hourRate]);
+
+    // Lógica para saber quién estuvo de guardia en una fecha
+    const getOnDutyTecnicoForDate = useCallback((dateStr: string) => {
+        if (!dateStr || !onDutyTecnicosConfig) return null;
+        const dateObj = new Date(`${dateStr}T12:00:00`);
+        const weekStartStr = getWeekStartStr(dateObj);
+        const weekConf = onDutyTecnicosConfig[weekStartStr];
+        if (!weekConf) return null;
+        if (weekConf.overrides && dateStr in weekConf.overrides) return weekConf.overrides[dateStr];
+        return weekConf.defaultTecnico || null;
+    }, [onDutyTecnicosConfig]);
+
+    // Filtrado de cirugías en las que participó el técnico seleccionado
+    const filteredSurgeries = useMemo(() => {
+        const tec = tecnicos.find(t => t.id === selectedTecnicoId);
+        if (!tec) return [];
+
+        return surgeries.filter(s => {
+            // Si la cirugía fue agregada manualmente por este técnico, incluir siempre
+            if (manualSurgeryIds.includes(s.id)) return true;
+
+            const surgDate = new Date(`${s.date}T12:00:00`);
+            const dayOfWeek = surgDate.getDay(); // 0 = Dom, 6 = Sab
+            
+            let isWithinTardeShift = false;
+            let isAfter19 = false;
+            if (s.actual_start_time) {
+                const [h, m] = s.actual_start_time.split(':').map(Number);
+                const startHourFraction = h + (m || 0) / 60;
+                
+                // Turno tarde: lunes a jueves de 15:00 a 19:00, viernes de 14:00 a 19:00
+                if (dayOfWeek >= 1 && dayOfWeek <= 4) {
+                    isWithinTardeShift = startHourFraction >= 15 && startHourFraction < 19;
+                } else if (dayOfWeek === 5) {
+                    isWithinTardeShift = startHourFraction >= 14 && startHourFraction < 19;
+                }
+                
+                // Luego de las 19:00 hrs
+                isAfter19 = startHourFraction >= 19;
+            }
+
+            const isFijo = tec.is_turno_tarde === true;
+            const onDutyTec = getOnDutyTecnicoForDate(s.date);
+            const isGuardia = onDutyTec && onDutyTec.id === selectedTecnicoId;
+
+            // Fines de semana o luego de las 19:00 -> Solo al que está de guardia
+            if (dayOfWeek === 0 || dayOfWeek === 6 || isAfter19) {
+                return isGuardia;
+            }
+
+            // En el turno tarde, participan AMBOS (Fijo y Guardia), PERO DEBEN HABER MARCADO INGRESO ESE DÍA
+            if (isWithinTardeShift) {
+                if (isFijo || isGuardia) {
+                    const checkedIn = hasCheckedInOnDate(selectedTecnicoId, s.date);
+                    return checkedIn;
+                }
+                return false;
+            }
+
+            // Fuera de esos horarios (mañana o nocturno), cae bajo guardia
+            return isGuardia;
+        });
+    }, [surgeries, selectedTecnicoId, tecnicos, getOnDutyTecnicoForDate, manualSurgeryIds, hasCheckedInOnDate]);
+
+    // Cálculo del Costo de las Cirugías
+    const surgeriesReport = useMemo(() => {
+        const tec = tecnicos.find(t => t.id === selectedTecnicoId);
+        if (!tec) return [];
+
+        return filteredSurgeries.map(s => {
+            // 1. Extraer código del nomenclador y unificar a AOTER
+            let rawCode = '';
+            const matchBracket = s.procedure?.match(/^\[(.*?)\]/);
+            const matchColon = s.procedure?.match(/^(.*?):/);
+            if (matchBracket) rawCode = matchBracket[1].trim();
+            else if (matchColon) rawCode = matchColon[1].trim();
+
+            // Mapear a AOTER si existe equivalencia
+            const mappedAoterCode = (nomencladorData.mapping as Record<string, string>)[rawCode] || rawCode;
+            const code = mappedAoterCode.replace(/\./g, '');
+
+            // 2. Obtener tarifa de la práctica
+            const practiceRate = rates.find(r => r.rate_type === 'practice' && r.practice_code === code)?.value || 0;
+
+            // 3. Duración redondeada
+            const realMin = calculateDurationMinutes(s.actual_start_time, s.actual_end_time);
+            const roundedMin = getRoundedDurationMinutes(realMin);
+            const roundedHrs = roundedMin / 60;
+
+            // 4. Costo por tiempo
+            const timeCost = roundedHrs * hourRate;
+
+            // 5. Total Qx
+            const totalQx = practiceRate + timeCost;
+
+            // 6. Liquidación individual y cálculo de porcentajes
+            const surgDate = new Date(`${s.date}T12:00:00`);
+            const dayOfWeek = surgDate.getDay();
+            const isWeekDay = dayOfWeek >= 1 && dayOfWeek <= 5;
+            
+            let isWithinTardeShift = false;
+            let isAfter19 = false;
+            if (s.actual_start_time) {
+                const [h, m] = s.actual_start_time.split(':').map(Number);
+                const startHourFraction = h + (m || 0) / 60;
+                if (dayOfWeek >= 1 && dayOfWeek <= 4) {
+                    isWithinTardeShift = startHourFraction >= 15 && startHourFraction < 19;
+                } else if (dayOfWeek === 5) {
+                    isWithinTardeShift = startHourFraction >= 14 && startHourFraction < 19;
+                }
+                isAfter19 = startHourFraction >= 19;
+            }
+
+            // Contar cuántos técnicos están asignados a esta cirugía
+            const manualAssignees = allManualSurgeries.filter(m => m.surgery_id === s.id).map(m => m.user_id);
+            const isCoAssigned = manualAssignees.length > 0;
+            const hasMultipleAssignees = isCoAssigned || isWithinTardeShift;
+
+            let myShare = 0;
+            let shareNotes = "";
+
+            if (dayOfWeek === 0 || dayOfWeek === 6 || isAfter19) {
+                if (isCoAssigned) {
+                    const modifiedTimeCost = (roundedHrs / 2) * hourRate;
+                    const modifiedTotalQx = practiceRate + modifiedTimeCost;
+                    myShare = modifiedTotalQx / 2;
+                    shareNotes = "50% Coparticipada (Fin de Semana / Nocturno)";
+                } else {
+                    myShare = totalQx;
+                    shareNotes = "100% Guardia (Fin de Semana / Nocturno)";
+                }
+            } else if (isWithinTardeShift) {
+                const modifiedTimeCost = (roundedHrs / 2) * hourRate;
+                const modifiedTotalQx = practiceRate + modifiedTimeCost;
+                myShare = modifiedTotalQx / 2;
+                shareNotes = "50% Turno Tarde (Duración / 2)";
+            } else {
+                if (isCoAssigned) {
+                    const modifiedTimeCost = (roundedHrs / 2) * hourRate;
+                    const modifiedTotalQx = practiceRate + modifiedTimeCost;
+                    myShare = modifiedTotalQx / 2;
+                    shareNotes = "50% Coparticipada";
+                } else {
+                    myShare = totalQx;
+                    shareNotes = "100% Asignado";
+                }
+            }
+
+            return {
+                id: s.id,
+                date: s.date,
+                patient: s.patient?.name || 'Desconocido',
+                procedure: s.procedure,
+                realMin,
+                roundedMin,
+                practiceRate,
+                timeCost,
+                totalCost: totalQx,
+                share: myShare,
+                notes: shareNotes,
+                isSingleAssignee: !hasMultipleAssignees,
+                coAssignedCount: manualAssignees.length
+            };
+        });
+    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries]);
+
+    const totalSurgeriesAmount = useMemo(() => {
+        return surgeriesReport.reduce((acc, curr) => acc + curr.share, 0);
+    }, [surgeriesReport]);
+
+    // Cálculo de Días de Guardia del Técnico Seleccionado
+    const guardsReport = useMemo(() => {
+        const tec = tecnicos.find(t => t.id === selectedTecnicoId);
+        if (!tec || !tec.does_guardias) return { daysCount: 0, weeksDetail: [], totalAmount: 0, weekendDaysCount: 0, holidaysCount: 0 };
+
+        // Recorrer todos los días del mes y verificar si estuvo asignado
+        const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+        let weekDaysWorked: Record<string, Set<string>> = {}; // weekStartStr -> Set de días hábiles trabajados de guardia
+        let weekendDaysWorkedCount = 0;
+        let holidaysWorkedCount = 0;
+
+        const lastDayOfPrevMonth = new Date(selectedYear, selectedMonth, 0);
+        const lastDayOfPrevMonthStr = getLocalStr(lastDayOfPrevMonth);
+        const prevMonthOnDuty = getOnDutyTecnicoForDate(lastDayOfPrevMonthStr);
+        const prevMonthOnDutyIsMe = prevMonthOnDuty && prevMonthOnDuty.id === selectedTecnicoId;
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateObj = new Date(selectedYear, selectedMonth, day);
+            const dateStr = getLocalStr(dateObj);
+            
+            // Exclusión de duplicidad: si el técnico de guardia actual estuvo de guardia a fin del mes anterior, 
+            // y el día actual pertenece a la misma semana que comenzó en el mes anterior, lo excluimos de este mes.
+            if (prevMonthOnDutyIsMe) {
+                const weekStartOfPrevMonthEnd = getWeekStartStr(lastDayOfPrevMonth);
+                const weekStartOfCurrentDay = getWeekStartStr(dateObj);
+                if (weekStartOfPrevMonthEnd === weekStartOfCurrentDay) {
+                    continue;
+                }
+            }
+
+            const onDutyTec = getOnDutyTecnicoForDate(dateStr);
+
+            if (onDutyTec && onDutyTec.id === selectedTecnicoId) {
+                const dayOfWeek = dateObj.getDay();
+                const isWE = dayOfWeek === 0 || dayOfWeek === 6;
+                const isHolidayDay = isHoliday(dateObj);
+
+                if (isHolidayDay && !isWE) {
+                    // Si cae en día de semana y es feriado, se suma como feriado
+                    holidaysWorkedCount++;
+                    // Y TAMBIÉN lo agregamos a los días hábiles de la semana para que no reste la fracción semanal
+                    const weekStartStr = getWeekStartStr(dateObj);
+                    if (!weekDaysWorked[weekStartStr]) {
+                        weekDaysWorked[weekStartStr] = new Set();
+                    }
+                    weekDaysWorked[weekStartStr].add(dateStr);
+                } else if (isWE) {
+                    weekendDaysWorkedCount++;
+                } else {
+                    const weekStartStr = getWeekStartStr(dateObj);
+                    if (!weekDaysWorked[weekStartStr]) {
+                        weekDaysWorked[weekStartStr] = new Set();
+                    }
+                    weekDaysWorked[weekStartStr].add(dateStr);
+                }
+            }
+        }
+
+        // Calcular días de guardia equivalentes
+        let weekdayGuardsCount = 0;
+        const weeksDetail = Object.entries(weekDaysWorked).map(([week, daysSet]) => {
+            const count = daysSet.size;
+            // 5 días hábiles = 1 día de guardia. Fracción proporcional:
+            const equiv = count / 5;
+            weekdayGuardsCount += equiv;
+            return { week, daysCount: count, equiv };
+        });
+
+        // Contemplar semana completa al de guardia si la semana del final del mes seleccionado cruza al mes siguiente.
+        const lastDayOfCurrentMonth = new Date(selectedYear, selectedMonth + 1, 0);
+        const lastDayOfCurrentMonthStr = getLocalStr(lastDayOfCurrentMonth);
+        const nextMonthOnDuty = getOnDutyTecnicoForDate(lastDayOfCurrentMonthStr);
+        const nextMonthOnDutyIsMe = nextMonthOnDuty && nextMonthOnDuty.id === selectedTecnicoId;
+
+        if (nextMonthOnDutyIsMe) {
+            const lastDayOfWeek = lastDayOfCurrentMonth.getDay(); // 0 = Dom, 6 = Sab
+            const weekStartStr = getWeekStartStr(lastDayOfCurrentMonth);
+            
+            for (let d = lastDayOfWeek + 1; d <= 6; d++) {
+                const targetDate = new Date(lastDayOfCurrentMonth);
+                targetDate.setDate(lastDayOfCurrentMonth.getDate() + (d - lastDayOfWeek));
+                
+                const targetDayOfWeek = targetDate.getDay();
+                const isTargetHoliday = isHoliday(targetDate);
+
+                if (targetDayOfWeek >= 1 && targetDayOfWeek <= 5) {
+                    if (isTargetHoliday) {
+                        holidaysWorkedCount++;
+                    }
+                    if (!weekDaysWorked[weekStartStr]) {
+                        weekDaysWorked[weekStartStr] = new Set();
+                    }
+                    const targetDateStr = getLocalStr(targetDate);
+                    if (!weekDaysWorked[weekStartStr].has(targetDateStr)) {
+                        weekDaysWorked[weekStartStr].add(targetDateStr);
+                    }
+                } else if (targetDayOfWeek === 0 || targetDayOfWeek === 6) {
+                    weekendDaysWorkedCount++;
+                }
+            }
+
+            // Recalcular el weeksDetail y weekdayGuardsCount
+            weekdayGuardsCount = 0;
+            Object.entries(weekDaysWorked).forEach(([week, daysSet]) => {
+                const count = daysSet.size;
+                const equiv = count / 5;
+                weekdayGuardsCount += equiv;
+                
+                const idx = weeksDetail.findIndex(w => w.week === week);
+                if (idx !== -1) {
+                    weeksDetail[idx] = { week, daysCount: count, equiv };
+                } else {
+                    weeksDetail.push({ week, daysCount: count, equiv });
+                }
+            });
+        }
+
+        const totalDaysCount = weekdayGuardsCount + weekendDaysWorkedCount + holidaysWorkedCount;
+        const totalAmount = totalDaysCount * guardRate;
+
+        return {
+            daysCount: totalDaysCount,
+            weeksDetail,
+            weekendDaysCount: weekendDaysWorkedCount,
+            holidaysCount: holidaysWorkedCount,
+            totalAmount
+        };
+    }, [selectedYear, selectedMonth, selectedTecnicoId, tecnicos, getOnDutyTecnicoForDate, guardRate]);
+
+    const grandTotalAmount = useMemo(() => {
+        return totalSurgeriesAmount + guardsReport.totalAmount + attendanceHoursReport.amount;
+    }, [totalSurgeriesAmount, guardsReport, attendanceHoursReport]);
+
+    // Gestión de Adición Manual de Cirugías por Técnico
+    const handleAddManualSurgery = async () => {
+        if (!selectedManualSurgeryId || !selectedTecnicoId) return;
+        setIsSavingManualSurgery(true);
+        try {
+            const { error } = await supabase
+                .from('tecnico_manual_surgeries')
+                .insert({
+                    user_id: selectedTecnicoId,
+                    surgery_id: selectedManualSurgeryId
+                });
+
+            if (error) {
+                if (error.code === '23505') {
+                    alert('Esta cirugía ya se encuentra agregada al listado de este técnico.');
+                } else {
+                    alert('Error al agregar cirugía: ' + error.message);
+                }
+            } else {
+                setManualSurgeryIds(prev => [...prev, selectedManualSurgeryId]);
+                setIsAddManualModalOpen(false);
+                setSelectedManualSurgeryId('');
+                fetchData();
+            }
+        } catch (err: any) {
+            console.error('Error adding manual surgery:', err);
+            alert('Error al agregar cirugía manual.');
+        } finally {
+            setIsSavingManualSurgery(false);
+        }
+    };
+
+    const handleCoAssignTecnico = async () => {
+        if (!coAssignSurgeryId || !coAssignTecnicoId) return;
+        setIsSavingManualSurgery(true);
+        try {
+            const { error } = await supabase
+                .from('tecnico_manual_surgeries')
+                .insert({
+                    user_id: coAssignTecnicoId,
+                    surgery_id: coAssignSurgeryId
+                });
+
+            if (error) {
+                if (error.code === '23505') {
+                    alert('El técnico seleccionado ya se encuentra asignado a esta cirugía.');
+                } else {
+                    alert('Error al sumar técnico: ' + error.message);
+                }
+            } else {
+                setIsCoAssignModalOpen(false);
+                setCoAssignSurgeryId('');
+                setCoAssignTecnicoId('');
+                fetchData();
+            }
+        } catch (err: any) {
+            console.error('Error co-assigning tecnico:', err);
+            alert('Error al sumar técnico a la cirugía.');
+        } finally {
+            setIsSavingManualSurgery(false);
+        }
+    };
+
+    const handleRemoveManualSurgery = async (surgeryId: string) => {
+        if (!selectedTecnicoId) return;
+        if (!confirm('¿Desea quitar esta cirugía cargada manualmente del listado del técnico?')) return;
+
+        try {
+            const { error } = await supabase
+                .from('tecnico_manual_surgeries')
+                .delete()
+                .eq('user_id', selectedTecnicoId)
+                .eq('surgery_id', surgeryId);
+
+            if (error) {
+                alert('Error al remover cirugía: ' + error.message);
+            } else {
+                setManualSurgeryIds(prev => prev.filter(id => id !== surgeryId));
+                fetchData();
+            }
+        } catch (err: any) {
+            console.error('Error removing manual surgery:', err);
+            alert('Error al remover cirugía manual.');
+        }
+    };
+
+    // Gestión de Fichadas (Check-In / Out)
+    const handleClockAction = async (type: 'check_in' | 'break_out' | 'break_in' | 'check_out') => {
+        if (!user) return;
+        
+        // Validar IP pública excepto para admins en test
+        const allowedIps = clinicIp ? clinicIp.split(',').map(ip => ip.trim()) : [];
+        const isIpOk = allowedIps.includes(clientIp) || isLevelAdmin;
+        if (!isIpOk) {
+            alert(`Acceso denegado: Fichada solo disponible desde la red WiFi de la clínica (IPs autorizadas: ${clinicIp || 'No configurada'}, tu IP: ${clientIp || 'Desconocida'}).`);
+            return;
+        }
+
+        if (!selectedTecnicoId) {
+            alert('Por favor, seleccione un técnico.');
+            return;
+        }
+
+        try {
+            const { error } = await supabase
+                .from('tecnico_attendance')
+                .insert({
+                    user_id: selectedTecnicoId,
+                    type,
+                    ip_address: clientIp || 'Local'
+                });
+            if (error) throw error;
+
+            alert('Fichada registrada con éxito');
+            fetchData();
+        } catch (e: any) {
+            alert('Error al fichar: ' + e.message);
+        }
+    };
+
+    const currentClockState = useMemo(() => {
+        if (todayUserLogs.length === 0) return 'Fuera de Turno';
+        const last = todayUserLogs[0]; // Ya filtradas por hoy y ordenadas desc
+        
+        if (last.type === 'check_in' || last.type === 'break_in') return 'En Turno';
+        if (last.type === 'break_out') return 'En Descanso';
+        return 'Fuera de Turno';
+    }, [todayUserLogs]);
+
+    // Registrar Consentimiento Mensual
+    const handleGiveConsent = async () => {
+        if (!selectedTecnicoId) return;
+        const periodStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+        
+        if (currentConsent) {
+            alert('Ya has brindado conformidad para este período.');
+            return;
+        }
+
+        if (!confirm(`¿Confirmas conformidad con la planilla de ${periodStr} por un total de $${grandTotalAmount.toLocaleString()}?`)) {
+            return;
+        }
+
+        try {
+            const { error } = await supabase
+                .from('tecnico_monthly_consents')
+                .insert({
+                    user_id: selectedTecnicoId,
+                    period: periodStr,
+                    amount_calculated: grandTotalAmount,
+                    status: 'consented'
+                });
+            if (error) throw error;
+            
+            alert('Conformidad registrada exitosamente.');
+            fetchData();
+        } catch (e: any) {
+            alert('Error al registrar conformidad: ' + e.message);
+        }
+    };
+
+    // Configuración de Tarifas (Administrativos)
+    const handleSaveGlobalRates = async () => {
+        setIsSavingRate(true);
+        try {
+            const upsertRate = async (type: 'hour' | 'guard' | 'clinic_ip', val: number, code?: string) => {
+                const payload: any = { rate_type: type, value: val };
+                if (code !== undefined) payload.practice_code = code;
+                
+                // buscar si existe
+                const match = rates.find(r => r.rate_type === type);
+                if (match?.id) payload.id = match.id;
+
+                const { error } = await supabase.from('tecnico_rates').upsert(payload);
+                if (error) throw error;
+            };
+
+            await upsertRate('hour', hourRate);
+            await upsertRate('guard', guardRate);
+            await upsertRate('clinic_ip', 0, inputClinicIp);
+
+            alert('Tarifas globales actualizadas con éxito.');
+            fetchData();
+        } catch (e: any) {
+            alert('Error al guardar tarifas: ' + e.message);
+        } finally {
+            setIsSavingRate(false);
+        }
+    };
+
+    const handleSavePracticeRate = async () => {
+        if (!practiceCodeInput.trim()) return alert('Ingrese un código de práctica.');
+        setIsSavingRate(true);
+        try {
+            const code = practiceCodeInput.trim().replace(/\./g, '');
+            const payload: any = {
+                rate_type: 'practice',
+                practice_code: code,
+                value: practiceValueInput
+            };
+
+            const match = rates.find(r => r.rate_type === 'practice' && r.practice_code === code);
+            if (match?.id) payload.id = match.id;
+
+            const { error } = await supabase.from('tecnico_rates').upsert(payload);
+            if (error) throw error;
+
+            alert('Tarifa de práctica guardada.');
+            setPracticeCodeInput('');
+            setPracticeValueInput(0);
+            fetchData();
+        } catch (e: any) {
+            alert('Error: ' + e.message);
+        } finally {
+            setIsSavingRate(false);
+        }
+    };
+
+    const handleDeletePracticeRate = async (id: string) => {
+        if (!confirm('¿Eliminar tarifa de práctica?')) return;
+        try {
+            const { error } = await supabase.from('tecnico_rates').delete().eq('id', id);
+            if (error) throw error;
+            fetchData();
+        } catch (e: any) {
+            alert('Error: ' + e.message);
+        }
+    };
+
+    const practiceRates = useMemo(() => {
+        return rates.filter(r => r.rate_type === 'practice');
+    }, [rates]);
+
+    const allowedIps = clinicIp ? clinicIp.split(',').map(ip => ip.trim()) : [];
+    const isIpMatch = allowedIps.includes(clientIp) || isLevelAdmin;
+
+    return (
+        <div className="flex flex-col min-h-screen bg-slate-50 relative p-4 md:p-6 overflow-y-auto pb-24">
+             <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2 tracking-tight">
+                        <span className="material-symbols-outlined text-indigo-600 text-3xl">engineering</span>
+                        Liquidación y Control de Técnicos
+                    </h1>
+                    <p className="text-sm text-slate-500 mt-1">
+                        {isLevelAdmin ? 'Panel de supervisión, tarifas y control de asistencia' : 'Mi espacio personal de asistencia, cirugías y guardias'}
+                    </p>
+                </div>
+
+                {/* Filtro Período / Técnico para Administración */}
+                <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
+                    {isLevelAdmin && (
+                        <div className="flex flex-col">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Técnico</label>
+                            <select
+                                className="bg-transparent border-none text-xs font-bold focus:ring-0 text-slate-700 py-1"
+                                value={selectedTecnicoId}
+                                onChange={e => setSelectedTecnicoId(e.target.value)}
+                            >
+                                <option value="">Seleccione Técnico...</option>
+                                {tecnicos.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name} {t.is_turno_tarde ? '(Fijo)' : '(Guardia)'}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                    
+                    <div className="h-8 w-px bg-slate-200 hidden md:block"></div>
+
+                    <div className="flex flex-col">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Mes</label>
+                        <select
+                            className="bg-transparent border-none text-xs font-bold focus:ring-0 text-slate-700 py-1"
+                            value={selectedMonth}
+                            onChange={e => setSelectedMonth(Number(e.target.value))}
+                        >
+                            {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((m, idx) => (
+                                <option key={idx} value={idx}>{m}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="h-8 w-px bg-slate-200 hidden md:block"></div>
+
+                    <div className="flex flex-col">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Año</label>
+                        <select
+                            className="bg-transparent border-none text-xs font-bold focus:ring-0 text-slate-700 py-1"
+                            value={selectedYear}
+                            onChange={e => setSelectedYear(Number(e.target.value))}
+                        >
+                            {[2025, 2026, 2027].map(y => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex bg-white rounded-xl p-1 border border-slate-200 shadow-sm w-fit mb-6">
+                <button
+                    onClick={() => setActiveTab('clock')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'clock' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                >
+                    <span className="material-symbols-outlined text-base">schedule</span>
+                    Control de Asistencia
+                </button>
+                <button
+                    onClick={() => setActiveTab('billing')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'billing' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                >
+                    <span className="material-symbols-outlined text-base">receipt_long</span>
+                    Liquidación Cirugías
+                </button>
+                <button
+                    onClick={() => setActiveTab('guards')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'guards' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                >
+                    <span className="material-symbols-outlined text-base">event_available</span>
+                    Liquidación Guardias
+                </button>
+                {isLevelAdmin && (
+                    <button
+                        onClick={() => setActiveTab('rates')}
+                        className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'rates' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                    >
+                        <span className="material-symbols-outlined text-base">monetization_on</span>
+                        Tarifas y Ajustes
+                    </button>
+                )}
+            </div>
+
+            {/* TAB CONTENT */}
+            <div className="flex-1 space-y-6">
+
+                {/* CLOCK TAB */}
+                {activeTab === 'clock' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn">
+                        
+                        {/* Fichador Card */}
+                        <div className="lg:col-span-1 bg-white p-6 rounded-2xl border border-slate-200 shadow-xl flex flex-col items-center text-center justify-between min-h-[350px] relative overflow-hidden">
+                            <div className="absolute top-0 inset-x-0 h-2 bg-indigo-500"></div>
+                            
+                            <div className="space-y-2 mt-4">
+                                <span className={`inline-flex px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest ${
+                                    currentClockState === 'En Turno' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                    currentClockState === 'En Descanso' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                    'bg-slate-100 text-slate-500 border border-slate-200'
+                                }`}>
+                                    {currentClockState}
+                                </span>
+                                <h3 className="text-3xl font-black text-slate-800 tracking-tight">Reloj de Fichadas</h3>
+                                <p className="text-xs text-slate-400">Jornada actual y descansos</p>
+                            </div>
+
+                            {/* Reloj Digital en Tiempo Real */}
+                            <div className="my-4 bg-slate-50 border border-slate-100 px-6 py-3 rounded-2xl shadow-inner select-none">
+                                <p className="text-3xl font-black text-indigo-600 font-mono tracking-wider">
+                                    {currentTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Hora Actual</p>
+                            </div>
+
+                            {/* Botones de fichada */}
+                            <div className="w-full space-y-3 my-6">
+                                {todayUserLogs.length === 0 || !todayUserLogs.some(l => l.type === 'check_in') ? (
+                                    <button
+                                        onClick={() => handleClockAction('check_in')}
+                                        className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-100 flex items-center justify-center gap-2 transition-all active:scale-98"
+                                    >
+                                        <span className="material-symbols-outlined">login</span>
+                                        Ingreso de Jornada
+                                    </button>
+                                ) : todayUserLogs.some(l => l.type === 'check_out') ? (
+                                    <div className="w-full py-4 px-3 bg-slate-50 border border-slate-200 rounded-xl text-center">
+                                        <p className="text-sm font-bold text-slate-500">Jornada Completada Hoy</p>
+                                        <p className="text-xs text-slate-400 mt-1">Has registrado la salida de tu jornada.</p>
+                                    </div>
+                                ) : (
+                                    <div className="w-full space-y-3">
+                                        {/* Botón Salida Temporal / Reingreso */}
+                                        {todayUserLogs[0]?.type === 'break_out' ? (
+                                            <button
+                                                onClick={() => handleClockAction('break_in')}
+                                                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-98 animate-pulseFast"
+                                            >
+                                                <span className="material-symbols-outlined">play_arrow</span>
+                                                Reingreso de Salida
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleClockAction('break_out')}
+                                                className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-98"
+                                            >
+                                                <span className="material-symbols-outlined">pause</span>
+                                                Salida Temporal
+                                            </button>
+                                        )}
+
+                                        {/* Botón Egreso de Jornada (Siempre disponible una vez ingresada y no egresada) */}
+                                        <button
+                                            onClick={() => handleClockAction('check_out')}
+                                            className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-98"
+                                        >
+                                            <span className="material-symbols-outlined">logout</span>
+                                            Egreso de Jornada
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Estado Red WiFi */}
+                            <div className="w-full pt-4 border-t border-slate-100 flex flex-col items-center gap-1.5">
+                                {loadingIp ? (
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider animate-pulse">Comprobando red WiFi...</p>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <span className={`size-2.5 rounded-full ${isIpMatch ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                                        <p className="text-xs font-bold text-slate-600">
+                                            {isIpMatch ? 'Conectado al WiFi de la Clínica' : 'Fuera del WiFi Autorizado'}
+                                        </p>
+                                    </div>
+                                )}
+                                <p className="text-[9px] text-slate-400 font-mono">IP: {clientIp || 'Cargando...'}</p>
+                            </div>
+                        </div>
+
+                        {/* Historial Logs */}
+                        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                            <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-slate-400">history</span>
+                                Registro de Asistencia del Período
+                            </h3>
+
+                            {attendanceLogs.length === 0 ? (
+                                <div className="flex-1 flex flex-col items-center justify-center py-12 text-slate-400 text-sm font-semibold italic">
+                                    Sin registros cargados este mes.
+                                </div>
+                            ) : (
+                                <div className="flex-1 overflow-y-auto max-h-[300px] divide-y divide-slate-100 custom-scrollbar pr-2">
+                                    {attendanceLogs.map(log => (
+                                        <div key={log.id} className="py-3 flex justify-between items-center text-sm">
+                                            <div className="flex items-center gap-3">
+                                                <span className={`material-symbols-outlined p-2 rounded-full ${
+                                                    log.type === 'check_in' ? 'bg-emerald-50 text-emerald-600' :
+                                                    log.type === 'check_out' ? 'bg-rose-50 text-rose-600' :
+                                                    log.type === 'break_out' ? 'bg-amber-50 text-amber-600' :
+                                                    'bg-blue-50 text-blue-600'
+                                                }`}>
+                                                    {
+                                                        log.type === 'check_in' ? 'login' :
+                                                        log.type === 'check_out' ? 'logout' :
+                                                        log.type === 'break_out' ? 'pause' : 'play_arrow'
+                                                    }
+                                                </span>
+                                                <div>
+                                                    <p className="font-bold text-slate-800">
+                                                        {
+                                                            log.type === 'check_in' ? 'Entrada Turno' :
+                                                            log.type === 'check_out' ? 'Salida Turno' :
+                                                            log.type === 'break_out' ? 'Inicio Descanso' : 'Fin Descanso'
+                                                        }
+                                                    </p>
+                                                    <p className="text-[10px] text-slate-400 font-mono">IP: {log.ip_address}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="font-bold text-slate-700">
+                                                    {new Date(log.timestamp).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                                </p>
+                                                <p className="text-xs text-slate-500">
+                                                    {new Date(log.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} hs
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* BILLING TAB */}
+                {activeTab === 'billing' && (
+                    <div className="space-y-6 animate-fadeIn">
+                        
+                        {/* Overview Card */}
+                        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">Cirugías Realizadas</h3>
+                                <p className="text-sm text-slate-500 mt-1">Cálculo de honorarios por procedimiento y tiempo de quirófano</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => setIsAddManualModalOpen(true)}
+                                    className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all"
+                                >
+                                    <span className="material-symbols-outlined text-base">add_circle</span>
+                                    Agregar Cirugía a mi Listado
+                                </button>
+                                <div className="text-right bg-slate-50 p-4 rounded-xl border border-slate-200 w-full md:w-auto">
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Horas Fichadas ({attendanceHoursReport.totalHours.toFixed(2)} hs)</p>
+                                    <p className="text-2xl font-black text-indigo-600 mt-1">${attendanceHoursReport.amount.toLocaleString()}</p>
+                                </div>
+                                <div className="text-right bg-slate-50 p-4 rounded-xl border border-slate-200 w-full md:w-auto">
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Subtotal Cirugías</p>
+                                    <p className="text-2xl font-black text-indigo-600 mt-1">${totalSurgeriesAmount.toLocaleString()}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* List Table */}
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto">
+                            {surgeriesReport.length === 0 ? (
+                                <div className="text-center py-12 text-slate-400 font-bold italic uppercase tracking-wider text-sm">
+                                    No se registran cirugías realizadas para el técnico seleccionado en el período.
+                                </div>
+                            ) : (
+                                <table className="w-full text-left">
+                                    <thead className="bg-slate-100 text-slate-500 text-[10px] uppercase font-bold tracking-widest border-b border-slate-200">
+                                        <tr>
+                                            <th className="px-6 py-4">Fecha</th>
+                                            <th className="px-6 py-4">Paciente</th>
+                                            <th className="px-6 py-4">Procedimiento</th>
+                                            <th className="px-6 py-4 text-center">Duración (Real / Redond.)</th>
+                                            <th className="px-6 py-4 text-right">Tarifa Nomenclador</th>
+                                            <th className="px-6 py-4 text-right">Tarifa Tiempo (Qx)</th>
+                                            <th className="px-6 py-4 text-right bg-slate-50/50">Monto Qx Total</th>
+                                            <th className="px-6 py-4 text-left">Cómputo / Regla</th>
+                                            <th className="px-6 py-4 text-right bg-indigo-50/50 text-indigo-900 font-black">Mi Parte</th>
+                                            <th className="px-4 py-4 text-center">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 text-sm">
+                                        {surgeriesReport.map((s, idx) => (
+                                            <tr key={s.id || idx} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-4 font-bold text-slate-700">
+                                                    {new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                                                </td>
+                                                <td className="px-6 py-4 font-bold text-slate-900">{s.patient}</td>
+                                                <td className="px-6 py-4 max-w-xs truncate font-medium text-slate-600" title={s.procedure}>
+                                                    {s.procedure}
+                                                </td>
+                                                <td className="px-6 py-4 text-center font-semibold text-slate-700">
+                                                    {s.realMin}m / <span className="text-indigo-600">{s.roundedMin}m</span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-medium text-slate-600">${s.practiceRate.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-right font-medium text-slate-600">${s.timeCost.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-right font-semibold bg-slate-50/50 text-slate-700">${s.totalCost.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-left text-xs font-bold text-slate-500">
+                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${
+                                                        manualSurgeryIds.includes(s.id) ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                                        s.notes.includes('100%') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                                    }`}>
+                                                        {manualSurgeryIds.includes(s.id) && <span className="material-symbols-outlined text-xs">touch_app</span>}
+                                                        {manualSurgeryIds.includes(s.id) ? 'Cargada Manualmente' : s.notes}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-black bg-indigo-50/50 text-indigo-700">${s.share.toLocaleString()}</td>
+                                                <td className="px-4 py-4 text-center flex items-center justify-center gap-1">
+                                                    {s.isSingleAssignee && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setCoAssignSurgeryId(s.id);
+                                                                setIsCoAssignModalOpen(true);
+                                                            }}
+                                                            className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
+                                                            title="Sumar a otro técnico a esta cirugía"
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">person_add</span>
+                                                            <span className="hidden lg:inline">+ Sumar Técnico</span>
+                                                        </button>
+                                                    )}
+                                                    {manualSurgeryIds.includes(s.id) && (
+                                                        <button
+                                                            onClick={() => handleRemoveManualSurgery(s.id)}
+                                                            className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1.5 rounded-lg transition-colors"
+                                                            title="Quitar cirugía cargada manualmente"
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">delete</span>
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* GUARDS TAB */}
+                {activeTab === 'guards' && (
+                    <div className="space-y-6 animate-fadeIn">
+                        
+                        {/* Overview Card */}
+                        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">Guardias Realizadas</h3>
+                                <p className="text-sm text-slate-500 mt-1">Cálculo proporcional de guardias cubiertas (Hábiles, Sábados, Domingos y Feriados)</p>
+                            </div>
+                            <div className="text-right bg-slate-50 p-4 rounded-xl border border-slate-200 w-full md:w-auto">
+                                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Subtotal Guardias ({guardsReport.daysCount.toFixed(2)} días)</p>
+                                <p className="text-2xl font-black text-emerald-600 mt-1">${guardsReport.totalAmount.toLocaleString()}</p>
+                            </div>
+                        </div>
+
+                        {/* Detalle Guardias & Calendario */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            
+                            {/* Resumen numérico y Semanas */}
+                            <div className="lg:col-span-1 space-y-6">
+                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Resumen de Días</h4>
+                                    
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-500 font-semibold">Equivalente de Hábiles:</span>
+                                            <span className="font-bold text-slate-800">
+                                                {guardsReport.weeksDetail.reduce((acc, curr) => acc + curr.equiv, 0).toFixed(2)} días
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-500 font-semibold">Fines de Semana:</span>
+                                            <span className="font-bold text-slate-800">{guardsReport.weekendDaysCount} días</span>
+                                        </div>
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-500 font-semibold">Feriados Nacionales:</span>
+                                            <span className="font-bold text-slate-800">{guardsReport.holidaysCount} días</span>
+                                        </div>
+                                        <div className="h-px bg-slate-100 my-2"></div>
+                                        <div className="flex justify-between text-sm font-bold text-indigo-600">
+                                            <span>Total computable:</span>
+                                            <span>{guardsReport.daysCount.toFixed(2)} días</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Semanas Hábiles Trabajadas (Lunes a Viernes)</h4>
+                                    
+                                    {guardsReport.weeksDetail.length === 0 ? (
+                                        <div className="flex-1 flex items-center justify-center text-xs text-slate-400 py-6 italic">
+                                            No se computan días hábiles en guardias este período.
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y divide-slate-100 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                                            {guardsReport.weeksDetail.map((w, idx) => (
+                                                <div key={idx} className="py-2.5 flex justify-between text-sm items-center">
+                                                    <div>
+                                                        <p className="font-bold text-slate-700">Semana del {new Date(`${w.week}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</p>
+                                                        <p className="text-xs text-slate-400">Días trabajados: {w.daysCount}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="font-black text-slate-800">{w.equiv.toFixed(2)} día</p>
+                                                        <p className="text-[10px] text-slate-400">({w.daysCount}/5 de guardia)</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Calendario Visual de Guardias */}
+                            <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h4 className="text-sm font-black text-slate-700 uppercase tracking-tight flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-indigo-600">calendar_month</span>
+                                        Calendario de Guardias Asignadas
+                                    </h4>
+                                    
+                                    {/* Leyenda */}
+                                    <div className="flex gap-3 text-[10px] font-bold">
+                                        <div className="flex items-center gap-1">
+                                            <span className="size-2 rounded bg-emerald-500"></span>
+                                            <span className="text-slate-500">Guardia Hábil</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <span className="size-2 rounded bg-indigo-500"></span>
+                                            <span className="text-slate-500">Fin de Semana</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <span className="size-2 rounded bg-amber-500"></span>
+                                            <span className="text-slate-500">Feriado</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Rejilla del Calendario */}
+                                <div className="grid grid-cols-7 gap-2 text-center text-xs">
+                                    {/* Cabecera del día */}
+                                    {['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'].map((d, i) => (
+                                        <div key={i} className="font-black text-slate-400 uppercase text-[10px] tracking-wider pb-2 border-b border-slate-100">
+                                            {d}
+                                        </div>
+                                    ))}
+                                    
+                                    {/* Celdas de días */}
+                                    {(() => {
+                                        const firstDayDate = new Date(selectedYear, selectedMonth, 1);
+                                        const firstDayIndex = firstDayDate.getDay();
+                                        const totalDays = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+                                        
+                                        const cells = [];
+                                        // Rellenar días vacíos antes del inicio del mes
+                                        for (let i = 0; i < firstDayIndex; i++) {
+                                            cells.push(<div key={`empty-${i}`} className="aspect-square bg-slate-50/50 rounded-xl border border-slate-100/30"></div>);
+                                        }
+
+                                        // Generar los días del mes
+                                        for (let day = 1; day <= totalDays; day++) {
+                                            const dateObj = new Date(selectedYear, selectedMonth, day);
+                                            const dateStr = getLocalStr(dateObj);
+                                            const onDuty = getOnDutyTecnicoForDate(dateStr);
+                                            
+                                            const isMe = onDuty && onDuty.id === selectedTecnicoId;
+                                            const isHolidayDay = isHoliday(dateObj);
+                                            const dayOfWeek = dateObj.getDay();
+                                            const isWE = dayOfWeek === 0 || dayOfWeek === 6;
+
+                                            let cellClass = "bg-slate-50 text-slate-500 border border-slate-100 hover:bg-slate-100/50";
+                                            if (isMe) {
+                                                if (isHolidayDay && !isWE) {
+                                                    cellClass = "bg-amber-500 text-white font-bold shadow-md shadow-amber-100 border border-amber-600";
+                                                } else if (isWE) {
+                                                    cellClass = "bg-indigo-600 text-white font-bold shadow-md shadow-indigo-100 border border-indigo-700";
+                                                } else {
+                                                    cellClass = "bg-emerald-500 text-white font-bold shadow-md shadow-emerald-100 border border-emerald-600";
+                                                }
+                                            }
+
+                                            cells.push(
+                                                <div 
+                                                    key={`day-${day}`} 
+                                                    className={`aspect-square rounded-xl flex flex-col items-center justify-between p-2 transition-all relative ${cellClass}`}
+                                                    title={isMe ? `Guardia asignada: ${isHolidayDay ? 'Feriado' : isWE ? 'Fin de Semana' : 'Día Hábil'}` : 'Sin asignación'}
+                                                >
+                                                    <span className="text-xs font-black">{day}</span>
+                                                    {isMe && (
+                                                        <span className="material-symbols-outlined text-[10px] absolute bottom-1 text-white/90">
+                                                            {isHolidayDay ? 'star' : isWE ? 'event' : 'check_circle'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            );
+                                        }
+                                        return cells;
+                                    })()}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}                {/* RATES TAB (ADMIN ONLY) */}
+                {activeTab === 'rates' && isLevelAdmin && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn">
+                        
+                        {/* Configurar Valores Globales */}
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between min-h-[350px]">
+                            <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-slate-400">settings_suggest</span>
+                                Valores Globales
+                            </h3>
+
+                            <div className="space-y-4 flex-1">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Valor de la Hora de Cirugía ($)</label>
+                                    <input
+                                        type="number"
+                                        className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                        value={hourRate}
+                                        onChange={e => setHourRate(Number(e.target.value))}
+                                    />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Valor del Día de Guardia ($)</label>
+                                    <input
+                                        type="number"
+                                        className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                        value={guardRate}
+                                        onChange={e => setGuardRate(Number(e.target.value))}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">IP Pública WiFi Clínica</label>
+                                    <input
+                                        type="text"
+                                        className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500 font-mono"
+                                        placeholder="Ej: 181.104.119.15, 190.57.246.74"
+                                        value={inputClinicIp}
+                                        onChange={e => setInputClinicIp(e.target.value)}
+                                    />
+                                    <p className="text-[10px] text-indigo-600 mt-1 italic">
+                                        Admite múltiples IPs separadas por coma. Tu IP actual es: {clientIp || 'No detectada'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleSaveGlobalRates}
+                                disabled={isSavingRate}
+                                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md mt-6 transition-all active:scale-98"
+                            >
+                                {isSavingRate ? 'Guardando...' : 'Guardar Valores'}
+                            </button>
+                        </div>
+
+                        {/* Configurar Valores Nomenclador */}
+                        <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                            <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-slate-400">list_alt</span>
+                                Tarifas por Práctica (Nomenclador)
+                            </h3>
+
+                            {/* Cargar Práctica */}
+                            <div className="grid grid-cols-3 gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                <div className="col-span-1">
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Código (Ej: 1210708)</label>
+                                    <input
+                                        type="text"
+                                        className="w-full bg-white text-slate-900 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-mono"
+                                        placeholder="Código práctica..."
+                                        value={practiceCodeInput}
+                                        onChange={e => setPracticeCodeInput(e.target.value)}
+                                    />
+                                </div>
+                                <div className="col-span-1">
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Monto ($)</label>
+                                    <input
+                                        type="number"
+                                        className="w-full bg-white text-slate-900 rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
+                                        value={practiceValueInput}
+                                        onChange={e => setPracticeValueInput(Number(e.target.value))}
+                                    />
+                                </div>
+                                <div className="col-span-1 flex items-end">
+                                    <button
+                                        onClick={handleSavePracticeRate}
+                                        disabled={isSavingRate}
+                                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs"
+                                    >
+                                        Agregar / Actualizar
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Listado Prácticas con Tarifas */}
+                            <div className="flex-1 overflow-y-auto max-h-[300px] divide-y divide-slate-100 pr-2 custom-scrollbar">
+                                {practiceRates.length === 0 ? (
+                                    <div className="text-center py-12 text-xs text-slate-400 italic">
+                                        No hay prácticas cargadas.
+                                    </div>
+                                ) : (
+                                    practiceRates.map(r => (
+                                        <div key={r.id} className="py-2 flex justify-between items-center text-sm font-medium">
+                                            <div className="flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-slate-400 text-base">clinical_trial</span>
+                                                <span className="font-bold text-slate-800 font-mono">Práctica {r.practice_code}</span>
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <span className="font-black text-slate-800">${r.value.toLocaleString()}</span>
+                                                <button
+                                                    onClick={() => r.id && handleDeletePracticeRate(r.id)}
+                                                    className="text-slate-400 hover:text-red-600"
+                                                >
+                                                    <span className="material-symbols-outlined text-base">delete</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Bottom Consent Panel */}
+            {selectedTecnicoId && (
+                <div className="mt-8 bg-white border border-slate-200 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden">
+                    <div className="absolute top-0 inset-x-0 h-1.5 bg-indigo-600"></div>
+                    <div>
+                        <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+                            <span className="material-symbols-outlined text-indigo-600">verified</span>
+                            Liquidación Total y Cierre Mensual
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1 leading-normal">
+                            Suma acumulada de cirugías y guardias para el período seleccionado.
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full md:w-auto">
+                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center md:text-right min-w-[200px]">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total a Liquidar</p>
+                            <p className="text-3xl font-black text-indigo-700 mt-1">${grandTotalAmount.toLocaleString()}</p>
+                        </div>
+                        
+                        {currentConsent ? (
+                            <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl p-4 flex flex-col justify-center items-center gap-1">
+                                <span className="px-2 py-0.5 bg-emerald-600 text-white text-[9px] font-bold uppercase tracking-wider rounded-md">Conformidad Brindada</span>
+                                <p className="text-[10px] font-bold mt-1 text-center">
+                                    Firmado el {new Date(currentConsent.consented_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })} a las {new Date(currentConsent.consented_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} hs
+                                </p>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={handleGiveConsent}
+                                className="px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-100 flex items-center justify-center gap-2 transition-all active:scale-97 text-sm"
+                            >
+                                <span className="material-symbols-outlined">edit_document</span>
+                                Dar Consentimiento / Conformidad
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Modal para Agregar Cirugía Manualmente */}
+            {isAddManualModalOpen && (
+                <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-indigo-600">add_circle</span>
+                                Agregar Cirugía Manual
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setIsAddManualModalOpen(false);
+                                    setSelectedManualSurgeryId('');
+                                }}
+                                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                            >
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+
+                        <p className="text-xs text-slate-500">
+                            Seleccione una cirugía completada en el período para incluirla manualmente en el listado del técnico seleccionado.
+                        </p>
+
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-700">Cirugías Disponibles ({surgeries.length}):</label>
+                            <select
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                                value={selectedManualSurgeryId}
+                                onChange={e => setSelectedManualSurgeryId(e.target.value)}
+                            >
+                                <option value="">-- Seleccionar Cirugía --</option>
+                                {surgeries.map(s => {
+                                    const isAlreadyIncluded = filteredSurgeries.some(fs => fs.id === s.id);
+                                    return (
+                                        <option key={s.id} value={s.id} disabled={isAlreadyIncluded}>
+                                            {s.date} | {s.patient?.name || 'Paciente sin nombre'} - {s.procedure} ({s.actual_start_time || 'Sin hora'}) {isAlreadyIncluded ? '(Ya incluida)' : ''}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </div>
+
+                        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                            <button
+                                onClick={() => {
+                                    setIsAddManualModalOpen(false);
+                                    setSelectedManualSurgeryId('');
+                                }}
+                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleAddManualSurgery}
+                                disabled={!selectedManualSurgeryId || isSavingManualSurgery}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1"
+                            >
+                                {isSavingManualSurgery ? 'Guardando...' : 'Confirmar e Incluir'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal para Sumar/Coparticipar a Segundo Técnico */}
+            {isCoAssignModalOpen && (
+                <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-indigo-600">person_add</span>
+                                Sumar Técnico a la Cirugía
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setIsCoAssignModalOpen(false);
+                                    setCoAssignSurgeryId('');
+                                    setCoAssignTecnicoId('');
+                                }}
+                                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                            >
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+
+                        <p className="text-xs text-slate-500">
+                            Seleccione un técnico disponible (fijo o de guardia) para coparticipar al 50% en los honorarios de esta cirugía.
+                        </p>
+
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-700">Técnico a incorporar:</label>
+                            <select
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                                value={coAssignTecnicoId}
+                                onChange={e => setCoAssignTecnicoId(e.target.value)}
+                            >
+                                <option value="">-- Seleccionar Técnico --</option>
+                                {tecnicos.filter(t => t.id !== selectedTecnicoId).map(t => (
+                                    <option key={t.id} value={t.id}>
+                                        {t.name} {t.is_turno_tarde ? '(Fijo Tarde)' : '(Guardia)'}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                            <button
+                                onClick={() => {
+                                    setIsCoAssignModalOpen(false);
+                                    setCoAssignSurgeryId('');
+                                    setCoAssignTecnicoId('');
+                                }}
+                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleCoAssignTecnico}
+                                disabled={!coAssignTecnicoId || isSavingManualSurgery}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1"
+                            >
+                                {isSavingManualSurgery ? 'Guardando...' : 'Confirmar Coparticipación'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

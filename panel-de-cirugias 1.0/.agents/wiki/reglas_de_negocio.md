@@ -133,10 +133,9 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     *   Cualquier cirugía los sábados y domingos, o que inicie después de las 19:00 hs en días hábiles, se le abona al **100% al Técnico de Guardia** de ese día.
 *   **Resto de Horarios**: Cualquier otra cirugía fuera del turno tarde (ej: mañanas hábiles) se distribuye al **50% para el Técnico de Guardia**.
 
-### Redondeo y Liquidación de Tiempos de Cirugía
-*   **Piso de Duración**: Cualquier cirugía que dure 30 minutos o menos se computa como 30 minutos (0.5 hs).
-*   **Redondeo por Bloques**: A partir de los 30 minutos, el tiempo se redondea hacia arriba al siguiente bloque de 15 minutos (ej: 35 min -> 45 min, 50 min -> 60 min).
-*   **Fórmula de Costo**: `Costo Qx = Tarifa Práctica (Nomenclador) + (Tarifa Hora * Horas Redondeadas)`.
+### Unificación de Nomenclador al Estándar AOTER
+*   **Mapeo Automático**: Todas las cirugías procesadas en el panel (incluidas las cirugías de OSER o con nomenclador numérico alternativo `121.xx.xx`) se mapean automáticamente al código **AOTER unificado** (`MS.xx.xx`, `RO.xx.xx`, `PP.xx.xx`) utilizando el mapa de equivalencias `nomenclador_mapping.json`.
+*   **Cómputo de Tarifas**: Las tarifas de práctica configuradas en `tecnico_rates` se consultan contra el código AOTER unificado, asegurando liquidaciones parejas entre todas las obras sociales.
 
 ### Cómputo de Guardias Acumuladas y Cortes de Mes (Evitar Duplicados)
 *   **Semana Hábil**: Por cada 5 días hábiles (lunes a viernes) de guardia trabajados, se computa 1 día de guardia. Fracciones menores de forma proporcional.

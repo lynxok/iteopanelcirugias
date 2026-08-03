@@ -4,6 +4,7 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.76 [2026-08-03]**: Lanzada la versión **v3.10.76**. Homologación y unificación automática de nomencladores al estándar **AOTER** (`nomenclador_mapping.json`) para el cómputo de tarifas y honorarios de cirugías de OSER en la sección "Gestión de Técnicos".
 *   **v3.10.75 [2026-08-03]**: Lanzada la versión **v3.10.75**. Actualización del módulo "Gestión de Técnicos":
     *   Fichaje obligatorio (`check_in`) para el turno tarde (L-J 15:00 a 19:00, V 14:00 a 19:00).
     *   Cierre automático de fichada de salida a las 19:00 hs para registros sin `check_out` pasada las 22:00 hs.
