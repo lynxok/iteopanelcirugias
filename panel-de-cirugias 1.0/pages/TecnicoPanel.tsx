@@ -308,6 +308,8 @@ export default function TecnicoPanel() {
         });
 
         let totalMinutes = 0;
+        const displayLogs: (Attendance & { isAuto?: boolean })[] = [...attendanceLogs];
+
         const details = Object.entries(logsByDay).map(([dateStr, dayLogs]) => {
             const sortedLogs = [...dayLogs].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             let dayMin = 0;
@@ -337,7 +339,6 @@ export default function TecnicoPanel() {
 
             // Si quedó un check_in abierto (sin check_out)
             if (currentCheckInTime !== null) {
-                const checkInDate = new Date(currentCheckInTime);
                 const defaultAutoOutTime = new Date(`${dateStr}T19:00:00`).getTime();
                 const cutoff22Time = new Date(`${dateStr}T22:00:00`).getTime();
                 const nowTime = new Date().getTime();
@@ -347,6 +348,17 @@ export default function TecnicoPanel() {
                     if (defaultAutoOutTime > currentCheckInTime) {
                         let diff = (defaultAutoOutTime - currentCheckInTime) / 60000;
                         dayMin += diff;
+
+                        // Insertar fichada sintética visual de egreso automático
+                        const autoOutLog: Attendance & { isAuto?: boolean } = {
+                            id: `auto-out-${dateStr}`,
+                            user_id: selectedTecnicoId,
+                            timestamp: new Date(`${dateStr}T19:00:00`).toISOString(),
+                            type: 'check_out',
+                            ip_address: 'Sistema (Auto)',
+                            isAuto: true
+                        };
+                        displayLogs.push(autoOutLog);
                     }
                 }
             }
@@ -361,13 +373,17 @@ export default function TecnicoPanel() {
             };
         });
 
+        // Ordenar la lista visual final cronológicamente descendente
+        displayLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
         const totalHours = totalMinutes / 60;
         return {
             totalHours,
             amount: totalHours * hourRate,
-            details
+            details,
+            displayLogs
         };
-    }, [attendanceLogs, hourRate]);
+    }, [attendanceLogs, hourRate, selectedTecnicoId]);
 
     // Lógica para saber quién estuvo de guardia en una fecha
     const getOnDutyTecnicoForDate = useCallback((dateStr: string) => {
@@ -1112,29 +1128,36 @@ export default function TecnicoPanel() {
                                 </div>
                             ) : (
                                 <div className="flex-1 overflow-y-auto max-h-[300px] divide-y divide-slate-100 custom-scrollbar pr-2">
-                                    {attendanceLogs.map(log => (
-                                        <div key={log.id} className="py-3 flex justify-between items-center text-sm">
+                                    {attendanceHoursReport.displayLogs.map((log, idx) => (
+                                        <div key={log.id || idx} className="py-3 flex justify-between items-center text-sm">
                                             <div className="flex items-center gap-3">
                                                 <span className={`material-symbols-outlined p-2 rounded-full ${
                                                     log.type === 'check_in' ? 'bg-emerald-50 text-emerald-600' :
-                                                    log.type === 'check_out' ? 'bg-rose-50 text-rose-600' :
+                                                    log.type === 'check_out' ? (log.isAuto ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600') :
                                                     log.type === 'break_out' ? 'bg-amber-50 text-amber-600' :
                                                     'bg-blue-50 text-blue-600'
                                                 }`}>
                                                     {
                                                         log.type === 'check_in' ? 'login' :
-                                                        log.type === 'check_out' ? 'logout' :
+                                                        log.type === 'check_out' ? (log.isAuto ? 'timer_off' : 'logout') :
                                                         log.type === 'break_out' ? 'pause' : 'play_arrow'
                                                     }
                                                 </span>
                                                 <div>
-                                                    <p className="font-bold text-slate-800">
-                                                        {
-                                                            log.type === 'check_in' ? 'Entrada Turno' :
-                                                            log.type === 'check_out' ? 'Salida Turno' :
-                                                            log.type === 'break_out' ? 'Inicio Descanso' : 'Fin Descanso'
-                                                        }
-                                                    </p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="font-bold text-slate-800">
+                                                            {
+                                                                log.type === 'check_in' ? 'Entrada Turno' :
+                                                                log.type === 'check_out' ? 'Salida Turno' :
+                                                                log.type === 'break_out' ? 'Inicio Descanso' : 'Fin Descanso'
+                                                            }
+                                                        </p>
+                                                        {log.isAuto && (
+                                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-extrabold uppercase rounded-full border border-amber-300">
+                                                                Cerrado por falta de marca
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <p className="text-[10px] text-slate-400 font-mono">IP: {log.ip_address}</p>
                                                 </div>
                                             </div>
