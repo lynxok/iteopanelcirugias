@@ -4,6 +4,10 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.80 [2026-08-03]**: Lanzada la versión **v3.10.80**. Actualizado el contador del KPI resumen **"FALTA MATERIAL"** para computar todas las cirugías activas que requieren prótesis/materiales y tienen pendiente la validación de ortopedia, coincidiendo con el bloque unificado y la grilla.
+*   **v3.10.79 [2026-08-03]**: Lanzada la versión **v3.10.79**. Reorganización de la vista pre-quirúrgica de Planificación ([Kanban.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Kanban.tsx)) en dos bloques unificados sin pestañas ni botones flotantes: **"OSER sin aprobar material"** y **"OSER material aprobado (Capital)"**.
+*   **v3.10.78 [2026-08-03]**: Lanzada la versión **v3.10.78**. Refinada la lógica del filtro de materiales sin validar: se excluyen automáticamente aquellas cirugías que no requieren materiales de ortopedia ya que no precisan autorización del proveedor.
+*   **v3.10.77 [2026-08-03]**: Lanzada la versión **v3.10.77**. Implementación inicial de filtros de Ortopedia Capital y Fecha de Autorización en la vista de Planificación.
 *   **v3.10.76 [2026-08-03]**: Lanzada la versión **v3.10.76**. Homologación y unificación automática de nomencladores al estándar **AOTER** (`nomenclador_mapping.json`) para el cómputo de tarifas y honorarios de cirugías de OSER en la sección "Gestión de Técnicos".
 *   **v3.10.75 [2026-08-03]**: Lanzada la versión **v3.10.75**. Actualización del módulo "Gestión de Técnicos":
     *   Fichaje obligatorio (`check_in`) para el turno tarde (L-J 15:00 a 19:00, V 14:00 a 19:00).

@@ -17,6 +17,11 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 *   **Reseteo de Seguridad**: La "Validación Quirófano" se destilda automáticamente si la cirugía pasa a estado suspendido o reprogramado para forzar una nueva revisión.
 *   **Cirugías Canceladas (`cancelled`)**: Se recuperan en el calendario para su consulta histórica. No se muestran como programadas en la grilla regular ni se listan en el panel de cirugías pendientes. En su lugar, cada día del calendario muestra un botón "Canceladas (X)" que abre un modal con el listado detallado y permite visualizar su ficha quirúrgica.
 
+### Organización de Flujo Pre-Quirúrgico (Planificación)
+*   **Sección `OSER sin aprobar material`**: Agrupa en un bloque dedicado aquellas cirugías que cuentan con fecha de autorización (OSER) y **requieren prótesis/materiales**, pero cuya validación por parte de la ortopedia se encuentra **pendiente** (`materialStatus !== 'OK'`). Las cirugías que no requieren materiales quedan excluidas automáticamente de este grupo.
+*   **Sección `OSER material aprobado (Capital)`**: Agrupa en un bloque dedicado las cirugías con fecha de autorización (OSER) asignadas a **Ortopedia Capital** cuya validación de materiales ya ha sido **aprobada/confirmada** (`materialStatus === 'OK'`).
+*   **Contador del KPI Resumen `FALTA MATERIAL`**: Calcula la suma total de **todas las cirugías activas** (con o sin fecha programada) que requieren prótesis/materiales y cuya aprobación por parte de la ortopedia aún está pendiente, garantizando coincidencia exacta con el bloque *OSER sin aprobar material* y bloqueadores de grilla.
+
 ### Lógica de Finalización y Auto-Inicio
 *   **Auto-Inicio**: Si una cirugía con horario asignado se encuentra en estado "Pendiente" a la hora de comienzo programada, el sistema la muestra como "En Curso" en tiempo real.
 *   **Auto-Finalización**:
