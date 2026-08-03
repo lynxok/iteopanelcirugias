@@ -137,6 +137,13 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 *   **Mapeo Automático**: Todas las cirugías procesadas en el panel (incluidas las cirugías de OSER o con nomenclador numérico alternativo `121.xx.xx`) se mapean automáticamente al código **AOTER unificado** (`MS.xx.xx`, `RO.xx.xx`, `PP.xx.xx`) utilizando el mapa de equivalencias `nomenclador_mapping.json`.
 *   **Cómputo de Tarifas**: Las tarifas de práctica configuradas en `tecnico_rates` se consultan contra el código AOTER unificado, asegurando liquidaciones parejas entre todas las obras sociales.
 
+### Cierre Mensual y Notificaciones por Correo Electrónico
+*   **Firma de Conformidad**: Al presionar **"Dar Consentimiento / Conformidad"**, el técnico otorga conformidad digital sobre la planilla del mes seleccionado.
+*   **Notificación Automática por Correo**: El sistema genera y encola un correo en `quirofano.email_notifications` que se envía a:
+    1. La casilla de **Administración** configurada en la pestaña *Tarifas y Ajustes* (`notification_email`).
+    2. Una **copia (CC)** a la casilla de correo registrada del propio **Técnico**.
+*   **Detalle del Resumen**: El correo enviado incluye el desglose completo del monto total ($), especificando parciales de cirugías, días de guardia y horas de asistencia fichadas.
+
 ### Cómputo de Guardias Acumuladas y Cortes de Mes (Evitar Duplicados)
 *   **Semana Hábil**: Por cada 5 días hábiles (lunes a viernes) de guardia trabajados, se computa 1 día de guardia. Fracciones menores de forma proporcional.
 *   **Fines de Semana y Feriados**: Cada sábado, domingo o feriado en día de semana suma 1 día de guardia completo directo.

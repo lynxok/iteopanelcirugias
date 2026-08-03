@@ -98,7 +98,9 @@ export default function TecnicoPanel() {
     // Rate Form State
     const [hourRate, setHourRate] = useState<number>(0);
     const [guardRate, setGuardRate] = useState<number>(0);
+    const [notificationEmail, setNotificationEmail] = useState<string>('');
     const [inputClinicIp, setInputClinicIp] = useState<string>('');
+    const [inputNotificationEmail, setInputNotificationEmail] = useState<string>('');
     const [practiceCodeInput, setPracticeCodeInput] = useState<string>('');
     const [practiceValueInput, setPracticeValueInput] = useState<number>(0);
 
@@ -165,10 +167,13 @@ export default function TecnicoPanel() {
                 const hr = rateData.find(r => r.rate_type === 'hour')?.value || 0;
                 const gr = rateData.find(r => r.rate_type === 'guard')?.value || 0;
                 const cip = rateData.find(r => r.rate_type === 'clinic_ip')?.practice_code || '';
+                const ne = rateData.find(r => r.rate_type === 'notification_email')?.practice_code || '';
                 setHourRate(hr);
                 setGuardRate(gr);
                 setClinicIp(cip);
                 setInputClinicIp(cip);
+                setNotificationEmail(ne);
+                setInputNotificationEmail(ne);
             }
 
             // 3. Configuración de guardias semanales de técnicos
@@ -820,6 +825,7 @@ export default function TecnicoPanel() {
     const handleGiveConsent = async () => {
         if (!selectedTecnicoId) return;
         const periodStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+        const targetTecnico = tecnicos.find(t => t.id === selectedTecnicoId);
         
         if (currentConsent) {
             alert('Ya has brindado conformidad para este período.');
@@ -840,8 +846,41 @@ export default function TecnicoPanel() {
                     status: 'consented'
                 });
             if (error) throw error;
+
+            // Encolar Notificaciones por Correo si hay emails configurados
+            const nowFormatted = new Date().toLocaleString('es-ES');
+            const emailSubject = `Conformidad Liquidación Técnicos - ${targetTecnico?.name || 'Técnico'} (${periodStr})`;
+            const emailBody = `
+Hola,
+
+Se ha registrado la conformidad de liquidación mensual de Técnicos de Quirófano:
+
+- Técnico: ${targetTecnico?.name || 'No especificado'} (${targetTecnico?.email || 'Sin correo registrado'})
+- Período: ${periodStr}
+- Monto Total Liquidado: $${grandTotalAmount.toLocaleString()}
+  * Cirugías: $${totalSurgeriesAmount.toLocaleString()}
+  * Guardias: $${guardsReport.totalAmount.toLocaleString()} (${guardsReport.daysCount} días)
+  * Asistencia Horas Fichadas: $${attendanceHoursReport.amount.toLocaleString()} (${attendanceHoursReport.totalHours.toFixed(1)} hs)
+- Fecha y Hora de Conformidad: ${nowFormatted}
+
+Atentamente,
+Sistema de Coordinación de Quirófano ITEO
+`.trim();
+
+            const recipients = new Set<string>();
+            if (notificationEmail.trim()) recipients.add(notificationEmail.trim());
+            if (targetTecnico?.email?.trim()) recipients.add(targetTecnico.email.trim());
+
+            for (const recipientEmail of recipients) {
+                await supabase.from('email_notifications').insert({
+                    recipient_email: recipientEmail,
+                    subject: emailSubject,
+                    message: emailBody,
+                    status: 'pending'
+                });
+            }
             
-            alert('Conformidad registrada exitosamente.');
+            alert('Conformidad registrada exitosamente y notificaciones de correo encoladas.');
             fetchData();
         } catch (e: any) {
             alert('Error al registrar conformidad: ' + e.message);
@@ -852,7 +891,7 @@ export default function TecnicoPanel() {
     const handleSaveGlobalRates = async () => {
         setIsSavingRate(true);
         try {
-            const upsertRate = async (type: 'hour' | 'guard' | 'clinic_ip', val: number, code?: string) => {
+            const upsertRate = async (type: 'hour' | 'guard' | 'clinic_ip' | 'notification_email', val: number, code?: string) => {
                 const payload: any = { rate_type: type, value: val };
                 if (code !== undefined) payload.practice_code = code;
                 
@@ -867,8 +906,9 @@ export default function TecnicoPanel() {
             await upsertRate('hour', hourRate);
             await upsertRate('guard', guardRate);
             await upsertRate('clinic_ip', 0, inputClinicIp);
+            await upsertRate('notification_email', 0, inputNotificationEmail);
 
-            alert('Tarifas globales actualizadas con éxito.');
+            alert('Tarifas y correos de notificación actualizados con éxito.');
             fetchData();
         } catch (e: any) {
             alert('Error al guardar tarifas: ' + e.message);
@@ -1492,6 +1532,20 @@ export default function TecnicoPanel() {
                                     />
                                     <p className="text-[10px] text-indigo-600 mt-1 italic">
                                         Admite múltiples IPs separadas por coma. Tu IP actual es: {clientIp || 'No detectada'}
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Correo Notificación Cierre de Mes (Administración)</label>
+                                    <input
+                                        type="email"
+                                        className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                        placeholder="Ej: administracion@iteo.com.ar"
+                                        value={inputNotificationEmail}
+                                        onChange={e => setInputNotificationEmail(e.target.value)}
+                                    />
+                                    <p className="text-[10px] text-slate-400 mt-1 italic">
+                                        Al dar conformidad, se enviará el resumen a este correo y con copia al técnico.
                                     </p>
                                 </div>
                             </div>
