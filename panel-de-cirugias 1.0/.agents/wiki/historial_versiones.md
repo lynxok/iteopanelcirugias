@@ -4,6 +4,11 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.75 [2026-08-03]**: Lanzada la versión **v3.10.75**. Actualización del módulo "Gestión de Técnicos":
+    *   Fichaje obligatorio (`check_in`) para el turno tarde (L-J 15:00 a 19:00, V 14:00 a 19:00).
+    *   Cierre automático de fichada de salida a las 19:00 hs para registros sin `check_out` pasada las 22:00 hs.
+    *   Incorporación del botón "+ Agregar Cirugía a mi Listado" con tabla `quirofano.tecnico_manual_surgeries`.
+    *   Soporte para coparticipar a un segundo técnico en cirugías individuales con botón "+ Sumar Técnico" y división automática del 50% de honorarios.
 *   **v3.10.74 [2026-07-31]**: Lanzada la versión **v3.10.74**. Implementado el filtrado de exclusividad para la **Oficina ART** en el `AdminDashboard.tsx` (restringiendo la vista únicamente a cirugías de aseguradoras ART) y añadida la casilla interactiva **"Paciente Notificado"** con registro de auditoría (`paciente_notificado`, `paciente_notificado_por`, `paciente_notificado_at`).
 *   **v3.10.73 [2026-07-31]**: Lanzada la versión **v3.10.73**. Generada nueva compilación y publicado release en GitHub para solucionar problemas en el proceso de actualización e instalación de la v3.10.72.
 *   **v3.10.71 [2026-07-30]**: Lanzada la versión **v3.10.71**. Incluidas prácticas ambulatorias (`is_guardia = true`) en la planilla de facturación (`Billing.tsx`) sin requerir estado `completed`. Verificado el permiso de modificación de cirugías para el rol `Administrativo de Guardias` sobre sus propias cirugías cargadas (`created_by_role`).

@@ -122,8 +122,13 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 ### Asignación de Cirugías y Coparticipación
 *   **Turno Tarde**:
     *   **Horario**: Lunes a Jueves de 15:00 a 19:00 hs, y Viernes de 14:00 a 19:00 hs.
-    *   **Distribución**: En este rango, coparticipan el **Técnico Fijo** y el **Técnico de Guardia**.
+    *   **Distribución**: En este rango, coparticipan el **Técnico Fijo** y el **Técnico de Guardia/Asignado esa semana**.
+    *   **Condición de Fichaje de Ingreso (Obligatorio)**: Para que una cirugía del turno tarde se asigne e incluya automáticamente en el listado del técnico (sea el Fijo o el de Guardia), dicho técnico **debe haber registrado su fichaje de ingreso (`check_in`) en la fecha de la cirugía**.
     *   **Cálculo**: El tiempo transcurrido (duración de la cirugía) se divide por 2 para el cómputo del costo. El monto total resultante de la cirugía se divide en un **50% para el Técnico Fijo** y **50% para el Técnico de Guardia**.
+*   **Adición Manual y Coparticipación de Cirugías**:
+    *   Cualquier técnico puede incluir manualmente una cirugía realizada a su planilla a través del botón **"+ Agregar Cirugía a mi Listado"**.
+    *   **Incorporar un Segundo Técnico**: En cirugías con 1 solo técnico asignado originalmente (ej. cirugías fuera del turno tarde, nocturnas o de fin de semana), el técnico asignado puede sumar a un segundo técnico disponible (fijo o de guardia) presionando el botón **"+ Sumar Técnico"**. Al hacerlo, los honorarios y tiempos de la cirugía se recalculan automáticamente al **50% para cada uno**.
+    *   Las cirugías agregadas manualmente o coparticipadas se marcan visualmente como `[Cargada Manualmente]` / `[50% Coparticipada]` y se persisten en la tabla `quirofano.tecnico_manual_surgeries`. También pueden ser removidas manualmente.
 *   **Fines de Semana y Horario Nocturno (Post-19:00 hs)**:
     *   Cualquier cirugía los sábados y domingos, o que inicie después de las 19:00 hs en días hábiles, se le abona al **100% al Técnico de Guardia** de ese día.
 *   **Resto de Horarios**: Cualquier otra cirugía fuera del turno tarde (ej: mañanas hábiles) se distribuye al **50% para el Técnico de Guardia**.
@@ -143,6 +148,7 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 ### Control de Asistencia y WiFi
 *   Los técnicos marcan Entrada, Salida, Descanso y Retorno desde su celular.
 *   La acción está bloqueada si la IP pública de navegación no coincide con alguna de las IPs configuradas de la clínica (soporta múltiples IPs separadas por comas).
+*   **Cierre Automático de Salida por Olvido (22:00 hs)**: Si un técnico marca ingreso (`check_in`) en el turno tarde y pasada las 22:00 hs del mismo día (o en días posteriores) no registró su marca de salida (`check_out`), el sistema le computa automáticamente el egreso a las **19:00 hs** de esa misma fecha.
 
 ### Cierre y Conformidad Mensual
 *   Al fin de mes, cada técnico debe auditar su planilla (que ahora consolida Horas Fichadas, Cirugías y Guardias) y presionar "Dar Conformidad" para registrar firma en `tecnico_monthly_consents` y bloquear liquidaciones.
