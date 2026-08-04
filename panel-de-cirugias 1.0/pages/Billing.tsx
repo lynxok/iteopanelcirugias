@@ -62,8 +62,20 @@ const Billing = () => {
     const [planillaFilterType, setPlanillaFilterType] = useState<'todos' | 'sin_factur' | 'con_factur' | 'sin_aoter' | 'con_aoter' | 'completas' | 'solo_ambulatorias' | 'solo_internacion'>('todos');
     const [planillaStartDate, setPlanillaStartDate] = useState('');
     const [planillaEndDate, setPlanillaEndDate] = useState('');
+    const [planillaBillingStartDate, setPlanillaBillingStartDate] = useState('');
+    const [planillaBillingEndDate, setPlanillaBillingEndDate] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(100);
+
+    // Modal de estadísticas
+    const [statModalData, setStatModalData] = useState<{
+        title: string;
+        description: string;
+        icon: string;
+        badgeColor: string;
+        rows: PlanillaRow[];
+    } | null>(null);
+    const [statModalSearch, setStatModalSearch] = useState('');
     // ────────────────────────────────────────────────────────────────
 
     // Permissions check
@@ -207,7 +219,7 @@ const Billing = () => {
                     surgery_id: surgery.id,
                     fecha: surgeryDateStr ? format(parseISO(surgeryDateStr), 'dd/MM/yyyy') : '—',
                     fechaRaw: surgeryDateStr || '',
-                    profesional: surgery.doctor?.full_name || '—',
+                    profesional: (surgery.doctor as any)?.full_name || '—',
                     paciente: patient?.full_name || '—',
                     cobertura: surgery.medical_coverage || patient?.insurance_name || 'PARTICULAR',
                     fe_factur: feFactur,
@@ -215,7 +227,7 @@ const Billing = () => {
                     nro_hc: patient?.medical_record_number || '—',
                     nuc: surgery.nuc || patient?.nuc || '—',
                     dni: patient?.document_number || '—',
-                    is_guardia: !!surgery.is_guardia,
+                    is_guardia: !!surgery.is_guardia || !!(surgery as any).is_ambulatory || !!(surgery as any).operating_room?.is_ambulatory,
                     patient_id: surgery.patient_id
                 });
             }
@@ -496,7 +508,7 @@ const Billing = () => {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [planillaSearch, planillaFilterType, planillaStartDate, planillaEndDate, rowsPerPage]);
+    }, [planillaSearch, planillaFilterType, planillaStartDate, planillaEndDate, planillaBillingStartDate, planillaBillingEndDate, rowsPerPage]);
 
     // Filtered Planilla Rows
     const filteredPlanilla = useMemo(() => {
@@ -532,7 +544,7 @@ const Billing = () => {
                 if (row.is_guardia) return false;
             }
 
-            // Date range filter
+            // Date range filter for Surgery / Admission Date (fechaRaw)
             if (row.fechaRaw) {
                 const rowDate = row.fechaRaw.substring(0, 10);
                 if (planillaStartDate && rowDate < planillaStartDate) return false;
@@ -541,9 +553,17 @@ const Billing = () => {
                 return false;
             }
 
+            // Date range filter for Billing Date (fe_factur)
+            if (planillaBillingStartDate || planillaBillingEndDate) {
+                if (!row.fe_factur) return false;
+                const feFacturDate = row.fe_factur.substring(0, 10);
+                if (planillaBillingStartDate && feFacturDate < planillaBillingStartDate) return false;
+                if (planillaBillingEndDate && feFacturDate > planillaBillingEndDate) return false;
+            }
+
             return true;
         });
-    }, [planillaRows, planillaSearch, planillaFilterType, planillaStartDate, planillaEndDate]);
+    }, [planillaRows, planillaSearch, planillaFilterType, planillaStartDate, planillaEndDate, planillaBillingStartDate, planillaBillingEndDate]);
 
     // Sorted Planilla Rows
     const sortedPlanilla = useMemo(() => {
@@ -652,17 +672,31 @@ const Billing = () => {
                 const sinAoter = filteredPlanilla.filter(r => !r.fe_aoter).length;
                 
                 const oserCount = filteredPlanilla.filter(r => String(r.cobertura).toUpperCase().includes('OSER')).length;
+                const ambulatoryCount = filteredPlanilla.filter(r => !!r.is_guardia).length;
 
                 // Internaciones facturadas en el período filtrado (fecha de factura dentro de planillaStartDate/planillaEndDate)
                 let invoicedInPeriodCount = 0;
                 let invoicedSamePeriodCount = 0;
                 let invoicedPrevPeriodCount = 0;
+                let invoicedInPeriodRows: PlanillaRow[] = [];
 
                 if (planillaStartDate || planillaEndDate) {
-                    const invoicedInPeriodRows = planillaRows.filter(r => {
+                    invoicedInPeriodRows = planillaRows.filter(r => {
                         if (!r.fe_factur) return false;
                         if (planillaStartDate && r.fe_factur < planillaStartDate) return false;
                         if (planillaEndDate && r.fe_factur > planillaEndDate) return false;
+                        if (planillaSearch) {
+                            const q = planillaSearch.toLowerCase().trim();
+                            const matchText = (
+                                String(r.paciente || '').toLowerCase().includes(q) ||
+                                String(r.dni || '').toLowerCase().includes(q) ||
+                                String(r.nuc || '').toLowerCase().includes(q) ||
+                                String(r.profesional || '').toLowerCase().includes(q) ||
+                                String(r.surgery_id || '').toLowerCase().includes(q) ||
+                                String(r.cobertura || '').toLowerCase().includes(q)
+                            );
+                            if (!matchText) return false;
+                        }
                         return true;
                     });
                     invoicedInPeriodCount = invoicedInPeriodRows.length;
@@ -675,7 +709,7 @@ const Billing = () => {
                     }).length;
                     invoicedPrevPeriodCount = invoicedInPeriodCount - invoicedSamePeriodCount;
                 } else {
-                    const invoicedInPeriodRows = planillaRows.filter(r => r.fe_factur);
+                    invoicedInPeriodRows = filteredPlanilla.filter(r => !!r.fe_factur);
                     invoicedInPeriodCount = invoicedInPeriodRows.length;
                     invoicedSamePeriodCount = invoicedInPeriodCount;
                     invoicedPrevPeriodCount = 0;
@@ -778,35 +812,59 @@ const Billing = () => {
                                         onChange={e => setPlanillaSearch(e.target.value)}
                                     />
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-sm text-slate-400">calendar_today</span>
-                                    <input
-                                        type="date"
-                                        value={planillaStartDate}
-                                        onChange={e => setPlanillaStartDate(e.target.value)}
-                                        className="px-2 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold bg-white cursor-pointer"
-                                    />
-                                    <span className="text-slate-400 font-bold">a</span>
-                                    <input
-                                        type="date"
-                                        value={planillaEndDate}
-                                        onChange={e => setPlanillaEndDate(e.target.value)}
-                                        className="px-2 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold bg-white cursor-pointer"
-                                    />
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                                        <span className="material-symbols-outlined text-xs text-slate-400">calendar_today</span>
+                                        <span className="text-[11px] font-bold text-slate-600">Fecha Práctica:</span>
+                                        <input
+                                            type="date"
+                                            value={planillaStartDate}
+                                            onChange={e => setPlanillaStartDate(e.target.value)}
+                                            className="px-2 py-1 rounded-lg border border-slate-200 text-xs font-semibold bg-white cursor-pointer"
+                                        />
+                                        <span className="text-slate-400 font-bold text-xs">a</span>
+                                        <input
+                                            type="date"
+                                            value={planillaEndDate}
+                                            onChange={e => setPlanillaEndDate(e.target.value)}
+                                            className="px-2 py-1 rounded-lg border border-slate-200 text-xs font-semibold bg-white cursor-pointer"
+                                        />
+                                    </div>
+
+                                    <div className="flex items-center gap-2 bg-emerald-50/70 px-3 py-1.5 rounded-xl border border-emerald-200/80">
+                                        <span className="material-symbols-outlined text-xs text-emerald-600">receipt_long</span>
+                                        <span className="text-[11px] font-bold text-emerald-900">Fecha Facturación:</span>
+                                        <input
+                                            type="date"
+                                            value={planillaBillingStartDate}
+                                            onChange={e => setPlanillaBillingStartDate(e.target.value)}
+                                            className="px-2 py-1 rounded-lg border border-emerald-200 text-xs font-semibold bg-white cursor-pointer"
+                                        />
+                                        <span className="text-emerald-500 font-bold text-xs">a</span>
+                                        <input
+                                            type="date"
+                                            value={planillaBillingEndDate}
+                                            onChange={e => setPlanillaBillingEndDate(e.target.value)}
+                                            className="px-2 py-1 rounded-lg border border-emerald-200 text-xs font-semibold bg-white cursor-pointer"
+                                        />
+                                    </div>
+
+                                    {(planillaStartDate || planillaEndDate || planillaBillingStartDate || planillaBillingEndDate || planillaSearch) && (
+                                        <button
+                                            onClick={() => {
+                                                setPlanillaStartDate('');
+                                                setPlanillaEndDate('');
+                                                setPlanillaBillingStartDate('');
+                                                setPlanillaBillingEndDate('');
+                                                setPlanillaSearch('');
+                                            }}
+                                            className="text-primary hover:underline flex items-center gap-1 font-black uppercase text-[10px] ml-1"
+                                        >
+                                            <span className="material-symbols-outlined text-xs">close</span>
+                                            Limpiar Filtros
+                                        </button>
+                                    )}
                                 </div>
-                                {(planillaStartDate || planillaEndDate || planillaSearch) && (
-                                    <button
-                                        onClick={() => {
-                                            setPlanillaStartDate('');
-                                            setPlanillaEndDate('');
-                                            setPlanillaSearch('');
-                                        }}
-                                        className="text-primary hover:underline flex items-center gap-1 font-black uppercase text-[10px]"
-                                    >
-                                        <span className="material-symbols-outlined text-xs">close</span>
-                                        Limpiar Filtros
-                                    </button>
-                                )}
                             </div>
                             <button
                                 onClick={fetchPlanilla}
@@ -818,23 +876,56 @@ const Billing = () => {
                         </div>
 
                         {/* KPIs Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 relative overflow-hidden group">
-                                <div className="size-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {/* Card 1: Internaciones Totales */}
+                            <div 
+                                onClick={() => {
+                                    setStatModalSearch('');
+                                    setStatModalData({
+                                        title: 'Internaciones Totales',
+                                        description: 'Listado completo de cirugías e internaciones computadas con los filtros actuales.',
+                                        icon: 'table_chart',
+                                        badgeColor: 'indigo',
+                                        rows: filteredPlanilla
+                                    });
+                                }}
+                                className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 relative overflow-hidden group cursor-pointer hover:shadow-md hover:border-indigo-300 hover:scale-[1.01] transition-all duration-200"
+                            >
+                                <div className="size-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
                                     <span className="material-symbols-outlined text-2xl">table_chart</span>
                                 </div>
-                                <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Internaciones Totales</p>
+                                <div className="flex-1">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Internaciones Totales</p>
+                                        <span className="material-symbols-outlined text-sm text-slate-300 group-hover:text-indigo-600 transition-colors">visibility</span>
+                                    </div>
                                     <h3 className="text-3xl font-black text-slate-900 mt-1">{totalFiltered}</h3>
+                                    <p className="text-[10px] text-indigo-600 font-bold mt-1 opacity-0 group-hover:opacity-100 transition-opacity">Haz click para ver detalle &rarr;</p>
                                 </div>
                             </div>
 
-                            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 relative overflow-hidden group">
-                                <div className="size-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            {/* Card 2: Internaciones Facturadas */}
+                            <div 
+                                onClick={() => {
+                                    setStatModalSearch('');
+                                    setStatModalData({
+                                        title: 'Internaciones Facturadas',
+                                        description: 'Listado de cirugías e internaciones con Fecha de Facturación asignada.',
+                                        icon: 'verified',
+                                        badgeColor: 'emerald',
+                                        rows: invoicedInPeriodRows
+                                    });
+                                }}
+                                className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 relative overflow-hidden group cursor-pointer hover:shadow-md hover:border-emerald-300 hover:scale-[1.01] transition-all duration-200"
+                            >
+                                <div className="size-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors shrink-0">
                                     <span className="material-symbols-outlined text-2xl">verified</span>
                                 </div>
                                 <div className="flex-1">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Internaciones Facturadas</p>
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Internaciones Facturadas</p>
+                                        <span className="material-symbols-outlined text-sm text-slate-300 group-hover:text-emerald-600 transition-colors">visibility</span>
+                                    </div>
                                     <div className="flex items-baseline gap-2 mt-1">
                                         <h3 className="text-3xl font-black text-slate-900">{invoicedInPeriodCount}</h3>
                                     </div>
@@ -844,16 +935,61 @@ const Billing = () => {
                                             <p className="text-amber-600 font-extrabold">{invoicedPrevPeriodCount} de períodos anteriores</p>
                                         </div>
                                     )}
+                                    <p className="text-[10px] text-emerald-600 font-bold mt-1 opacity-0 group-hover:opacity-100 transition-opacity">Haz click para ver detalle &rarr;</p>
                                 </div>
                             </div>
 
-                            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 relative overflow-hidden group">
-                                <div className="size-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                            {/* Card 3: Internaciones Ambulatorias */}
+                            <div 
+                                onClick={() => {
+                                    setStatModalSearch('');
+                                    setStatModalData({
+                                        title: 'Internaciones Ambulatorias',
+                                        description: 'Listado de cirugías y procedimientos de carácter ambulatorio o guardia.',
+                                        icon: 'medical_services',
+                                        badgeColor: 'purple',
+                                        rows: filteredPlanilla.filter(r => !!r.is_guardia)
+                                    });
+                                }}
+                                className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 relative overflow-hidden group cursor-pointer hover:shadow-md hover:border-purple-300 hover:scale-[1.01] transition-all duration-200"
+                            >
+                                <div className="size-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors shrink-0">
+                                    <span className="material-symbols-outlined text-2xl">medical_services</span>
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Internaciones Ambulatorias</p>
+                                        <span className="material-symbols-outlined text-sm text-slate-300 group-hover:text-purple-600 transition-colors">visibility</span>
+                                    </div>
+                                    <h3 className="text-3xl font-black text-slate-900 mt-1">{ambulatoryCount}</h3>
+                                    <p className="text-[10px] text-purple-600 font-bold mt-1 opacity-0 group-hover:opacity-100 transition-opacity">Haz click para ver detalle &rarr;</p>
+                                </div>
+                            </div>
+
+                            {/* Card 4: Pacientes OSER */}
+                            <div 
+                                onClick={() => {
+                                    setStatModalSearch('');
+                                    setStatModalData({
+                                        title: 'Pacientes OSER',
+                                        description: 'Listado de cirugías e internaciones pertenecientes a la cobertura OSER.',
+                                        icon: 'sync_alt',
+                                        badgeColor: 'amber',
+                                        rows: filteredPlanilla.filter(r => String(r.cobertura).toUpperCase().includes('OSER'))
+                                    });
+                                }}
+                                className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 relative overflow-hidden group cursor-pointer hover:shadow-md hover:border-amber-300 hover:scale-[1.01] transition-all duration-200"
+                            >
+                                <div className="size-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-colors shrink-0">
                                     <span className="material-symbols-outlined text-2xl">sync_alt</span>
                                 </div>
-                                <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pacientes OSER</p>
+                                <div className="flex-1">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Pacientes OSER</p>
+                                        <span className="material-symbols-outlined text-sm text-slate-300 group-hover:text-amber-600 transition-colors">visibility</span>
+                                    </div>
                                     <h3 className="text-3xl font-black text-slate-900 mt-1">{oserCount}</h3>
+                                    <p className="text-[10px] text-amber-600 font-bold mt-1 opacity-0 group-hover:opacity-100 transition-opacity">Haz click para ver detalle &rarr;</p>
                                 </div>
                             </div>
                         </div>
@@ -1018,20 +1154,18 @@ const Billing = () => {
                             </button>
                         </div>
 
-                        {/* Rango de fechas de ingreso */}
-                        <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-100 text-xs text-slate-500 font-bold">
-                            <div className="flex items-center gap-2">
+                        {/* Rango de fechas de ingreso / cirugía y fecha de facturación */}
+                        <div className="flex flex-wrap items-center gap-4 pt-3 border-t border-slate-100 text-xs text-slate-500 font-bold">
+                            <div className="flex items-center gap-2 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200">
                                 <span className="material-symbols-outlined text-sm text-slate-400">calendar_today</span>
-                                <span>Práctica desde:</span>
+                                <span>Práctica:</span>
                                 <input
                                     type="date"
                                     value={planillaStartDate}
                                     onChange={e => setPlanillaStartDate(e.target.value)}
                                     className="px-2 py-1 rounded-lg border border-slate-200 focus:ring-2 focus:ring-primary focus:border-primary outline-none text-xs font-semibold bg-white cursor-pointer"
                                 />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span>Hasta:</span>
+                                <span>a</span>
                                 <input
                                     type="date"
                                     value={planillaEndDate}
@@ -1039,11 +1173,32 @@ const Billing = () => {
                                     className="px-2 py-1 rounded-lg border border-slate-200 focus:ring-2 focus:ring-primary focus:border-primary outline-none text-xs font-semibold bg-white cursor-pointer"
                                 />
                             </div>
-                            {(planillaStartDate || planillaEndDate || planillaFilterType !== 'todos') && (
+
+                            <div className="flex items-center gap-2 bg-emerald-50/70 px-2.5 py-1 rounded-xl border border-emerald-200/80">
+                                <span className="material-symbols-outlined text-sm text-emerald-600">receipt_long</span>
+                                <span className="text-emerald-900 font-bold">Facturación:</span>
+                                <input
+                                    type="date"
+                                    value={planillaBillingStartDate}
+                                    onChange={e => setPlanillaBillingStartDate(e.target.value)}
+                                    className="px-2 py-1 rounded-lg border border-emerald-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-xs font-semibold bg-white cursor-pointer"
+                                />
+                                <span className="text-emerald-600">a</span>
+                                <input
+                                    type="date"
+                                    value={planillaBillingEndDate}
+                                    onChange={e => setPlanillaBillingEndDate(e.target.value)}
+                                    className="px-2 py-1 rounded-lg border border-emerald-200 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-xs font-semibold bg-white cursor-pointer"
+                                />
+                            </div>
+
+                            {(planillaStartDate || planillaEndDate || planillaBillingStartDate || planillaBillingEndDate || planillaFilterType !== 'todos') && (
                                 <button
                                     onClick={() => {
                                         setPlanillaStartDate('');
                                         setPlanillaEndDate('');
+                                        setPlanillaBillingStartDate('');
+                                        setPlanillaBillingEndDate('');
                                         setPlanillaFilterType('todos');
                                     }}
                                     className="text-primary hover:underline flex items-center gap-1 font-black uppercase text-[10px]"
@@ -1949,6 +2104,174 @@ const Billing = () => {
                         </table>
                         <div className="text-right font-bold uppercase text-[9px] mt-2">
                             Total de registros seleccionados: {planillaRows.filter(r => selectedRows.has(r.admission_id)).length}
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Modal de Detalle de Tarjeta Estadística */}
+            {statModalData && createPortal(
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fadeIn">
+                    <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-scaleUp">
+                        
+                        {/* Header */}
+                        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div className="flex items-center gap-4">
+                                <div className={`size-12 rounded-2xl flex items-center justify-center ${
+                                    statModalData.badgeColor === 'emerald' ? 'bg-emerald-100 text-emerald-700' :
+                                    statModalData.badgeColor === 'amber' ? 'bg-amber-100 text-amber-700' :
+                                    statModalData.badgeColor === 'purple' ? 'bg-purple-100 text-purple-700' :
+                                    'bg-indigo-100 text-indigo-700'
+                                }`}>
+                                    <span className="material-symbols-outlined text-2xl">{statModalData.icon}</span>
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">{statModalData.title}</h2>
+                                        <span className="px-3 py-1 rounded-full text-xs font-black bg-slate-100 text-slate-700 border border-slate-200">
+                                            {statModalData.rows.length} {statModalData.rows.length === 1 ? 'registro' : 'registros'}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-500 font-medium mt-0.5">{statModalData.description}</p>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => setStatModalData(null)}
+                                className="size-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors"
+                                title="Cerrar modal"
+                            >
+                                <span className="material-symbols-outlined text-lg">close</span>
+                            </button>
+                        </div>
+
+                        {/* Controles internos del Modal */}
+                        <div className="p-4 bg-slate-50/30 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
+                            <div className="relative flex-1 min-w-[240px]">
+                                <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
+                                <input
+                                    type="text"
+                                    placeholder="Filtrar por paciente, profesional, DNI, NUC, cobertura..."
+                                    className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary focus:border-primary outline-none text-xs font-semibold bg-white transition-all"
+                                    value={statModalSearch}
+                                    onChange={e => setStatModalSearch(e.target.value)}
+                                />
+                            </div>
+                            {(planillaStartDate || planillaEndDate) && (
+                                <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold bg-slate-100 px-3 py-1.5 rounded-xl">
+                                    <span className="material-symbols-outlined text-sm text-slate-400">calendar_today</span>
+                                    <span>Filtro activo: {planillaStartDate || 'Inicio'} a {planillaEndDate || 'Hoy'}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Tabla del Modal */}
+                        <div className="flex-1 overflow-y-auto p-6">
+                            {(() => {
+                                const q = statModalSearch.toLowerCase().trim();
+                                const filteredModalRows = statModalData.rows.filter(row => {
+                                    if (!q) return true;
+                                    return (
+                                        String(row.paciente || '').toLowerCase().includes(q) ||
+                                        String(row.dni || '').toLowerCase().includes(q) ||
+                                        String(row.nuc || '').toLowerCase().includes(q) ||
+                                        String(row.profesional || '').toLowerCase().includes(q) ||
+                                        String(row.cobertura || '').toLowerCase().includes(q) ||
+                                        String(row.nro_hc || '').toLowerCase().includes(q)
+                                    );
+                                });
+
+                                if (filteredModalRows.length === 0) {
+                                    return (
+                                        <div className="py-16 text-center">
+                                            <span className="material-symbols-outlined text-5xl text-slate-200 mb-2">search_off</span>
+                                            <p className="text-slate-400 font-bold uppercase text-xs">No se encontraron cirugías con los criterios de búsqueda</p>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                                        <table className="w-full text-left border-collapse text-xs">
+                                            <thead className="bg-slate-100/80 border-b border-slate-200 sticky top-0 backdrop-blur-md">
+                                                <tr>
+                                                    <th className="px-3 py-3 font-black text-slate-600 uppercase tracking-wider">Fecha Práctica</th>
+                                                    <th className="px-3 py-3 font-black text-slate-600 uppercase tracking-wider">Paciente</th>
+                                                    <th className="px-3 py-3 font-black text-slate-600 uppercase tracking-wider">Profesional</th>
+                                                    <th className="px-3 py-3 font-black text-slate-600 uppercase tracking-wider">Cobertura</th>
+                                                    <th className="px-3 py-3 font-black text-slate-600 uppercase tracking-wider">Fe Factur</th>
+                                                    <th className="px-3 py-3 font-black text-slate-600 uppercase tracking-wider">Fe Aoter</th>
+                                                    <th className="px-3 py-3 font-black text-slate-600 uppercase tracking-wider text-center">Tipo</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {filteredModalRows.map((row, idx) => (
+                                                    <tr key={row.admission_id + '-' + idx} className="hover:bg-slate-50/80 transition-colors">
+                                                        <td className="px-3 py-3 font-bold text-slate-800 whitespace-nowrap">{row.fecha}</td>
+                                                        <td className="px-3 py-3">
+                                                            <div className="font-bold text-slate-900 uppercase">{row.paciente}</div>
+                                                            <div className="text-[10px] text-slate-400 font-medium">
+                                                                DNI: {row.dni} | NUC: {row.nuc} | HC: {row.nro_hc}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-3 py-3 font-semibold text-slate-700 uppercase">{row.profesional}</td>
+                                                        <td className="px-3 py-3 font-bold text-slate-700 uppercase">
+                                                            <span className={`px-2 py-0.5 rounded-md ${
+                                                                String(row.cobertura).toUpperCase().includes('OSER') 
+                                                                    ? 'bg-amber-100 text-amber-800 font-extrabold' 
+                                                                    : 'bg-slate-100 text-slate-700'
+                                                            }`}>
+                                                                {row.cobertura}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-3 py-3 whitespace-nowrap">
+                                                            {row.fe_factur ? (
+                                                                <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">
+                                                                    {row.fe_factur}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-slate-300 font-medium">—</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-3 py-3 whitespace-nowrap">
+                                                            {row.fe_aoter ? (
+                                                                <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-bold">
+                                                                    {row.fe_aoter}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-slate-300 font-medium">—</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-3 py-3 text-center whitespace-nowrap">
+                                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                                                row.is_guardia 
+                                                                    ? 'bg-purple-100 text-purple-700' 
+                                                                    : 'bg-blue-100 text-blue-700'
+                                                            }`}>
+                                                                {row.is_guardia ? 'Ambulatoria / Guardia' : 'Internación'}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                            <p className="text-xs text-slate-500 font-medium">
+                                Mostrando cirugías tomadas para este cálculo
+                            </p>
+                            <button
+                                onClick={() => setStatModalData(null)}
+                                className="px-5 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-all shadow-md"
+                            >
+                                Cerrar
+                            </button>
                         </div>
                     </div>
                 </div>,

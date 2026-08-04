@@ -15,7 +15,7 @@ Las tablas principales en el esquema `quirofano` son:
 *   `surgeries`: Cirugías programadas. Se vincula mediante llaves foráneas a `patients`, `doctors` y `operating_rooms`.
     *   Columnas agregadas: `surgery_side`, `pre_op_notes`, `original_start_time` (para auditoría de cambio horario), `nuc` (migrada desde el nivel del paciente al nivel de la cirugía para permitir NUCs independientes en ingresos históricos), `created_by_role` (para registrar el rol creador de la cirugía y condicionar permisos de edición) y `paciente_notificado` / `paciente_notificado_por` / `paciente_notificado_at` (marcado exclusivo para la gestión de la Oficina ART).
 *   `doctors`: Listado de médicos profesionales.
-*   `operating_rooms`: Quirófanos disponibles.
+*   `operating_rooms`: Quirófanos disponibles. Columna agregada: `is_ambulatory` (boolean, marca si el quirófano está destinado a cirugías ambulatorias de forma predeterminada).
 *   `users`: Tabla personalizada de datos de usuarios autenticados.
     *   Campos añadidos: `resident_level` (para guardar R1, R2, R3, R4) y `can_view_all_vendors` (para proveedores de ortopedia habilitados a ver cirugías de otras empresas).
 *   `audit_logs`: Tabla inmutable utilizada para registrar cambios críticos de estados, creaciones y eliminaciones (`old` -> `new`).

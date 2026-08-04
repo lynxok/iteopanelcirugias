@@ -49,18 +49,9 @@ El wiki está dividido en las siguientes secciones lógicas:
 *   `[2026-07-30]`: Lanzadas las versiones **v3.10.71** y **v3.10.72**.
 *   `[2026-07-31]`: Implementado el filtrado de exclusividad para la **Oficina ART** en el `AdminDashboard.tsx` (restringiendo la vista únicamente a cirugías de aseguradoras ART) y añadida la casilla interactiva **"Paciente Notificado"** con registro de auditoría (`paciente_notificado`, `paciente_notificado_por`, `paciente_notificado_at`).
 *   `[2026-08-03]`: Incorporados dos nuevos filtros rápidos en la sección de Planificación ([Kanban.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Kanban.tsx)): **"Capital Validado"** (cirugías asignadas a Ortopedia Capital con fecha de autorización y materiales validados/aprobados) y **"Autorizado Sin Val. Ortopedia"** (cirugías con fecha de autorización pero sin validación de ortopedia). Disponibles para roles de Administración, Ortopedia Capital y Técnicos.
-
-
-
-
-
-
-
-
-
-
-
-
+*   `[2026-08-04]`: Habilitada la edición completa de turnos de guardia en el módulo **Guardias Residentes** ([ResidentShifts.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResidentShifts.tsx)). Se añadieron botones directos de edición en las vistas móvil y desktop del calendario mensual y en el panel **"Mis Guardias"** (`MyConsentsView`), permitiendo a los residentes habilitados (`can_edit_shifts`) y administración ajustar la fecha, horario de inicio y finalización de guardias cargadas o pendientes, así como eliminarlas si fuera necesario. Generada compilación de producción exitosa.
+*   `[2026-08-04]`: Agregado el filtro independiente de **Fecha de Facturación** (`planillaBillingStartDate` / `planillaBillingEndDate`) en el módulo de Facturación ([Billing.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Billing.tsx)). Convive con el filtro de Fecha de Práctica/Cirugía tanto en la cabecera del panel de **Estadísticas** como en la **Planilla de Internaciones**, filtrando los registros por su fecha de facturación asignada (`fe_factur`).
+*   `[2026-08-04]`: Lanzada la versión **v3.10.83**. Incluye la exención automática de prequirúrgicos, firma de consentimiento e indicador Cama/ART para cirugías ambulatorias y de guardia en la Ficha Clínica (`PatientSection.tsx` / `LogisticsSection.tsx` / `Kanban.tsx` / `Calendar.tsx`), edición de Guardias de Residentes y filtros de Facturación. Generado el paquete de distribución `dist`.
 
 
 

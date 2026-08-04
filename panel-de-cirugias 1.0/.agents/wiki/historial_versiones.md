@@ -4,6 +4,10 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.83 [2026-08-04]**: Lanzada la versión **v3.10.83**.
+    *   **Guardias Residentes**: Habilitada la edición completa y eliminación de turnos de guardia asignados o pendientes para residentes con permiso `can_edit_shifts` y personal administrativo (`MyConsentsView` / `LogShiftModal` / `ShiftsCalendarView`).
+    *   **Facturación**: Incorporado el filtro independiente por **Fecha de Facturación** (`fe_factur`) en los paneles de Estadísticas y Planilla de Internaciones (`Billing.tsx`), interactuando con el filtro de fecha de cirugía/práctica.
+    *   **Cirugías Ambulatorias**: Omisión automática de requerimientos de Exámenes Pre-quirúrgicos, Firma de Consentimiento e Indicador de Cama/ART en la Ficha Clínica (`PatientSection.tsx` / `LogisticsSection.tsx` / `Kanban.tsx` / `Calendar.tsx`) para cirugías de guardia o agendadas en salas ambulatorias.
 *   **v3.10.80 [2026-08-03]**: Lanzada la versión **v3.10.80**. Actualizado el contador del KPI resumen **"FALTA MATERIAL"** para computar todas las cirugías activas que requieren prótesis/materiales y tienen pendiente la validación de ortopedia, coincidiendo con el bloque unificado y la grilla.
 *   **v3.10.79 [2026-08-03]**: Lanzada la versión **v3.10.79**. Reorganización de la vista pre-quirúrgica de Planificación ([Kanban.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Kanban.tsx)) en dos bloques unificados sin pestañas ni botones flotantes: **"OSER sin aprobar material"** y **"OSER material aprobado (Capital)"**.
 *   **v3.10.78 [2026-08-03]**: Lanzada la versión **v3.10.78**. Refinada la lógica del filtro de materiales sin validar: se excluyen automáticamente aquellas cirugías que no requieren materiales de ortopedia ya que no precisan autorización del proveedor.
