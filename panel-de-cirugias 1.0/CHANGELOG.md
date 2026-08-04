@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.87 (2026-08-04)
+- **Control de Grabación OBS Studio**:
+    - **Solución de error en Captura de Imagen**: Corregido el fallo `"Your request type is not valid"` al intentar tomar capturas de pantalla desde el panel de control remoto de OBS.
+    - **Compatibilidad con Protocolo OBS WebSocket v5**: Se actualizaron las solicitudes en `ObsBackgroundController.tsx` reemplazando llamadas obsoletas por `GetCurrentProgramScene` y `GetSourceScreenshot`.
+    - **Guardado Nativo**: Implementado el manejador IPC `obs:save-screenshot` en `main.cjs` para escribir la captura Base64 comprimida directamente en el disco duro local dentro de la carpeta asignada al cirujano.
+
 ## v3.10.31 (2026-07-08)
 - **Sincronización OSER**:
     - **Ignorado de Historial**: Se omiten del listado de discrepancias aquellas prácticas de OSER que no existen en la App y cuyo estado es inactivo/no-autorizable (ej. "Rechazada", "Anulada", "No autorizada").

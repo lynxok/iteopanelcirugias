@@ -1067,6 +1067,30 @@ ipcMain.handle('obs:get-screenshot-path', async (event, globalDestFolder, doctor
     }
 });
 
+// Handler to save base64 screenshot image file to disk
+ipcMain.handle('obs:save-screenshot', async (event, filePath, base64Data) => {
+    try {
+        if (!filePath || !base64Data) {
+            throw new Error('Ruta de archivo o datos de imagen no especificados.');
+        }
+        const base64Clean = base64Data.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Clean, 'base64');
+
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+
+        fs.writeFileSync(filePath, buffer);
+        console.log(`[OBS Integration] Captura guardada exitosamente en: ${filePath}`);
+        return { success: true };
+    } catch (error) {
+        console.error('[OBS Integration] Error al guardar captura:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+
 // Handler to open directory selection dialog
 ipcMain.handle('select-directory', async () => {
     try {
