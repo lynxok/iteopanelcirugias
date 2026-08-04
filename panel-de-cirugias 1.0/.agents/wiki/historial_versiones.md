@@ -4,6 +4,8 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.86 [2026-08-04]**: Lanzada la versión **v3.10.86**.
+    *   **Consolidación de Producción y Releases**: Generación del nuevo bundle `dist/` consolidado con la exención de prequirúrgicos/consentimiento para cirugías ambulatorias, la modalidad ambulatoria explícita con switch interactivo, la solución al error 400 en edición de salas de quirófano y los filtros de fecha de facturación.
 *   **v3.10.85 [2026-08-04]**: Lanzada la versión **v3.10.85**.
     *   **Desacoplamiento de Cirugías de Guardia y Ambulatorias**: Las cirugías de guardia (`isGuardia`) ya no se marcan automáticamente como ambulatorias. Se agregó la columna `is_ambulatory` a `quirofano.surgeries` y un selector/switch explícito **"Modalidad Ambulatoria"** en la Ficha Clínica (`PatientSection.tsx` / `SurgeryDetail.tsx` / `useSurgeryDetail.ts`), permitiendo definir individualmente si una cirugía de guardia o electiva requiere o no internación/prequirúrgicos.
 *   **v3.10.84 [2026-08-04]**: Lanzada la versión **v3.10.84**.
