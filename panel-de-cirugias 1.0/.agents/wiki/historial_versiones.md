@@ -4,6 +4,8 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.85 [2026-08-04]**: Lanzada la versión **v3.10.85**.
+    *   **Desacoplamiento de Cirugías de Guardia y Ambulatorias**: Las cirugías de guardia (`isGuardia`) ya no se marcan automáticamente como ambulatorias. Se agregó la columna `is_ambulatory` a `quirofano.surgeries` y un selector/switch explícito **"Modalidad Ambulatoria"** en la Ficha Clínica (`PatientSection.tsx` / `SurgeryDetail.tsx` / `useSurgeryDetail.ts`), permitiendo definir individualmente si una cirugía de guardia o electiva requiere o no internación/prequirúrgicos.
 *   **v3.10.84 [2026-08-04]**: Lanzada la versión **v3.10.84**.
     *   **Solución a Error 400 en Edición de Quirófano**: Incorporada la columna `is_ambulatory` (BOOLEAN DEFAULT false) a la tabla `quirofano.operating_rooms` en Supabase y corregido el handler `handleSaveOR` (`useSettings.ts`) para desacoplar el ID del cuerpo del payload `PATCH` al actualizar salas, solucionando el error 400 Bad Request al modificarquirófanos.
 *   **v3.10.83 [2026-08-04]**: Lanzada la versión **v3.10.83**.

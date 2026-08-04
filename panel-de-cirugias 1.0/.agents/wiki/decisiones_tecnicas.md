@@ -41,5 +41,19 @@
 *   **Asignación de IP/Host en OBS WebSocket**: Para evitar que la IP cambie tras reiniciar la notebook por DHCP dinámico, cuando la aplicación corre en la misma notebook se debe configurar el Host/IP como `localhost` o `127.0.0.1`. Si se conecta desde otro dispositivo en la red local, se debe reservar la IP en el router por MAC address o asignar IP fija estática en la interfaz de red de Windows.
 
 ### Publicación de Releases en GitHub
-*   **Gestión de Tokens en CLI (`gh`)**: Si el comando `gh release create` falla con error `HTTP 401` debido a una variable `GITHUB_TOKEN` ambiental obsoleta o placeholder, se debe limpiar la variable en la sesión de shell (`$env:GITHUB_TOKEN=""`) para forzar a GitHub CLI a utilizar las credenciales válidas persistidas en el llavero local del sistema (cuenta `lynxok`).
+### Módulos Clínicos y Administrativos Recientes
+
+*   **Gestión de Guardias de Residentes (`ResidentShifts.tsx`)**:
+    *   Habilitada la edición completa y eliminación de turnos de guardia asignados o pendientes para residentes con permiso `can_edit_shifts` y administradores.
+    *   Se integraron acciones directas de edición en el panel `MyConsentsView`, el calendario mensual `ShiftsCalendarView` y el modal `LogShiftModal.tsx`.
+
+*   **Filtro por Fecha de Facturación (`Billing.tsx`)**:
+    *   Implementado filtrado independiente por rango de **Fecha Facturación** (`fe_factur`) mediante los estados `planillaBillingStartDate` y `planillaBillingEndDate`.
+    *   Convive dinámicamente con el filtro de fecha de práctica en las vistas de **Estadísticas** y **Planilla de Internaciones**.
+
+*   **Exención Automática y Lógica de Cirugías Ambulatorias**:
+    *   **Determinación de Modalidad Ambulatoria**: Una cirugía se evalúa como ambulatoria si cumple cualquiera de las condiciones: `isGuardia === true`, `surgery.is_ambulatory === true`, o si está agendada en un quirófano con `operating_room.is_ambulatory === true`.
+    *   **Exención de Requisitos**: En `PatientSection.tsx` y `LogisticsSection.tsx` se omiten automáticamente las casillas de comprobación de Exámenes Pre-quirúrgicos, Firma de Consentimiento e Indicador de Cama/ART, reemplazándolos por divisores e insignias informativas de color violeta.
+    *   **Persistencia en Supabase (`useSurgeryDetail.ts`)**: Al guardar una cirugía ambulatoria, el payload setea automáticamente `admission_validated: true`, `pre_op_exams: true` y `consent_signed: true`.
+    *   **Solución a Error 400 en Edición de Quirófano (`useSettings.ts`)**: Se creó la columna `is_ambulatory` (boolean default false) en `quirofano.operating_rooms` y se desacopló la columna de clave primaria `id` del cuerpo del objeto `PATCH` al actualizar salas de quirófano, previniendo excepciones 400 Bad Request de PostgREST.
 
