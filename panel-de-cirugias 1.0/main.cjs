@@ -835,7 +835,6 @@ ipcMain.on('ready-to-print', (event, printerName) => {
     const printOptions = {
         silent: !!printerName,
         printBackground: true,
-        landscape: true,
         margins: {
             marginType: 'none'
         },

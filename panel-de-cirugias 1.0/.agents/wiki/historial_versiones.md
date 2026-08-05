@@ -4,6 +4,10 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.88 [2026-08-05]**: Lanzada la versión **v3.10.88**.
+    *   **Impresión de Pulseras de Pacientes (Web y Escritorio Electron)**: Solucionado el problema de corte y desplazamiento del texto al imprimir pulseras térmicas. En la vista web se ajustaron los márgenes y `line-height: 1.25` para evitar el corte superior de las mayúsculas. En la versión de escritorio de Electron (`main.cjs`), se eliminó la bandera `landscape: true` forzada en `printOptions`, la cual causaba una doble rotación de 90° e imprimía el contenido fuera del ancho del rollo de 30mm.
+*   **v3.10.87 [2026-08-04]**: Lanzada la versión **v3.10.87**.
+    *   **Control de Grabación OBS Studio**: Solucionado el error `"Your request type is not valid"` al solicitar capturas de imagen desde el panel remoto de OBS. Se actualizaron las solicitudes a la especificación oficial de OBS WebSocket v5 (`GetCurrentProgramScene` y `GetSourceScreenshot`) y se implementó la persistencia de imágenes Base64 en disco mediante el IPC `obs:save-screenshot` (`main.cjs` / `preload.cjs`).
 *   **v3.10.86 [2026-08-04]**: Lanzada la versión **v3.10.86**.
     *   **Consolidación de Producción y Releases**: Generación del nuevo bundle `dist/` consolidado con la exención de prequirúrgicos/consentimiento para cirugías ambulatorias, la modalidad ambulatoria explícita con switch interactivo, la solución al error 400 en edición de salas de quirófano y los filtros de fecha de facturación.
 *   **v3.10.85 [2026-08-04]**: Lanzada la versión **v3.10.85**.
