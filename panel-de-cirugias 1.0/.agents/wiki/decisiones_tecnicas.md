@@ -27,9 +27,11 @@
 *   **Impresión de Pulseras Térmicas**:
     *   Usa el canal IPC de Electron para consultar las impresoras de Windows.
     *   Permite seleccionar una impresora térmica y guardar el identificador en `localStorage`.
-    *   Imprime silenciosamente forzando `marginType: 'none'`, `printBackground: true`, `landscape: true` y limitación de hojas `pageRanges: [{ from: 0, to: 0 }]` (evita impresión accidental de carillas en blanco o rotadas).
-    *   **Formato CSS y Supresión de Márgenes**: La regla `@page` debe situarse obligatoriamente en el nivel raíz del bloque CSS (fuera de `@media print`) especificando `size: 280mm 30mm landscape;` y `margin: 0 !important;`. Si se anida dentro de `@media print`, Chromium la ignora e imprime automáticamente cabeceras (`CONSOLA DE CONFIGURACION`) y pies de página (`sistema...`) del sistema operativo.
-    *   Usa `printWindow.loadFile()` con la opción de hash SPA para evitar el error de seguridad `Not allowed to load local resource`.
+    *   Imprime silenciosamente forzando `marginType: 'none'`, `printBackground: true` y limitación de hojas `pageRanges: [{ from: 0, to: 0 }]` (evita impresión accidental de carillas en blanco o rotadas).
+    *   **Prohibición de Doble Rotación (`landscape: true`) en Electron**: NO pasar la opción `landscape: true` a los `printOptions` de `webContents.print()` en Electron (`main.cjs`) cuando el lienzo HTML especifica un tamaño fijo mediante `@page { size: 280mm 30mm; margin: 0 !important; }`. Pasar `landscape: true` en Electron aplica una rotación secundaria de 90° sobre las dimensiones del rollo térmico (30mm), desplazando todo el texto y datos del paciente fuera de la tira impresa.
+    *   **Formato CSS y Supresión de Márgenes**: La regla `@page` debe situarse obligatoriamente en el nivel raíz del bloque CSS especificando `size: 280mm 30mm;` (sin el modificador `landscape`) y `margin: 0 !important;` para que Chromium suprima encabezados y pies de página del sistema operativo.
+    *   **Ajuste Vertical y Ascendentes de Texto (`line-height`)**: El nombre del paciente en `PatientPrintLabel.tsx` debe mantener un `line-height: 1.25` y padding interno vertical (`padding: 2mm 10mm` en el contenedor wrapper) para prevenir que la parte superior de las letras mayúsculas se corte contra los bordes físico-térmicos del rollo de 30mm.
+    *   **REGLA ESTRICTA DE INTOCABILIDAD ESTÉTICA**: Queda estrictamente prohibido alterar la estética visual, tipografías, colores, disposición o diseño de la plantilla de pulseras de paciente (`PatientPrintLabel.tsx`) sin la solicitud explícita y previa del usuario.
 
 ### Servidor de Desarrollo y Paquetes
 *   **Servidor Vite**: Iniciado con `npm run dev`.
