@@ -1788,13 +1788,25 @@ Sistema de Coordinación de Quirófano ITEO
                                         const hasPrice = existingRate && existingRate.value > 0;
                                         const caseCount = practiceCaseCounts.get(code) || 0;
 
+                                        // Encontrar equivalente numérico OSER (ej: 121.07.03 o 1230606)
+                                        const mappingObj = nomencladorData.mapping as Record<string, string>;
+                                        const oserKey = Object.keys(mappingObj).find(k => {
+                                            const valClean = mappingObj[k].replace(/\./g, '').trim();
+                                            return valClean === code && /^\d/.test(k);
+                                        });
+
+                                        const primaryCodeDisplay = oserKey ? oserKey : code;
+                                        const aoterSuffixDisplay = oserKey && code !== oserKey.replace(/\./g, '') ? ` (${code})` : '';
+
                                         return (
                                             <div key={code} className="py-2.5 flex justify-between items-center text-sm font-medium hover:bg-slate-50/80 px-2 rounded-lg transition-colors">
                                                 <div className="flex items-center gap-2.5">
                                                     <span className="material-symbols-outlined text-indigo-500/70 text-base">medical_services</span>
                                                     <div className="flex flex-col">
                                                         <div className="flex items-center gap-2">
-                                                            <span className="font-bold text-slate-800 font-mono text-xs">Práctica {code}</span>
+                                                            <span className="font-bold text-slate-800 font-mono text-xs">
+                                                                Práctica {primaryCodeDisplay}<span className="text-slate-400 font-normal">{aoterSuffixDisplay}</span>
+                                                            </span>
                                                             {caseCount > 0 && (
                                                                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold rounded-md flex items-center gap-1">
                                                                     <span className="material-symbols-outlined text-[11px]">medical_services</span>
