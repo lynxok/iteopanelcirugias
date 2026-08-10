@@ -1745,29 +1745,36 @@ Sistema de Coordinación de Quirófano ITEO
                                     // 2. Mapeo completo de prácticas provenientes del nomenclador
                                     const mappingObj = nomencladorData.mapping as Record<string, string>;
                                     
-                                    // Crear mapa de pares { oserCode, aoterCode, key }
+                                    // Crear mapa de pares { oserCode, aoterCode } indexado por la versión numérica (OSER)
                                     const practiceEntriesMap = new Map<string, { oserCode: string; aoterCode: string; rateCode: string }>();
 
                                     Object.keys(mappingObj).forEach(k => {
-                                        const cleanK = k.replace(/\./g, '').trim();
-                                        const targetVal = mappingObj[k] ? mappingObj[k].replace(/\./g, '').trim() : cleanK;
-                                        
-                                        // Si la clave es numérica (OSER), ej: 121.01.03 o 1230606
+                                        // Procesar prioritariamente las claves numéricas (OSER), ej: 121.01.04
                                         if (/^\d/.test(k)) {
-                                            if (!practiceEntriesMap.has(cleanK)) {
-                                                practiceEntriesMap.set(cleanK, {
+                                            const oserClean = k.replace(/\./g, '').trim();
+                                            const aoterVal = mappingObj[k] || k;
+                                            const aoterClean = aoterVal.replace(/\./g, '').trim();
+
+                                            if (!practiceEntriesMap.has(oserClean)) {
+                                                practiceEntriesMap.set(oserClean, {
                                                     oserCode: k,
-                                                    aoterCode: targetVal,
-                                                    rateCode: targetVal
+                                                    aoterCode: aoterVal,
+                                                    rateCode: aoterClean
                                                 });
                                             }
-                                        } else {
-                                            // Si la clave es AOTER (ej: MS.01.01), intentar asociar a OSER o guardarla
-                                            if (!practiceEntriesMap.has(targetVal)) {
-                                                practiceEntriesMap.set(targetVal, {
+                                        }
+                                    });
+
+                                    // Para claves alfanuméricas de AOTER que no tuvieron equivalente OSER explícito
+                                    Object.keys(mappingObj).forEach(k => {
+                                        if (!/^\d/.test(k)) {
+                                            const cleanK = k.replace(/\./g, '').trim();
+                                            const isAlreadyMapped = Array.from(practiceEntriesMap.values()).some(e => e.aoterCode.replace(/\./g, '').trim() === cleanK);
+                                            if (!isAlreadyMapped && !practiceEntriesMap.has(cleanK)) {
+                                                practiceEntriesMap.set(cleanK, {
                                                     oserCode: k,
-                                                    aoterCode: targetVal,
-                                                    rateCode: targetVal
+                                                    aoterCode: k,
+                                                    rateCode: cleanK
                                                 });
                                             }
                                         }
@@ -1788,10 +1795,10 @@ Sistema de Coordinación de Quirófano ITEO
 
                                     // 3. Ordenamiento dinámico según la opción seleccionada por el usuario
                                     allEntries.sort((entryA, entryB) => {
-                                        const countA = practiceCaseCounts.get(entryA.rateCode) || practiceCaseCounts.get(entryA.aoterCode) || 0;
-                                        const countB = practiceCaseCounts.get(entryB.rateCode) || practiceCaseCounts.get(entryB.aoterCode) || 0;
-                                        const rateA = practiceRates.find(r => r.practice_code === entryA.rateCode || r.practice_code === entryA.aoterCode)?.value || 0;
-                                        const rateB = practiceRates.find(r => r.practice_code === entryB.rateCode || r.practice_code === entryB.aoterCode)?.value || 0;
+                                        const countA = practiceCaseCounts.get(entryA.rateCode) || practiceCaseCounts.get(entryA.oserCode.replace(/\./g, '')) || 0;
+                                        const countB = practiceCaseCounts.get(entryB.rateCode) || practiceCaseCounts.get(entryB.oserCode.replace(/\./g, '')) || 0;
+                                        const rateA = practiceRates.find(r => r.practice_code === entryA.rateCode)?.value || 0;
+                                        const rateB = practiceRates.find(r => r.practice_code === entryB.rateCode)?.value || 0;
 
                                         if (practiceSortOption === 'cases_desc') {
                                             if (countB !== countA) return countB - countA;
@@ -1818,7 +1825,7 @@ Sistema de Coordinación de Quirófano ITEO
                                     if (practiceSearchFilter.trim()) {
                                         const query = practiceSearchFilter.toLowerCase().replace(/\./g, '').trim();
                                         allEntries = allEntries.filter(e => {
-                                            const desc = (practiceDescriptions.get(e.rateCode) || practiceDescriptions.get(e.aoterCode) || '').toLowerCase();
+                                            const desc = (practiceDescriptions.get(e.rateCode) || practiceDescriptions.get(e.oserCode.replace(/\./g, '')) || '').toLowerCase();
                                             return (
                                                 e.oserCode.toLowerCase().replace(/\./g, '').includes(query) ||
                                                 e.aoterCode.toLowerCase().replace(/\./g, '').includes(query) ||
@@ -1836,16 +1843,18 @@ Sistema de Coordinación de Quirófano ITEO
                                     }
 
                                     return allEntries.map(entry => {
-                                        const existingRate = practiceRates.find(r => r.practice_code === entry.rateCode || r.practice_code === entry.aoterCode);
+                                        const existingRate = practiceRates.find(r => r.practice_code === entry.rateCode || r.practice_code === entry.oserCode.replace(/\./g, ''));
                                         const hasPrice = existingRate && existingRate.value > 0;
-                                        const caseCount = practiceCaseCounts.get(entry.rateCode) || practiceCaseCounts.get(entry.aoterCode) || 0;
-                                        const desc = practiceDescriptions.get(entry.rateCode) || practiceDescriptions.get(entry.aoterCode) || '';
+                                        const caseCount = practiceCaseCounts.get(entry.rateCode) || practiceCaseCounts.get(entry.oserCode.replace(/\./g, '')) || 0;
+                                        const desc = practiceDescriptions.get(entry.rateCode) || practiceDescriptions.get(entry.oserCode.replace(/\./g, '')) || '';
 
-                                        const fullTitle = `Práctica OSER ${entry.oserCode} | AOTER (${entry.aoterCode})${desc ? ` - ${desc}` : ''}`;
+                                        // Solo mostrar entre paréntesis si el código AOTER es distinto al OSER mostrado
+                                        const showParensAoter = entry.aoterCode && entry.aoterCode !== entry.oserCode;
+                                        const fullTitle = `Práctica OSER ${entry.oserCode}${showParensAoter ? ` | AOTER (${entry.aoterCode})` : ''}${desc ? ` - ${desc}` : ''}`;
 
                                         return (
                                             <div
-                                                key={entry.oserCode + entry.aoterCode}
+                                                key={entry.oserCode}
                                                 className="py-2.5 flex justify-between items-center text-sm font-medium hover:bg-slate-50/80 px-2 rounded-lg transition-colors group cursor-default"
                                                 title={fullTitle}
                                             >
@@ -1854,7 +1863,7 @@ Sistema de Coordinación de Quirófano ITEO
                                                     <div className="flex flex-col min-w-0">
                                                         <div className="flex items-center gap-2 flex-wrap">
                                                             <span className="font-bold text-slate-800 font-mono text-xs truncate" title={fullTitle}>
-                                                                Práctica {entry.oserCode} <span className="text-slate-400 font-normal">({entry.aoterCode})</span>
+                                                                Práctica {entry.oserCode} {showParensAoter && <span className="text-slate-400 font-normal">({entry.aoterCode})</span>}
                                                             </span>
                                                             {caseCount > 0 && (
                                                                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold rounded-md flex items-center gap-1 shrink-0">
