@@ -172,8 +172,11 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     *   Los días que cayeron en ese mes de transición y ya fueron incluidos en la liquidación anterior **se excluyen/restan estrictamente del mes siguiente** para evitar pagar dos veces el mismo día de guardia.
 
 ### Nomenclador de Prácticas y Tarifas (10/08/2026)
-*   **Listado Pre-Cargado:** En la pestaña *Tarifas y Ajustes* ([TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx)), el recuadro "Tarifas por Práctica" despliega el listado completo de códigos nomenclados (OSER / AOTER).
-*   **Gestión Rápida de Tarifas:** Las prácticas sin tarifa configurada se muestran con la etiqueta ⚠️ `Sin Precio ($0)`. Cuenta con un buscador en tiempo real por código y botones de "Cargar Precio" / "Editar" para asignar montos a medida que se cuente con la información.
+*   **Listado Pre-Cargado:** En la pestaña *Tarifas y Ajustes* ([TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx)), el recuadro "Tarifas por Práctica" despliega el listado completo de prácticas nomencladas (OSER / AOTER).
+*   **Formato de Código Dual:** Cada ítem despliega el código numérico **OSER** como identificador principal (ej: `121.01.04`). Únicamente si cuenta con un homónimo **AOTER** diferente, se añade entre paréntesis `(MS0104)`. Si ambos coinciden, se presenta limpio sin paréntesis redundantes.
+*   **Ordenamiento por Frecuencia de Casos:** Por defecto (`cases_desc`), las prácticas se ordenan según la cantidad de cirugías registradas en el período (mayor a menor), indicando un badge índigo con el conteo de casos (ej: `4 casos`). Se incluye un selector para ordenar por: *Más Frecuentes*, *Menos Frecuentes*, *Código (Asc/Desc)* o *Precio (Asc/Desc)*.
+*   **Descripciones Médicas Doble Fuente:** Las descripciones de los procedimientos quirúrgicos se obtienen dinámicamente de los partes de cirugías realizadas; para aquellas prácticas aún sin cirugías cargadas en el período, el sistema consulta el catálogo estático del nomenclador.
+*   **Gestión Rápida de Tarifas:** Las prácticas sin tarifa configurada se muestran con la etiqueta ⚠️ `Sin Precio ($0)`. Cuenta con un buscador en tiempo real por código/descripción y botones de "Cargar Precio" / "Editar" para asignar montos a medida que se cuente con la información.
 
 
 ### Control de Asistencia y WiFi

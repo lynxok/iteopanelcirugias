@@ -4,6 +4,11 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.92 [2026-08-10]**: Lanzada la versión **v3.10.92**.
+    *   **Imputación por Ficha Técnica y Alertas**: Incorporado el rastreo de la instrumentadora en `surgery_forms.instrumentadora`. Si un técnico figura en la ficha, la cirugía se adjudica en su mensualidad, desplegando un badge de advertencia en ámbar cuando no pertenece al turno tarde ni a la guardia del día.
+    *   **Reglas Horarias de Guardia y Turnos**: Cirugías iniciadas antes de las 06:00 AM o después de las 19:00 HS en días hábiles computan 100% para la Guardia Nocturna. El Turno Mañana (06:00 a 15:00 hs) no imputa automáticamente a la guardia.
+    *   **Catálogo Frecuenciado de Tarifas (OSER / AOTER)**: Pre-cargado el listado completo de prácticas nomencladas en la pestaña *Tarifas y Ajustes* ([TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx)). Muestra la clave OSER numérica como principal y AOTER entre paréntesis sólo cuando difiere.
+    *   **Ordenador por Casos y Descripciones Doble Fuente**: Las prácticas se ordenan predeterminadamente por frecuencia de ejecución (`cases_desc`), con selector de ordenamiento interactivo (casos, código o tarifa). Las descripciones médicas se extraen de los partes quirúrgicos o del catálogo estático oficial para prácticas sin cirugías cargadas.
 *   **v3.10.91 [2026-08-10]**: Lanzada la versión **v3.10.91**.
     *   **Filtro de Técnicos en Panel Admin**: Corregida la consulta en `TecnicoPanel.tsx` para listar únicamente técnicos que realizan guardias (`does_guardias = true`) o pertenecen al turno tarde (`is_turno_tarde = true`) en la vista de administración.
     *   **Guardado Flexible de Cirugías con 'A DEFINIR'**: Ajustada la validación de `handleSurgerySave` en `useSurgeryDetail.ts` para permitir el guardado de cirugías cuando se selecciona o ingresa la práctica comodín `"A DEFINIR"` (`[00.00.00]`), agregando automáticamente la etiqueta si permanecía en el cuadro de búsqueda.
