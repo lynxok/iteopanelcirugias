@@ -1710,18 +1710,35 @@ Sistema de Coordinación de Quirófano ITEO
                             {/* Listado Completo de Prácticas Nomencladas con Tarifas y Pendientes */}
                             <div className="flex-1 overflow-y-auto max-h-[350px] divide-y divide-slate-100 pr-2 custom-scrollbar">
                                 {(() => {
-                                    // 1. Contar frecuencia de casos por código en las cirugías cargadas
+                                    // 1. Contar frecuencia de casos y capturar nombres/descripciones por código
                                     const practiceCaseCounts = new Map<string, number>();
+                                    const practiceDescriptions = new Map<string, string>();
+
                                     surgeries.forEach(s => {
                                         let rawCode = '';
-                                        const matchBracket = s.procedure?.match(/^\[(.*?)\]/);
-                                        const matchColon = s.procedure?.match(/^(.*?):/);
-                                        if (matchBracket) rawCode = matchBracket[1].trim();
-                                        else if (matchColon) rawCode = matchColon[1].trim();
+                                        let procedureText = '';
+                                        
+                                        const matchBracket = s.procedure?.match(/^\[(.*?)\]\s*(.*)/);
+                                        const matchColon = s.procedure?.match(/^(.*?):\s*(.*)/);
+                                        
+                                        if (matchBracket) {
+                                            rawCode = matchBracket[1].trim();
+                                            procedureText = matchBracket[2].trim();
+                                        } else if (matchColon) {
+                                            rawCode = matchColon[1].trim();
+                                            procedureText = matchColon[2].trim();
+                                        } else if (s.procedure) {
+                                            procedureText = s.procedure.trim();
+                                        }
+
                                         const mappedAoterCode = (nomencladorData.mapping as Record<string, string>)[rawCode] || rawCode;
                                         const code = mappedAoterCode.replace(/\./g, '').trim();
+                                        
                                         if (code) {
                                             practiceCaseCounts.set(code, (practiceCaseCounts.get(code) || 0) + 1);
+                                            if (procedureText && !practiceDescriptions.has(code)) {
+                                                practiceDescriptions.set(code, procedureText);
+                                            }
                                         }
                                     });
 
@@ -1797,13 +1814,17 @@ Sistema de Coordinación de Quirófano ITEO
                                         return 0;
                                     });
 
-                                    // 4. Filtrar por término de búsqueda si el usuario ingresó algo
+                                    // 4. Filtrar por término de búsqueda si el usuario ingresó algo (código o descripción)
                                     if (practiceSearchFilter.trim()) {
                                         const query = practiceSearchFilter.toLowerCase().replace(/\./g, '').trim();
-                                        allEntries = allEntries.filter(e => 
-                                            e.oserCode.toLowerCase().replace(/\./g, '').includes(query) ||
-                                            e.aoterCode.toLowerCase().replace(/\./g, '').includes(query)
-                                        );
+                                        allEntries = allEntries.filter(e => {
+                                            const desc = (practiceDescriptions.get(e.rateCode) || practiceDescriptions.get(e.aoterCode) || '').toLowerCase();
+                                            return (
+                                                e.oserCode.toLowerCase().replace(/\./g, '').includes(query) ||
+                                                e.aoterCode.toLowerCase().replace(/\./g, '').includes(query) ||
+                                                desc.includes(query)
+                                            );
+                                        });
                                     }
 
                                     if (allEntries.length === 0) {
@@ -1818,8 +1839,9 @@ Sistema de Coordinación de Quirófano ITEO
                                         const existingRate = practiceRates.find(r => r.practice_code === entry.rateCode || r.practice_code === entry.aoterCode);
                                         const hasPrice = existingRate && existingRate.value > 0;
                                         const caseCount = practiceCaseCounts.get(entry.rateCode) || practiceCaseCounts.get(entry.aoterCode) || 0;
+                                        const desc = practiceDescriptions.get(entry.rateCode) || practiceDescriptions.get(entry.aoterCode) || '';
 
-                                        const fullTitle = `Práctica OSER ${entry.oserCode} | AOTER (${entry.aoterCode})`;
+                                        const fullTitle = `Práctica OSER ${entry.oserCode} | AOTER (${entry.aoterCode})${desc ? ` - ${desc}` : ''}`;
 
                                         return (
                                             <div
@@ -1827,7 +1849,7 @@ Sistema de Coordinación de Quirófano ITEO
                                                 className="py-2.5 flex justify-between items-center text-sm font-medium hover:bg-slate-50/80 px-2 rounded-lg transition-colors group cursor-default"
                                                 title={fullTitle}
                                             >
-                                                <div className="flex items-center gap-2.5 max-w-[65%] min-w-0">
+                                                <div className="flex items-center gap-2.5 max-w-[70%] min-w-0">
                                                     <span className="material-symbols-outlined text-indigo-500/70 text-base shrink-0">medical_services</span>
                                                     <div className="flex flex-col min-w-0">
                                                         <div className="flex items-center gap-2 flex-wrap">
@@ -1841,6 +1863,11 @@ Sistema de Coordinación de Quirófano ITEO
                                                                 </span>
                                                             )}
                                                         </div>
+                                                        {desc && (
+                                                            <span className="text-[11px] text-slate-500 font-normal truncate mt-0.5" title={desc}>
+                                                                {desc}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-3 shrink-0">
