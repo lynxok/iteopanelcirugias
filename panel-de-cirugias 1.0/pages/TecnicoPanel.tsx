@@ -1791,7 +1791,7 @@ Sistema de Coordinación de Quirófano ITEO
                                         return (
                                             <div key={code} className="py-2.5 flex justify-between items-center text-sm font-medium hover:bg-slate-50/80 px-2 rounded-lg transition-colors">
                                                 <div className="flex items-center gap-2.5">
-                                                    <span className="material-symbols-outlined text-slate-400 text-base">clinical_trial</span>
+                                                    <span className="material-symbols-outlined text-indigo-500/70 text-base">medical_services</span>
                                                     <div className="flex flex-col">
                                                         <div className="flex items-center gap-2">
                                                             <span className="font-bold text-slate-800 font-mono text-xs">Práctica {code}</span>
