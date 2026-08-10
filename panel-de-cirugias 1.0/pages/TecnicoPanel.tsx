@@ -1846,7 +1846,14 @@ Sistema de Coordinación de Quirófano ITEO
                                         const existingRate = practiceRates.find(r => r.practice_code === entry.rateCode || r.practice_code === entry.oserCode.replace(/\./g, ''));
                                         const hasPrice = existingRate && existingRate.value > 0;
                                         const caseCount = practiceCaseCounts.get(entry.rateCode) || practiceCaseCounts.get(entry.oserCode.replace(/\./g, '')) || 0;
-                                        const desc = practiceDescriptions.get(entry.rateCode) || practiceDescriptions.get(entry.oserCode.replace(/\./g, '')) || '';
+                                        
+                                        // Buscar descripción registrada en cirugías o en las descripciones estáticas del nomenclador
+                                        const catalogDescs = (nomencladorData as any).descriptions || {};
+                                        const desc = practiceDescriptions.get(entry.rateCode) || 
+                                                     practiceDescriptions.get(entry.oserCode.replace(/\./g, '')) || 
+                                                     catalogDescs[entry.aoterCode] || 
+                                                     catalogDescs[entry.oserCode] || 
+                                                     '';
 
                                         // Solo mostrar entre paréntesis si el código AOTER es distinto al OSER mostrado
                                         const showParensAoter = entry.aoterCode && entry.aoterCode !== entry.oserCode;
