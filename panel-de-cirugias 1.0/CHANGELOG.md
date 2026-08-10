@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.92 (2026-08-10)
+- **Gestión de Técnicos**:
+    - **Validación de Ficha Técnica**: Incorporado el rastreo explícito de la instrumentadora en `surgery_forms.instrumentadora`, imputando las cirugías a su planilla mensual e indicando advertencias en ámbar cuando no pertenece al turno tarde ni a la guardia.
+    - **Reglas Horarias de Guardia y Turnos**: Ajustadas las franjas horarias de días hábiles. Las cirugías iniciadas antes de las 06:00 AM o después de las 19:00 HS se asignan a la guardia nocturna. El turno mañana (06:00 a 15:00 hs) no imputa automáticamente a guardia.
+    - **Catálogo de Nomenclador y Tarifas**: Pre-cargado el listado completo del nomenclador OSER/AOTER en la pestaña *Tarifas y Ajustes*, con estado `Sin Precio ($0)`, contador de casos realizados, buscador en tiempo real y selector de ordenamiento (Más frecuentes primero, menos frecuentes, código o tarifa).
+
 ## v3.10.87 (2026-08-04)
 - **Control de Grabación OBS Studio**:
     - **Solución de error en Captura de Imagen**: Corregido el fallo `"Your request type is not valid"` al intentar tomar capturas de pantalla desde el panel de control remoto de OBS.

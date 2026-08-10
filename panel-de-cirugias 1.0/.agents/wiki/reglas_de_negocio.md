@@ -138,11 +138,13 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 *   **Liquidación de Asistencia**: Las horas reales acumuladas en el mes se multiplican por el **Valor Hora** (Tarifa Hora) y se suman directamente a la liquidación final del técnico.
 
 ### Asignación de Cirugías y Coparticipación
-*   **Turno Tarde**:
-    *   **Horario**: Lunes a Jueves de 15:00 a 19:00 hs, y Viernes de 14:00 a 19:00 hs.
-    *   **Distribución**: En este rango, coparticipan el **Técnico Fijo** y el **Técnico de Guardia/Asignado esa semana**.
-    *   **Condición de Fichaje de Ingreso (Obligatorio)**: Para que una cirugía del turno tarde se asigne e incluya automáticamente en el listado del técnico (sea el Fijo o el de Guardia), dicho técnico **debe haber registrado su fichaje de ingreso (`check_in`) en la fecha de la cirugía**.
-    *   **Cálculo**: El tiempo transcurrido (duración de la cirugía) se divide por 2 para el cómputo del costo. El monto total resultante de la cirugía se divide en un **50% para el Técnico Fijo** y **50% para el Técnico de Guardia**.
+### Horarios y Asignación de Cirugías a Técnicos (10/08/2026)
+*   **Guardia Nocturna, Fines de Semana y Feriados:** 
+    *   Cualquier cirugía iniciada **antes de las 06:00 hs AM** en días hábiles, **después de las 19:00 hs** en días hábiles, o en **sábados, domingos y feriados** se asigna al 100% al **Técnico de Guardia** de esa fecha.
+*   **Turno Mañana (06:00 a 14:00/15:00 hs en Días Hábiles):** 
+    *   Corresponde al personal del turno mañana. **No se asigna automáticamente al Técnico de Guardia ni al Fijo**, a menos que en la Ficha Técnica de Cirugía (`surgery_forms.instrumentadora`) se encuentre especificado su nombre expresamente.
+*   **Turno Tarde (15:00 a 19:00 hs / Viernes 14:00 a 19:00 hs en Días Hábiles):** 
+    *   Participan el **Técnico Fijo** y el **Técnico de Guardia**, condicionado a que hayan marcado ingreso (`check_in`). Se liquida al 50% para cada uno.
 *   **Adición Manual y Coparticipación de Cirugías**:
     *   Cualquier técnico puede incluir manualmente una cirugía realizada a su planilla a través del botón **"+ Agregar Cirugía a mi Listado"**.
     *   **Incorporar un Segundo Técnico**: En cirugías con 1 solo técnico asignado originalmente (ej. cirugías fuera del turno tarde, nocturnas o de fin de semana), el técnico asignado puede sumar a un segundo técnico disponible (fijo o de guardia) presionando el botón **"+ Sumar Técnico"**. Al hacerlo, los honorarios y tiempos de la cirugía se recalculan automáticamente al **50% para cada uno**.
@@ -168,6 +170,11 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 *   **Corte Mensual (Semana Cruzada)**: 
     *   Si una semana de guardia cruza el cambio de mes (ej. fin de junio y principio de julio), se le contempla la semana completa de guardia al técnico asignado en el mes que finaliza.
     *   Los días que cayeron en ese mes de transición y ya fueron incluidos en la liquidación anterior **se excluyen/restan estrictamente del mes siguiente** para evitar pagar dos veces el mismo día de guardia.
+
+### Nomenclador de Prácticas y Tarifas (10/08/2026)
+*   **Listado Pre-Cargado:** En la pestaña *Tarifas y Ajustes* ([TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx)), el recuadro "Tarifas por Práctica" despliega el listado completo de códigos nomenclados (OSER / AOTER).
+*   **Gestión Rápida de Tarifas:** Las prácticas sin tarifa configurada se muestran con la etiqueta ⚠️ `Sin Precio ($0)`. Cuenta con un buscador en tiempo real por código y botones de "Cargar Precio" / "Editar" para asignar montos a medida que se cuente con la información.
+
 
 ### Control de Asistencia y WiFi
 *   Los técnicos marcan Entrada, Salida, Descanso y Retorno desde su celular.

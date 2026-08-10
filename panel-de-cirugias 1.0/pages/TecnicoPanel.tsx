@@ -103,6 +103,8 @@ export default function TecnicoPanel() {
     const [inputNotificationEmail, setInputNotificationEmail] = useState<string>('');
     const [practiceCodeInput, setPracticeCodeInput] = useState<string>('');
     const [practiceValueInput, setPracticeValueInput] = useState<number>(0);
+    const [practiceSearchFilter, setPracticeSearchFilter] = useState<string>('');
+    const [practiceSortOption, setPracticeSortOption] = useState<'cases_desc' | 'cases_asc' | 'code_asc' | 'code_desc' | 'price_desc' | 'price_asc'>('cases_desc');
 
     // Helpers de liquidación
     const getRoundedDurationMinutes = (realMin: number) => {
@@ -220,13 +222,45 @@ export default function TecnicoPanel() {
             const surgStartStr = `${selectedYear}-${monthStr}-01`;
             const surgEndStr = `${selectedYear}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
 
-            const { data: surgData } = await supabase
+            const { data: rawSurgData } = await supabase
                 .from('surgeries')
-                .select('id, patient:patients(name), procedure:procedure_name, date:surgery_date, actual_start_time, actual_end_time')
+                .select(`
+                    id, 
+                    patient:patients(full_name), 
+                    procedure:procedure_name, 
+                    date:surgery_date, 
+                    actual_start_time, 
+                    actual_end_time
+                `)
                 .eq('status', 'completed')
                 .gte('surgery_date', surgStartStr)
                 .lte('surgery_date', surgEndStr);
-            if (surgData) setSurgeries(surgData);
+
+            if (rawSurgData && rawSurgData.length > 0) {
+                const surgeryIds = rawSurgData.map(s => s.id);
+                const { data: formsData } = await supabase
+                    .from('surgery_forms')
+                    .select('surgery_id, instrumentadora')
+                    .in('surgery_id', surgeryIds);
+
+                const formsMap = new Map<string, string>();
+                if (formsData) {
+                    formsData.forEach(f => {
+                        if (f.surgery_id && f.instrumentadora) {
+                            formsMap.set(f.surgery_id, f.instrumentadora);
+                        }
+                    });
+                }
+
+                const mergedSurgData = rawSurgData.map(s => ({
+                    ...s,
+                    surgery_forms: { instrumentadora: formsMap.get(s.id) || null }
+                }));
+
+                setSurgeries(mergedSurgData);
+            } else {
+                setSurgeries([]);
+            }
 
             // 5.b Cargar Mapeo de Cirugías Manuales y Asistencia del Mes
             const { data: allManData } = await supabase
@@ -411,15 +445,35 @@ export default function TecnicoPanel() {
             // Si la cirugía fue agregada manualmente por este técnico, incluir siempre
             if (manualSurgeryIds.includes(s.id)) return true;
 
+            // Verificar si el técnico seleccionado figura como instrumentador/a en la Ficha Técnica de Cirugía
+            const formInstrumentadora = Array.isArray(s.surgery_forms) ? s.surgery_forms[0]?.instrumentadora : s.surgery_forms?.instrumentadora;
+            
+            const normalizeStr = (str: string) => str ? str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim() : "";
+            const normForm = normalizeStr(formInstrumentadora || '');
+            const normTec = normalizeStr(tec.name || '');
+
+            const isAssignedInForm = normForm !== '' && normTec !== '' && (
+                normForm.includes(normTec) ||
+                normTec.includes(normForm) ||
+                normForm.includes('yuskowich') && normTec.includes('yuskowich')
+            );
+
+            // Si está explícitamente asignado/a en la ficha técnica, registrar de todos modos
+            if (isAssignedInForm) return true;
+
             const surgDate = new Date(`${s.date}T12:00:00`);
             const dayOfWeek = surgDate.getDay(); // 0 = Dom, 6 = Sab
             
+            let isBefore6 = false;
             let isWithinTardeShift = false;
             let isAfter19 = false;
             if (s.actual_start_time) {
                 const [h, m] = s.actual_start_time.split(':').map(Number);
                 const startHourFraction = h + (m || 0) / 60;
                 
+                // Madrugada antes de las 06:00 AM
+                isBefore6 = startHourFraction < 6;
+
                 // Turno tarde: lunes a jueves de 15:00 a 19:00, viernes de 14:00 a 19:00
                 if (dayOfWeek >= 1 && dayOfWeek <= 4) {
                     isWithinTardeShift = startHourFraction >= 15 && startHourFraction < 19;
@@ -435,8 +489,8 @@ export default function TecnicoPanel() {
             const onDutyTec = getOnDutyTecnicoForDate(s.date);
             const isGuardia = onDutyTec && onDutyTec.id === selectedTecnicoId;
 
-            // Fines de semana o luego de las 19:00 -> Solo al que está de guardia
-            if (dayOfWeek === 0 || dayOfWeek === 6 || isAfter19) {
+            // Fines de semana, luego de las 19:00 hs o antes de las 06:00 AM (Guardia Nocturna) -> Solo al que está de guardia
+            if (dayOfWeek === 0 || dayOfWeek === 6 || isAfter19 || isBefore6) {
                 return isGuardia;
             }
 
@@ -449,8 +503,8 @@ export default function TecnicoPanel() {
                 return false;
             }
 
-            // Fuera de esos horarios (mañana o nocturno), cae bajo guardia
-            return isGuardia;
+            // En el Turno Mañana (06:00 a 14:00/15:00 hs) de días hábiles, no se imputa al de guardia salvo en la ficha técnica
+            return false;
         });
     }, [surgeries, selectedTecnicoId, tecnicos, getOnDutyTecnicoForDate, manualSurgeryIds, hasCheckedInOnDate]);
 
@@ -489,6 +543,10 @@ export default function TecnicoPanel() {
             const surgDate = new Date(`${s.date}T12:00:00`);
             const dayOfWeek = surgDate.getDay();
             const isWeekDay = dayOfWeek >= 1 && dayOfWeek <= 5;
+
+            const onDutyTec = getOnDutyTecnicoForDate(s.date);
+            const isGuardia = onDutyTec && onDutyTec.id === selectedTecnicoId;
+            const isFijo = tec.is_turno_tarde === true;
             
             let isWithinTardeShift = false;
             let isAfter19 = false;
@@ -502,6 +560,10 @@ export default function TecnicoPanel() {
                 }
                 isAfter19 = startHourFraction >= 19;
             }
+
+            // Verificar si el técnico asignado en la Ficha Técnica difiere de guardia/turno tarde
+            const formInstrumentadora = Array.isArray(s.surgery_forms) ? s.surgery_forms[0]?.instrumentadora : s.surgery_forms?.instrumentadora;
+            const isInstrumentadoraMismatch = formInstrumentadora && !isFijo && !isGuardia;
 
             // Contar cuántos técnicos están asignados a esta cirugía
             const manualAssignees = allManualSurgeries.filter(m => m.surgery_id === s.id).map(m => m.user_id);
@@ -541,7 +603,7 @@ export default function TecnicoPanel() {
             return {
                 id: s.id,
                 date: s.date,
-                patient: s.patient?.name || 'Desconocido',
+                patient: s.patient?.full_name || s.patient?.name || 'Desconocido',
                 procedure: s.procedure,
                 realMin,
                 roundedMin,
@@ -551,10 +613,12 @@ export default function TecnicoPanel() {
                 share: myShare,
                 notes: shareNotes,
                 isSingleAssignee: !hasMultipleAssignees,
-                coAssignedCount: manualAssignees.length
+                coAssignedCount: manualAssignees.length,
+                formInstrumentadora: formInstrumentadora || null,
+                isInstrumentadoraMismatch: !!isInstrumentadoraMismatch
             };
         });
-    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries]);
+    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate]);
 
     const totalSurgeriesAmount = useMemo(() => {
         return surgeriesReport.reduce((acc, curr) => acc + curr.share, 0);
@@ -1286,13 +1350,21 @@ Sistema de Coordinación de Quirófano ITEO
                                                 <td className="px-6 py-4 text-right font-medium text-slate-600">${s.timeCost.toLocaleString()}</td>
                                                 <td className="px-6 py-4 text-right font-semibold bg-slate-50/50 text-slate-700">${s.totalCost.toLocaleString()}</td>
                                                 <td className="px-6 py-4 text-left text-xs font-bold text-slate-500">
-                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${
-                                                        manualSurgeryIds.includes(s.id) ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                                                        s.notes.includes('100%') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
-                                                    }`}>
-                                                        {manualSurgeryIds.includes(s.id) && <span className="material-symbols-outlined text-xs">touch_app</span>}
-                                                        {manualSurgeryIds.includes(s.id) ? 'Cargada Manualmente' : s.notes}
-                                                    </span>
+                                                     <div className="flex flex-col gap-1">
+                                                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${
+                                                             manualSurgeryIds.includes(s.id) ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                                             s.notes.includes('100%') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                                         }`}>
+                                                             {manualSurgeryIds.includes(s.id) && <span className="material-symbols-outlined text-xs">touch_app</span>}
+                                                             {manualSurgeryIds.includes(s.id) ? 'Cargada Manualmente' : s.notes}
+                                                         </span>
+                                                         {s.isInstrumentadoraMismatch && (
+                                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 text-[10px]" title={`Técnico en ficha: ${s.formInstrumentadora}`}>
+                                                                 <span className="material-symbols-outlined text-xs text-amber-600">warning</span>
+                                                                 Ver: asignado/a en ficha ({s.formInstrumentadora}) no es del turno tarde ni de guardia
+                                                             </span>
+                                                         )}
+                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-right font-black bg-indigo-50/50 text-indigo-700">${s.share.toLocaleString()}</td>
                                                 <td className="px-4 py-4 text-center flex items-center justify-center gap-1">
@@ -1562,12 +1634,48 @@ Sistema de Coordinación de Quirófano ITEO
 
                         {/* Configurar Valores Nomenclador */}
                         <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-                            <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-slate-400">list_alt</span>
-                                Tarifas por Práctica (Nomenclador)
-                            </h3>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                                <div>
+                                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-slate-400">list_alt</span>
+                                        Tarifas por Práctica (Nomenclador OSER / AOTER)
+                                    </h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        Listado completo de prácticas. Asigne o modifique los valores de cada práctica para el cálculo de honorarios.
+                                    </p>
+                                </div>
+                            </div>
 
-                            {/* Cargar Práctica */}
+                            {/* Buscador y Ordenador de Prácticas */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                                <div className="sm:col-span-2 relative">
+                                    <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">search</span>
+                                    <input
+                                        type="text"
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-xs font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                                        placeholder="Buscar práctica por código (ej: 1210708, 121.01.01, MS.01.01)..."
+                                        value={practiceSearchFilter}
+                                        onChange={e => setPracticeSearchFilter(e.target.value)}
+                                    />
+                                </div>
+                                <div className="sm:col-span-1 flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1">
+                                    <span className="material-symbols-outlined text-slate-400 text-sm">sort</span>
+                                    <select
+                                        className="w-full bg-transparent text-xs font-bold text-slate-700 focus:outline-none cursor-pointer py-1"
+                                        value={practiceSortOption}
+                                        onChange={e => setPracticeSortOption(e.target.value as any)}
+                                    >
+                                        <option value="cases_desc">Más Frecuentes (Casos ↓)</option>
+                                        <option value="cases_asc">Menos Frecuentes (Casos ↑)</option>
+                                        <option value="code_asc">Código (A-Z / Menor)</option>
+                                        <option value="code_desc">Código (Z-A / Mayor)</option>
+                                        <option value="price_desc">Precio (Mayor a Menor)</option>
+                                        <option value="price_asc">Precio (Menor a Mayor)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Cargar Práctica Manual */}
                             <div className="grid grid-cols-3 gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
                                 <div className="col-span-1">
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Código (Ej: 1210708)</label>
@@ -1592,38 +1700,145 @@ Sistema de Coordinación de Quirófano ITEO
                                     <button
                                         onClick={handleSavePracticeRate}
                                         disabled={isSavingRate}
-                                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs"
+                                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition-colors"
                                     >
                                         Agregar / Actualizar
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Listado Prácticas con Tarifas */}
-                            <div className="flex-1 overflow-y-auto max-h-[300px] divide-y divide-slate-100 pr-2 custom-scrollbar">
-                                {practiceRates.length === 0 ? (
-                                    <div className="text-center py-12 text-xs text-slate-400 italic">
-                                        No hay prácticas cargadas.
-                                    </div>
-                                ) : (
-                                    practiceRates.map(r => (
-                                        <div key={r.id} className="py-2 flex justify-between items-center text-sm font-medium">
-                                            <div className="flex items-center gap-2">
-                                                <span className="material-symbols-outlined text-slate-400 text-base">clinical_trial</span>
-                                                <span className="font-bold text-slate-800 font-mono">Práctica {r.practice_code}</span>
+                            {/* Listado Completo de Prácticas Nomencladas con Tarifas y Pendientes */}
+                            <div className="flex-1 overflow-y-auto max-h-[350px] divide-y divide-slate-100 pr-2 custom-scrollbar">
+                                {(() => {
+                                    // 1. Contar frecuencia de casos por código en las cirugías cargadas
+                                    const practiceCaseCounts = new Map<string, number>();
+                                    surgeries.forEach(s => {
+                                        let rawCode = '';
+                                        const matchBracket = s.procedure?.match(/^\[(.*?)\]/);
+                                        const matchColon = s.procedure?.match(/^(.*?):/);
+                                        if (matchBracket) rawCode = matchBracket[1].trim();
+                                        else if (matchColon) rawCode = matchColon[1].trim();
+                                        const mappedAoterCode = (nomencladorData.mapping as Record<string, string>)[rawCode] || rawCode;
+                                        const code = mappedAoterCode.replace(/\./g, '').trim();
+                                        if (code) {
+                                            practiceCaseCounts.set(code, (practiceCaseCounts.get(code) || 0) + 1);
+                                        }
+                                    });
+
+                                    // 2. Mapeo completo de prácticas provenientes del nomenclador
+                                    const allMappingKeys = Object.keys(nomencladorData.mapping as Record<string, string>);
+                                    const uniqueCodesSet = new Set<string>();
+                                    
+                                    allMappingKeys.forEach(k => {
+                                        const clean = k.replace(/\./g, '').trim();
+                                        if (clean) uniqueCodesSet.add(clean);
+                                    });
+
+                                    // Incorporar también las cargadas explícitamente en la base de datos
+                                    practiceRates.forEach(r => {
+                                        if (r.practice_code) uniqueCodesSet.add(r.practice_code);
+                                    });
+
+                                    let allCodesList = Array.from(uniqueCodesSet);
+
+                                    // 3. Ordenamiento dinámico según la opción seleccionada por el usuario
+                                    allCodesList.sort((codeA, codeB) => {
+                                        const countA = practiceCaseCounts.get(codeA) || 0;
+                                        const countB = practiceCaseCounts.get(codeB) || 0;
+                                        const rateA = practiceRates.find(r => r.practice_code === codeA)?.value || 0;
+                                        const rateB = practiceRates.find(r => r.practice_code === codeB)?.value || 0;
+
+                                        if (practiceSortOption === 'cases_desc') {
+                                            if (countB !== countA) return countB - countA; // Mayor cantidad de casos primero
+                                            return codeA.localeCompare(codeB);
+                                        }
+                                        if (practiceSortOption === 'cases_asc') {
+                                            if (countA !== countB) return countA - countB;
+                                            return codeA.localeCompare(codeB);
+                                        }
+                                        if (practiceSortOption === 'code_asc') return codeA.localeCompare(codeB);
+                                        if (practiceSortOption === 'code_desc') return codeB.localeCompare(codeA);
+                                        if (practiceSortOption === 'price_desc') {
+                                            if (rateB !== rateA) return rateB - rateA;
+                                            return codeA.localeCompare(codeB);
+                                        }
+                                        if (practiceSortOption === 'price_asc') {
+                                            if (rateA !== rateB) return rateA - rateB;
+                                            return codeA.localeCompare(codeB);
+                                        }
+                                        return 0;
+                                    });
+
+                                    // 4. Filtrar por término de búsqueda si el usuario ingresó algo
+                                    if (practiceSearchFilter.trim()) {
+                                        const query = practiceSearchFilter.toLowerCase().replace(/\./g, '').trim();
+                                        allCodesList = allCodesList.filter(c => c.toLowerCase().includes(query));
+                                    }
+
+                                    if (allCodesList.length === 0) {
+                                        return (
+                                            <div className="text-center py-12 text-xs text-slate-400 italic">
+                                                No se encontraron prácticas que coincidan con la búsqueda.
                                             </div>
-                                            <div className="flex items-center gap-4">
-                                                <span className="font-black text-slate-800">${r.value.toLocaleString()}</span>
-                                                <button
-                                                    onClick={() => r.id && handleDeletePracticeRate(r.id)}
-                                                    className="text-slate-400 hover:text-red-600"
-                                                >
-                                                    <span className="material-symbols-outlined text-base">delete</span>
-                                                </button>
+                                        );
+                                    }
+
+                                    return allCodesList.map(code => {
+                                        const existingRate = practiceRates.find(r => r.practice_code === code);
+                                        const hasPrice = existingRate && existingRate.value > 0;
+                                        const caseCount = practiceCaseCounts.get(code) || 0;
+
+                                        return (
+                                            <div key={code} className="py-2.5 flex justify-between items-center text-sm font-medium hover:bg-slate-50/80 px-2 rounded-lg transition-colors">
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="material-symbols-outlined text-slate-400 text-base">clinical_trial</span>
+                                                    <div className="flex flex-col">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold text-slate-800 font-mono text-xs">Práctica {code}</span>
+                                                            {caseCount > 0 && (
+                                                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold rounded-md flex items-center gap-1">
+                                                                    <span className="material-symbols-outlined text-[11px]">medical_services</span>
+                                                                    {caseCount} {caseCount === 1 ? 'caso' : 'casos'}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    {hasPrice ? (
+                                                        <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-black">
+                                                            ${existingRate.value.toLocaleString()}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[11px] font-bold flex items-center gap-1">
+                                                            <span className="material-symbols-outlined text-xs text-amber-500">warning</span>
+                                                            Sin Precio ($0)
+                                                        </span>
+                                                    )}
+                                                    <button
+                                                        onClick={() => {
+                                                            setPracticeCodeInput(code);
+                                                            setPracticeValueInput(existingRate?.value || 0);
+                                                        }}
+                                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-bold px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                                                        title="Cargar o modificar precio para esta práctica"
+                                                    >
+                                                        {hasPrice ? 'Editar' : 'Cargar Precio'}
+                                                    </button>
+                                                    {existingRate?.id && (
+                                                        <button
+                                                            onClick={() => handleDeletePracticeRate(existingRate.id!)}
+                                                            className="text-slate-400 hover:text-rose-600 p-1"
+                                                            title="Eliminar tarifa"
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">delete</span>
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))
-                                )}
+                                        );
+                                    });
+                                })()}
                             </div>
                         </div>
                     </div>
