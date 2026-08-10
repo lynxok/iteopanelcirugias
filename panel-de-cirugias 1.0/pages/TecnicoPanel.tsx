@@ -1726,45 +1726,73 @@ Sistema de Coordinación de Quirófano ITEO
                                     });
 
                                     // 2. Mapeo completo de prácticas provenientes del nomenclador
-                                    const allMappingKeys = Object.keys(nomencladorData.mapping as Record<string, string>);
-                                    const uniqueCodesSet = new Set<string>();
+                                    const mappingObj = nomencladorData.mapping as Record<string, string>;
                                     
-                                    allMappingKeys.forEach(k => {
-                                        const clean = k.replace(/\./g, '').trim();
-                                        if (clean) uniqueCodesSet.add(clean);
+                                    // Crear mapa de pares { oserCode, aoterCode, key }
+                                    const practiceEntriesMap = new Map<string, { oserCode: string; aoterCode: string; rateCode: string }>();
+
+                                    Object.keys(mappingObj).forEach(k => {
+                                        const cleanK = k.replace(/\./g, '').trim();
+                                        const targetVal = mappingObj[k] ? mappingObj[k].replace(/\./g, '').trim() : cleanK;
+                                        
+                                        // Si la clave es numérica (OSER), ej: 121.01.03 o 1230606
+                                        if (/^\d/.test(k)) {
+                                            if (!practiceEntriesMap.has(cleanK)) {
+                                                practiceEntriesMap.set(cleanK, {
+                                                    oserCode: k,
+                                                    aoterCode: targetVal,
+                                                    rateCode: targetVal
+                                                });
+                                            }
+                                        } else {
+                                            // Si la clave es AOTER (ej: MS.01.01), intentar asociar a OSER o guardarla
+                                            if (!practiceEntriesMap.has(targetVal)) {
+                                                practiceEntriesMap.set(targetVal, {
+                                                    oserCode: k,
+                                                    aoterCode: targetVal,
+                                                    rateCode: targetVal
+                                                });
+                                            }
+                                        }
                                     });
 
-                                    // Incorporar también las cargadas explícitamente en la base de datos
+                                    // Incorporar también tarifas cargadas explícitamente en la base de datos
                                     practiceRates.forEach(r => {
-                                        if (r.practice_code) uniqueCodesSet.add(r.practice_code);
+                                        if (r.practice_code && !practiceEntriesMap.has(r.practice_code)) {
+                                            practiceEntriesMap.set(r.practice_code, {
+                                                oserCode: r.practice_code,
+                                                aoterCode: r.practice_code,
+                                                rateCode: r.practice_code
+                                            });
+                                        }
                                     });
 
-                                    let allCodesList = Array.from(uniqueCodesSet);
+                                    let allEntries = Array.from(practiceEntriesMap.values());
 
                                     // 3. Ordenamiento dinámico según la opción seleccionada por el usuario
-                                    allCodesList.sort((codeA, codeB) => {
-                                        const countA = practiceCaseCounts.get(codeA) || 0;
-                                        const countB = practiceCaseCounts.get(codeB) || 0;
-                                        const rateA = practiceRates.find(r => r.practice_code === codeA)?.value || 0;
-                                        const rateB = practiceRates.find(r => r.practice_code === codeB)?.value || 0;
+                                    allEntries.sort((entryA, entryB) => {
+                                        const countA = practiceCaseCounts.get(entryA.rateCode) || practiceCaseCounts.get(entryA.aoterCode) || 0;
+                                        const countB = practiceCaseCounts.get(entryB.rateCode) || practiceCaseCounts.get(entryB.aoterCode) || 0;
+                                        const rateA = practiceRates.find(r => r.practice_code === entryA.rateCode || r.practice_code === entryA.aoterCode)?.value || 0;
+                                        const rateB = practiceRates.find(r => r.practice_code === entryB.rateCode || r.practice_code === entryB.aoterCode)?.value || 0;
 
                                         if (practiceSortOption === 'cases_desc') {
-                                            if (countB !== countA) return countB - countA; // Mayor cantidad de casos primero
-                                            return codeA.localeCompare(codeB);
+                                            if (countB !== countA) return countB - countA;
+                                            return entryA.oserCode.localeCompare(entryB.oserCode);
                                         }
                                         if (practiceSortOption === 'cases_asc') {
                                             if (countA !== countB) return countA - countB;
-                                            return codeA.localeCompare(codeB);
+                                            return entryA.oserCode.localeCompare(entryB.oserCode);
                                         }
-                                        if (practiceSortOption === 'code_asc') return codeA.localeCompare(codeB);
-                                        if (practiceSortOption === 'code_desc') return codeB.localeCompare(codeA);
+                                        if (practiceSortOption === 'code_asc') return entryA.oserCode.localeCompare(entryB.oserCode);
+                                        if (practiceSortOption === 'code_desc') return entryB.oserCode.localeCompare(entryA.oserCode);
                                         if (practiceSortOption === 'price_desc') {
                                             if (rateB !== rateA) return rateB - rateA;
-                                            return codeA.localeCompare(codeB);
+                                            return entryA.oserCode.localeCompare(entryB.oserCode);
                                         }
                                         if (practiceSortOption === 'price_asc') {
                                             if (rateA !== rateB) return rateA - rateB;
-                                            return codeA.localeCompare(codeB);
+                                            return entryA.oserCode.localeCompare(entryB.oserCode);
                                         }
                                         return 0;
                                     });
@@ -1772,10 +1800,13 @@ Sistema de Coordinación de Quirófano ITEO
                                     // 4. Filtrar por término de búsqueda si el usuario ingresó algo
                                     if (practiceSearchFilter.trim()) {
                                         const query = practiceSearchFilter.toLowerCase().replace(/\./g, '').trim();
-                                        allCodesList = allCodesList.filter(c => c.toLowerCase().includes(query));
+                                        allEntries = allEntries.filter(e => 
+                                            e.oserCode.toLowerCase().replace(/\./g, '').includes(query) ||
+                                            e.aoterCode.toLowerCase().replace(/\./g, '').includes(query)
+                                        );
                                     }
 
-                                    if (allCodesList.length === 0) {
+                                    if (allEntries.length === 0) {
                                         return (
                                             <div className="text-center py-12 text-xs text-slate-400 italic">
                                                 No se encontraron prácticas que coincidan con la búsqueda.
@@ -1783,32 +1814,28 @@ Sistema de Coordinación de Quirófano ITEO
                                         );
                                     }
 
-                                    return allCodesList.map(code => {
-                                        const existingRate = practiceRates.find(r => r.practice_code === code);
+                                    return allEntries.map(entry => {
+                                        const existingRate = practiceRates.find(r => r.practice_code === entry.rateCode || r.practice_code === entry.aoterCode);
                                         const hasPrice = existingRate && existingRate.value > 0;
-                                        const caseCount = practiceCaseCounts.get(code) || 0;
+                                        const caseCount = practiceCaseCounts.get(entry.rateCode) || practiceCaseCounts.get(entry.aoterCode) || 0;
 
-                                        // Encontrar equivalente numérico OSER (ej: 121.07.03 o 1230606)
-                                        const mappingObj = nomencladorData.mapping as Record<string, string>;
-                                        const oserKey = Object.keys(mappingObj).find(k => {
-                                            const valClean = mappingObj[k].replace(/\./g, '').trim();
-                                            return valClean === code && /^\d/.test(k);
-                                        });
-
-                                        const primaryCodeDisplay = oserKey ? oserKey : code;
-                                        const aoterSuffixDisplay = oserKey && code !== oserKey.replace(/\./g, '') ? ` (${code})` : '';
+                                        const fullTitle = `Práctica OSER ${entry.oserCode} | AOTER (${entry.aoterCode})`;
 
                                         return (
-                                            <div key={code} className="py-2.5 flex justify-between items-center text-sm font-medium hover:bg-slate-50/80 px-2 rounded-lg transition-colors">
-                                                <div className="flex items-center gap-2.5">
-                                                    <span className="material-symbols-outlined text-indigo-500/70 text-base">medical_services</span>
-                                                    <div className="flex flex-col">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-bold text-slate-800 font-mono text-xs">
-                                                                Práctica {primaryCodeDisplay}<span className="text-slate-400 font-normal">{aoterSuffixDisplay}</span>
+                                            <div
+                                                key={entry.oserCode + entry.aoterCode}
+                                                className="py-2.5 flex justify-between items-center text-sm font-medium hover:bg-slate-50/80 px-2 rounded-lg transition-colors group cursor-default"
+                                                title={fullTitle}
+                                            >
+                                                <div className="flex items-center gap-2.5 max-w-[65%] min-w-0">
+                                                    <span className="material-symbols-outlined text-indigo-500/70 text-base shrink-0">medical_services</span>
+                                                    <div className="flex flex-col min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="font-bold text-slate-800 font-mono text-xs truncate" title={fullTitle}>
+                                                                Práctica {entry.oserCode} <span className="text-slate-400 font-normal">({entry.aoterCode})</span>
                                                             </span>
                                                             {caseCount > 0 && (
-                                                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold rounded-md flex items-center gap-1">
+                                                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-extrabold rounded-md flex items-center gap-1 shrink-0">
                                                                     <span className="material-symbols-outlined text-[11px]">medical_services</span>
                                                                     {caseCount} {caseCount === 1 ? 'caso' : 'casos'}
                                                                 </span>
@@ -1816,7 +1843,7 @@ Sistema de Coordinación de Quirófano ITEO
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-3 shrink-0">
                                                     {hasPrice ? (
                                                         <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-black">
                                                             ${existingRate.value.toLocaleString()}
@@ -1829,11 +1856,11 @@ Sistema de Coordinación de Quirófano ITEO
                                                     )}
                                                     <button
                                                         onClick={() => {
-                                                            setPracticeCodeInput(code);
+                                                            setPracticeCodeInput(entry.aoterCode);
                                                             setPracticeValueInput(existingRate?.value || 0);
                                                         }}
                                                         className="text-xs text-indigo-600 hover:text-indigo-800 font-bold px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
-                                                        title="Cargar o modificar precio para esta práctica"
+                                                        title={`Cargar o modificar precio para ${entry.oserCode} (${entry.aoterCode})`}
                                                     >
                                                         {hasPrice ? 'Editar' : 'Cargar Precio'}
                                                     </button>
