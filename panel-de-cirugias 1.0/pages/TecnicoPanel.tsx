@@ -145,16 +145,17 @@ export default function TecnicoPanel() {
 
     const fetchData = useCallback(async () => {
         try {
-            // 1. Obtener todos los técnicos activos
+            // 1. Obtener todos los técnicos activos asignados a guardias o turno tarde
             const { data: tecData } = await supabase
                 .from('users')
                 .select('id, name, email, is_turno_tarde, has_tecnico_section_access, does_guardias')
                 .eq('role', 'Tecnico')
                 .eq('active', true);
             if (tecData) {
-                setTecnicos(tecData);
-                if (!selectedTecnicoId && tecData.length > 0 && isLevelAdmin) {
-                    setSelectedTecnicoId(tecData[0].id);
+                const filteredTecs = tecData.filter(t => t.does_guardias || t.is_turno_tarde);
+                setTecnicos(filteredTecs);
+                if (!selectedTecnicoId && filteredTecs.length > 0 && isLevelAdmin) {
+                    setSelectedTecnicoId(filteredTecs[0].id);
                 }
             }
 

@@ -11,10 +11,17 @@ El wiki está dividido en las siguientes secciones lógicas:
 3.  **[Reglas de Negocio](file:///.agents/wiki/reglas_de_negocio.md)**: Lógica de estados de cirugías, mapeo de validaciones (Kanban), lógica de alertas críticas, reglas de residentes y guardias.
 4.  **[Historial de Versiones](file:///.agents/wiki/historial_versiones.md)**: Registro cronológico de cambios aplicados en cada release (v1.0.x a v3.10.x).
 
+5.  **[CodeWiki](file:///.agents/wiki/codewiki/index.md)**: Documentación jerárquica y consciente de la arquitectura (Diagramas Mermaid, Módulos, Flujos de Sincronización y Árbol de Componentes).
+
 ---
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-08-07]`: Agregada la columna y campo **"Pedido de autorización ART"** (`pedido_autorizacion_art`, `pedido_autorizacion_art_por`, `pedido_autorizacion_art_at`) en `AdminDashboard.tsx` para usuarios ART, con registro de auditoría y validación obligatoria de cobertura médica en `useSurgeryDetail.ts`. Ejecutada la migración SQL `ALTER TABLE quirofano.surgeries` vía Supabase MCP.
+*   `[2026-08-07]`: Lanzada la versión **v3.10.90**. Implementada la vista opcional "Ranking" (4 columnas: Urgencias/Emergencias, OSER, Prepagas, ART/Particulares) en Planificación (`Kanban.tsx`). Se añadieron los badges de cobertura médica específica (`ART`, `Particular`, etc.), el resalte visual en fondo y borde naranja para cirugías OSER con material pendiente de ortopedia, y la leyenda de colores descriptiva en la cabecera. Corregido el bug de renderizado `TypeError` y `handleCancelSurgery` no definido en navegadores móviles y tablets.
+*   `[2026-08-07]`: Lanzada la versión **v3.10.89**. Agregada la opción predeterminada `[00.00.00] A DEFINIR` al catálogo y buscador del nomenclador para cirugías sin código informado por el médico. Se implementó el bloqueo automático de agendado en el calendario (`Calendar.tsx` y `useSurgeryDetail.ts`), el desplegable interactivo con búsqueda en tiempo real sobre `nomenclador_items` y aviso de advertencia (`ClinicalDetailsSection.tsx`), y la exención del requerimiento de fecha de prequirúrgicos para cirugías ambulatorias durante el guardado.
+*   `[2026-08-06]`: Implementado el controlador de fondo `AmbulatoryAutoCompleter` (`src/lib/ambulatoryAutoCompleter.ts` y `components/AmbulatoryAutoCompleter.tsx`) para la auto-finalización periódica exclusiva de cirugías ambulatorias cuya fecha de realización ya transcurrió (`surgery_date < fecha_actual`).
+*   `[2026-08-05]`: Generada la estructura CodeWiki del proyecto en `.agents/wiki/codewiki/` con visión general de arquitectura, mapa de módulos, flujos de datos e impresión y árbol de componentes.
 *   `[2026-07-08]`: Creación del Wiki modular y migración inicial desde `KNOWLEDGE.md`.
 *   `[2026-07-08]`: Actualizada la lógica de discrepancias de OSER en `reglas_de_negocio.md` para ignorar prácticas no autorizadas o anuladas del historial.
 *   `[2026-07-08]`: Modificada la lógica de cobertura en `ResidentShifts.tsx` (semana: 17:00-07:00, 14hs; finde/feriado: 08:00 a 08:00 del día siguiente, 24hs) y flexibilizada la regla de las 16hs de descanso a advertencia. Actualizado `reglas_de_negocio.md`.
