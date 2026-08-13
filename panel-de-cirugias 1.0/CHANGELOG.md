@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v3.10.93 (2026-08-13)
+- **Cirugías Ambulatorias**:
+    - **Validación de Prequirúrgicos**: Se confirma y mantiene la regla de flexibilización por la cual las cirugías ambulatorias o agendadas en quirófano ambulatorio no requieren la fecha de prequirúrgicos para su carga y aprobación clínica.
+
 ## v3.10.92 (2026-08-10)
 - **Gestión de Técnicos**:
     - **Validación de Ficha Técnica**: Incorporado el rastreo explícito de la instrumentadora en `surgery_forms.instrumentadora`, imputando las cirugías a su planilla mensual e indicando advertencias en ámbar cuando no pertenece al turno tarde ni a la guardia.
