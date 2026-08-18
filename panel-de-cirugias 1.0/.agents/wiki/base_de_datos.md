@@ -41,3 +41,4 @@ El RLS está habilitado y es altamente restrictivo en todas las tablas sensibles
     *   Tabla `quirofano.tecnico_rates`: Almacena tarifas de horas, guardias, IP de la clínica y tarifas por práctica del nomenclador. Incluye columnas `updated_at`, `updated_by` y `updated_by_name` para trazabilidad y auditoría de ediciones.
     *   Tabla `quirofano.tecnico_attendance`: Almacena registros de fichadas/asistencia (Check-In, Break-Out, Break-In, Check-Out) y la dirección IP.
     *   Tabla `quirofano.tecnico_monthly_consents`: Registra las firmas mensuales de conformidad de los técnicos sobre el período liquidado.
+    *   Tabla `quirofano.tecnico_manual_surgeries`: Almacena cirugías agregadas manualmente o co-asignadas a técnicos. Columnas: `id`, `user_id`, `surgery_id`, `status` ('pending' | 'approved' | 'rejected'), `validated_at`, `validated_by`, `validated_by_name`, `created_by`, `created_by_name`, `created_by_role` y `notes`.

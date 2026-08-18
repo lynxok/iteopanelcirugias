@@ -60,9 +60,33 @@ interface Consent {
     status: string;
 }
 
+export interface ManualSurgery {
+    id: string;
+    user_id: string;
+    surgery_id: string;
+    status: 'pending' | 'approved' | 'rejected';
+    validated_at?: string;
+    validated_by?: string;
+    validated_by_name?: string;
+    created_by?: string;
+    created_by_name?: string;
+    created_by_role?: string;
+    created_at?: string;
+    notes?: string;
+}
+
 export default function TecnicoPanel() {
     const { user } = useAuth();
-    const isLevelAdmin = user?.role === 'SuperAdmin' || user?.role === 'Direccion' || user?.role === 'Administrativo Direccion';
+    const canValidateManualSurgeries = user?.role === 'SuperAdmin' || 
+        user?.role === 'Direccion' || 
+        user?.role === 'DireccionMedica' || 
+        user?.role === 'Administrativo Direccion' || 
+        user?.role === 'Gerencia' || 
+        user?.role === 'GerenciaMedica' || 
+        user?.role === 'Administracion' || 
+        user?.role === 'JefaturaDeAdministracion';
+
+    const isLevelAdmin = canValidateManualSurgeries;
 
     // Tabs
     const [activeTab, setActiveTab] = useState<'clock' | 'billing' | 'guards' | 'rates'>(
@@ -80,7 +104,7 @@ export default function TecnicoPanel() {
     const [attendanceLogs, setAttendanceLogs] = useState<Attendance[]>([]);
     const [allMonthAttendance, setAllMonthAttendance] = useState<Attendance[]>([]);
     const [manualSurgeryIds, setManualSurgeryIds] = useState<string[]>([]);
-    const [allManualSurgeries, setAllManualSurgeries] = useState<{ user_id: string; surgery_id: string }[]>([]);
+    const [allManualSurgeries, setAllManualSurgeries] = useState<ManualSurgery[]>([]);
     const [isAddManualModalOpen, setIsAddManualModalOpen] = useState<boolean>(false);
     const [selectedManualSurgeryId, setSelectedManualSurgeryId] = useState<string>('');
     const [isSavingManualSurgery, setIsSavingManualSurgery] = useState<boolean>(false);
@@ -335,7 +359,7 @@ export default function TecnicoPanel() {
             // 5.b Cargar Mapeo de Cirugías Manuales y Asistencia del Mes
             const { data: allManData } = await supabase
                 .from('tecnico_manual_surgeries')
-                .select('user_id, surgery_id');
+                .select('*');
             if (allManData) {
                 setAllManualSurgeries(allManData);
                 if (selectedTecnicoId) {
@@ -644,10 +668,17 @@ export default function TecnicoPanel() {
             const formInstrumentadora = Array.isArray(s.surgery_forms) ? s.surgery_forms[0]?.instrumentadora : s.surgery_forms?.instrumentadora;
             const isInstrumentadoraMismatch = formInstrumentadora && !isFijo && !isGuardia;
 
-            // Contar cuántos técnicos están asignados a esta cirugía
-            const manualAssignees = allManualSurgeries.filter(m => m.surgery_id === s.id).map(m => m.user_id);
-            const isCoAssigned = manualAssignees.length > 0;
+            // Contar cuántos técnicos están asignados y aprobados a esta cirugía
+            const approvedManualAssignees = allManualSurgeries
+                .filter(m => m.surgery_id === s.id && m.status === 'approved')
+                .map(m => m.user_id);
+            const isCoAssigned = approvedManualAssignees.length > 0;
             const hasMultipleAssignees = isCoAssigned || isWithinTardeShift;
+
+            // Verificar si esta cirugía fue agregada manualmente para este técnico
+            const myManual = allManualSurgeries.find(m => m.user_id === selectedTecnicoId && m.surgery_id === s.id);
+            const isManual = !!myManual;
+            const manualStatus: 'pending' | 'approved' | 'rejected' | null = myManual ? (myManual.status || 'pending') : null;
 
             let myShare = 0;
             let shareNotes = "";
@@ -679,6 +710,10 @@ export default function TecnicoPanel() {
                 }
             }
 
+            const estimatedShare = myShare;
+            // Si la cirugía fue agregada manualmente y aún no fue aprobada/validada, no computa en la liquidación oficial
+            const actualShare = (isManual && manualStatus !== 'approved') ? 0 : myShare;
+
             return {
                 id: s.id,
                 date: s.date,
@@ -692,14 +727,18 @@ export default function TecnicoPanel() {
                 practiceRate,
                 timeCost,
                 totalCost: totalQx,
-                share: myShare,
+                share: actualShare,
+                estimatedShare,
                 notes: shareNotes,
                 isSingleAssignee: !hasMultipleAssignees,
-                coAssignedCount: manualAssignees.length,
+                coAssignedCount: approvedManualAssignees.length,
                 formInstrumentadora: formInstrumentadora || null,
                 isInstrumentadoraMismatch: !!isInstrumentadoraMismatch,
                 rateUpdatedAt: existingRate?.updated_at,
-                rateUpdatedByName: existingRate?.updated_by_name
+                rateUpdatedByName: existingRate?.updated_by_name,
+                isManual,
+                manualRecord: myManual || null,
+                manualStatus
             };
         });
     }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate]);
@@ -869,12 +908,22 @@ export default function TecnicoPanel() {
         const targetTecnico = tecnicos.find(t => t.id === selectedTecnicoId);
         const targetSurgery = surgeries.find(s => s.id === selectedManualSurgeryId);
 
+        const isValidator = canValidateManualSurgeries;
+        const initialStatus = isValidator ? 'approved' : 'pending';
+
         try {
             const { error } = await supabase
                 .from('tecnico_manual_surgeries')
                 .insert({
                     user_id: selectedTecnicoId,
-                    surgery_id: selectedManualSurgeryId
+                    surgery_id: selectedManualSurgeryId,
+                    status: initialStatus,
+                    created_by: user?.id,
+                    created_by_name: user?.name || user?.email || 'Usuario',
+                    created_by_role: user?.role || 'Tecnico',
+                    validated_at: isValidator ? new Date().toISOString() : null,
+                    validated_by: isValidator ? user?.id : null,
+                    validated_by_name: isValidator ? (user?.name || user?.email || 'Administrador') : null
                 });
 
             if (error) {
@@ -888,14 +937,22 @@ export default function TecnicoPanel() {
                     'CREATE',
                     'Técnicos - Cirugía Manual',
                     selectedManualSurgeryId,
-                    `${user?.name || 'Usuario'} agregó manualmente la cirugía de ${targetSurgery?.patient?.full_name || 'Paciente'} al técnico ${targetTecnico?.name || 'Técnico'}.`,
-                    { tecnico_id: selectedTecnicoId, tecnico_name: targetTecnico?.name, surgery_id: selectedManualSurgeryId }
+                    isValidator
+                        ? `${user?.name || 'Usuario'} agregó y validó directamente la cirugía de ${targetSurgery?.patient?.full_name || targetSurgery?.patient?.name || 'Paciente'} al técnico ${targetTecnico?.name || 'Técnico'}.`
+                        : `${user?.name || 'Usuario'} agregó la cirugía de ${targetSurgery?.patient?.full_name || targetSurgery?.patient?.name || 'Paciente'} al listado de ${targetTecnico?.name || 'Técnico'} (Pendiente de validación).`,
+                    { tecnico_id: selectedTecnicoId, tecnico_name: targetTecnico?.name, surgery_id: selectedManualSurgeryId, status: initialStatus }
                 );
 
                 setManualSurgeryIds(prev => [...prev, selectedManualSurgeryId]);
                 setIsAddManualModalOpen(false);
                 setSelectedManualSurgeryId('');
                 fetchData();
+
+                if (!isValidator) {
+                    alert('Cirugía agregada con éxito.\n\nHa quedado registrada como "Pendiente de Validación" y solo se computará en la liquidación una vez que sea validada por un usuario de tipo SuperAdmin, Dirección o Administrativo de Gerencia.');
+                } else {
+                    alert('Cirugía agregada y validada con éxito.');
+                }
             }
         } catch (err: any) {
             console.error('Error adding manual surgery:', err);
@@ -911,12 +968,22 @@ export default function TecnicoPanel() {
         const targetTecnico = tecnicos.find(t => t.id === coAssignTecnicoId);
         const targetSurgery = surgeries.find(s => s.id === coAssignSurgeryId);
 
+        const isValidator = canValidateManualSurgeries;
+        const initialStatus = isValidator ? 'approved' : 'pending';
+
         try {
             const { error } = await supabase
                 .from('tecnico_manual_surgeries')
                 .insert({
                     user_id: coAssignTecnicoId,
-                    surgery_id: coAssignSurgeryId
+                    surgery_id: coAssignSurgeryId,
+                    status: initialStatus,
+                    created_by: user?.id,
+                    created_by_name: user?.name || user?.email || 'Usuario',
+                    created_by_role: user?.role || 'Tecnico',
+                    validated_at: isValidator ? new Date().toISOString() : null,
+                    validated_by: isValidator ? user?.id : null,
+                    validated_by_name: isValidator ? (user?.name || user?.email || 'Administrador') : null
                 });
 
             if (error) {
@@ -930,20 +997,76 @@ export default function TecnicoPanel() {
                     'CREATE',
                     'Técnicos - Co-asignación',
                     coAssignSurgeryId,
-                    `${user?.name || 'Usuario'} co-asignó (sumó) al técnico ${targetTecnico?.name || 'Técnico'} a la cirugía de ${targetSurgery?.patient?.full_name || 'Paciente'}.`,
-                    { tecnico_id: coAssignTecnicoId, tecnico_name: targetTecnico?.name, surgery_id: coAssignSurgeryId }
+                    isValidator
+                        ? `${user?.name || 'Usuario'} co-asignó y validó al técnico ${targetTecnico?.name || 'Técnico'} a la cirugía de ${targetSurgery?.patient?.full_name || targetSurgery?.patient?.name || 'Paciente'}.`
+                        : `${user?.name || 'Usuario'} solicitó co-asignar al técnico ${targetTecnico?.name || 'Técnico'} a la cirugía de ${targetSurgery?.patient?.full_name || targetSurgery?.patient?.name || 'Paciente'} (Pendiente de validación).`,
+                    { tecnico_id: coAssignTecnicoId, tecnico_name: targetTecnico?.name, surgery_id: coAssignSurgeryId, status: initialStatus }
                 );
 
                 setIsCoAssignModalOpen(false);
                 setCoAssignSurgeryId('');
                 setCoAssignTecnicoId('');
                 fetchData();
+
+                if (!isValidator) {
+                    alert('Co-asignación solicitada con éxito.\n\nHa quedado en estado "Pendiente de Validación" hasta su aprobación por SuperAdmin, Dirección o Administrativo de Gerencia.');
+                } else {
+                    alert('Técnico sumado y validado con éxito.');
+                }
             }
         } catch (err: any) {
             console.error('Error co-assigning tecnico:', err);
             alert('Error al sumar técnico a la cirugía.');
         } finally {
             setIsSavingManualSurgery(false);
+        }
+    };
+
+    const handleValidateManualSurgery = async (manualRecordId: string, action: 'approve' | 'reject') => {
+        if (!canValidateManualSurgeries) {
+            alert('No tiene permisos para validar cirugías manuales. Solo usuarios tipo SuperAdmin, Dirección o Administrativo de Gerencia pueden realizar esta acción.');
+            return;
+        }
+
+        const manRecord = allManualSurgeries.find(m => m.id === manualRecordId);
+        if (!manRecord) return;
+
+        const targetSurgery = surgeries.find(s => s.id === manRecord.surgery_id);
+        const targetTecnico = tecnicos.find(t => t.id === manRecord.user_id);
+
+        const newStatus = action === 'approve' ? 'approved' : 'rejected';
+        const actionLabel = action === 'approve' ? 'VALIDAR Y APROBAR' : 'RECHAZAR';
+
+        if (!confirm(`¿Está seguro de que desea ${actionLabel} la cirugía de ${targetSurgery?.patient?.full_name || targetSurgery?.patient?.name || 'Paciente'} para la liquidación de ${targetTecnico?.name || 'Técnico'}?`)) {
+            return;
+        }
+
+        try {
+            const { error } = await supabase
+                .from('tecnico_manual_surgeries')
+                .update({
+                    status: newStatus,
+                    validated_at: new Date().toISOString(),
+                    validated_by: user?.id,
+                    validated_by_name: user?.name || user?.email || 'Administrador'
+                })
+                .eq('id', manualRecordId);
+
+            if (error) throw error;
+
+            await logAudit(
+                'STATUS_CHANGE',
+                'Técnicos - Validación Cirugía Manual',
+                manRecord.surgery_id,
+                `${user?.name || 'Administrador'} ${action === 'approve' ? 'aprobó y validó' : 'rechazó'} la cirugía manual de ${targetSurgery?.patient?.full_name || targetSurgery?.patient?.name || 'Paciente'} para el técnico ${targetTecnico?.name || 'Técnico'}.`,
+                { manual_record_id: manualRecordId, surgery_id: manRecord.surgery_id, tecnico_id: manRecord.user_id, status: newStatus }
+            );
+
+            alert(action === 'approve' ? 'Cirugía validada exitosamente para la liquidación.' : 'Inclusión manual rechazada.');
+            fetchData();
+        } catch (err: any) {
+            console.error('Error al validar cirugía manual:', err);
+            alert('Error al validar la cirugía: ' + err.message);
         }
     };
 
@@ -1534,7 +1657,6 @@ Sistema de Coordinación de Quirófano ITEO
                 {/* BILLING TAB */}
                 {activeTab === 'billing' && (
                     <div className="space-y-6 animate-fadeIn">
-                        
                         {/* Overview Card */}
                         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                             <div>
@@ -1560,6 +1682,30 @@ Sistema de Coordinación de Quirófano ITEO
                             </div>
                         </div>
 
+                        {/* Banner de Cirugías Pendientes de Validación */}
+                        {surgeriesReport.some(s => s.isManual && s.manualStatus === 'pending') && (
+                            <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300/80 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-sm animate-fadeIn">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-sm">
+                                        <span className="material-symbols-outlined text-xl">hourglass_top</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-black text-amber-900 uppercase tracking-wide flex items-center gap-1.5">
+                                            <span>Cirugías Agregadas Manualmente Pendientes de Validación</span>
+                                            <span className="bg-amber-500 text-white text-[10px] px-2 py-0.2 rounded-full font-bold">
+                                                {surgeriesReport.filter(s => s.isManual && s.manualStatus === 'pending').length}
+                                            </span>
+                                        </p>
+                                        <p className="text-xs text-amber-800/90 mt-0.5">
+                                            {canValidateManualSurgeries 
+                                                ? 'Usted tiene permisos de validación (SuperAdmin / Dirección / Gerencia). Puede validar o rechazar estas cirugías directamente con los botones de acción en la tabla.'
+                                                : 'Las cirugías agregadas manualmente por el instrumentador permanecen en espera y solo se computarán en el subtotal una vez validadas por SuperAdmin, Dirección o Administrativo de Gerencia.'}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* List Table */}
                         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto">
                             {surgeriesReport.length === 0 ? (
@@ -1584,7 +1730,7 @@ Sistema de Coordinación de Quirófano ITEO
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 text-sm">
                                         {surgeriesReport.map((s, idx) => (
-                                            <tr key={s.id || idx} className="hover:bg-slate-50 transition-colors">
+                                            <tr key={s.id || idx} className={`transition-colors ${s.isManual && s.manualStatus === 'pending' ? 'bg-amber-50/20 hover:bg-amber-50/40' : 'hover:bg-slate-50'}`}>
                                                 <td className="px-6 py-4 font-bold text-slate-700">
                                                     {new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
                                                 </td>
@@ -1631,13 +1777,50 @@ Sistema de Coordinación de Quirófano ITEO
                                                 <td className="px-6 py-4 text-right font-semibold bg-slate-50/50 text-slate-700">${s.totalCost.toLocaleString()}</td>
                                                 <td className="px-6 py-4 text-left text-xs font-bold text-slate-500">
                                                      <div className="flex flex-col gap-1">
-                                                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${
-                                                             manualSurgeryIds.includes(s.id) ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                                                             s.notes.includes('100%') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
-                                                         }`}>
-                                                             {manualSurgeryIds.includes(s.id) && <span className="material-symbols-outlined text-xs">touch_app</span>}
-                                                             {manualSurgeryIds.includes(s.id) ? 'Cargada Manualmente' : s.notes}
-                                                         </span>
+                                                         {s.isManual ? (
+                                                             s.manualStatus === 'pending' ? (
+                                                                 <div className="flex flex-col items-start gap-0.5">
+                                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-black text-[11px] animate-pulse shadow-2xs">
+                                                                         <span className="material-symbols-outlined text-xs text-amber-700">hourglass_top</span>
+                                                                         Pendiente de Validación
+                                                                     </span>
+                                                                     <span className="text-[10px] text-slate-500 font-normal pl-1">
+                                                                         Por: {s.manualRecord?.created_by_name || 'Instrumentador'}
+                                                                     </span>
+                                                                 </div>
+                                                             ) : s.manualStatus === 'approved' ? (
+                                                                 <div className="flex flex-col items-start gap-0.5">
+                                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[11px] shadow-2xs">
+                                                                         <span className="material-symbols-outlined text-xs text-emerald-700">verified</span>
+                                                                         Cargada Manual (Validada)
+                                                                     </span>
+                                                                     {s.manualRecord?.validated_by_name && (
+                                                                         <span className="text-[10px] text-slate-500 font-normal pl-1">
+                                                                             Aprobó: {s.manualRecord.validated_by_name}
+                                                                         </span>
+                                                                     )}
+                                                                 </div>
+                                                             ) : (
+                                                                 <div className="flex flex-col items-start gap-0.5">
+                                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-100 text-rose-900 border border-rose-300 font-bold text-[11px]">
+                                                                         <span className="material-symbols-outlined text-xs text-rose-700">cancel</span>
+                                                                         Cargada Manual (Rechazada)
+                                                                     </span>
+                                                                     {s.manualRecord?.validated_by_name && (
+                                                                         <span className="text-[10px] text-slate-500 font-normal pl-1">
+                                                                             Por: {s.manualRecord.validated_by_name}
+                                                                         </span>
+                                                                     )}
+                                                                 </div>
+                                                             )
+                                                         ) : (
+                                                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${
+                                                                 s.notes.includes('100%') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                                             }`}>
+                                                                 {s.notes}
+                                                             </span>
+                                                         )}
+                                                         
                                                          {s.isInstrumentadoraMismatch && (
                                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 text-[10px]" title={`Técnico en ficha: ${s.formInstrumentadora}`}>
                                                                  <span className="material-symbols-outlined text-xs text-amber-600">warning</span>
@@ -1646,30 +1829,82 @@ Sistema de Coordinación de Quirófano ITEO
                                                          )}
                                                      </div>
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-black bg-indigo-50/50 text-indigo-700">${s.share.toLocaleString()}</td>
-                                                <td className="px-4 py-4 text-center flex items-center justify-center gap-1">
-                                                    {s.isSingleAssignee && (
-                                                        <button
-                                                            onClick={() => {
-                                                                setCoAssignSurgeryId(s.id);
-                                                                setIsCoAssignModalOpen(true);
-                                                            }}
-                                                            className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
-                                                            title="Sumar a otro técnico a esta cirugía"
-                                                        >
-                                                            <span className="material-symbols-outlined text-base">person_add</span>
-                                                            <span className="hidden lg:inline">+ Sumar Técnico</span>
-                                                        </button>
+                                                <td className="px-6 py-4 text-right">
+                                                    {s.isManual && s.manualStatus === 'pending' ? (
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="text-sm font-black text-amber-700">$0</span>
+                                                            <span className="text-[10px] font-semibold text-amber-600/90 leading-tight">
+                                                                (Est. ${s.estimatedShare.toLocaleString()} al validar)
+                                                            </span>
+                                                        </div>
+                                                    ) : s.isManual && s.manualStatus === 'rejected' ? (
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="text-sm font-bold text-slate-400">$0</span>
+                                                            <span className="text-[10px] text-rose-500">Rechazada</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="font-black bg-indigo-50/50 text-indigo-700 px-3 py-1.5 rounded-lg text-sm">
+                                                            ${s.share.toLocaleString()}
+                                                        </span>
                                                     )}
-                                                    {manualSurgeryIds.includes(s.id) && (
-                                                        <button
-                                                            onClick={() => handleRemoveManualSurgery(s.id)}
-                                                            className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 p-1.5 rounded-lg transition-colors"
-                                                            title="Quitar cirugía cargada manualmente"
-                                                        >
-                                                            <span className="material-symbols-outlined text-base">delete</span>
-                                                        </button>
-                                                    )}
+                                                </td>
+                                                <td className="px-4 py-4 text-center">
+                                                    <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                                        {/* Acciones de Validación para SuperAdmin / Dirección / Gerencia */}
+                                                        {s.isManual && s.manualStatus === 'pending' && (
+                                                            canValidateManualSurgeries ? (
+                                                                <div className="flex items-center gap-1">
+                                                                    <button
+                                                                        onClick={() => handleValidateManualSurgery(s.manualRecord.id, 'approve')}
+                                                                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1 transition-all active:scale-95"
+                                                                        title="Aprobar y validar inclusión de cirugía"
+                                                                    >
+                                                                        <span className="material-symbols-outlined text-sm">check_circle</span>
+                                                                        <span>Validar</span>
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleValidateManualSurgery(s.manualRecord.id, 'reject')}
+                                                                        className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold flex items-center gap-1 transition-all"
+                                                                        title="Rechazar inclusión manual"
+                                                                    >
+                                                                        <span className="material-symbols-outlined text-sm">close</span>
+                                                                        <span>Rechazar</span>
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-md border border-amber-200 flex items-center gap-1" title="Pendiente de validación por SuperAdmin, Dirección o Gerencia">
+                                                                    <span className="material-symbols-outlined text-xs animate-spin">progress_activity</span>
+                                                                    Esperando Validación
+                                                                </span>
+                                                            )
+                                                        )}
+
+                                                        {/* Botón Sumar Técnico */}
+                                                        {s.isSingleAssignee && (!s.isManual || s.manualStatus === 'approved') && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setCoAssignSurgeryId(s.id);
+                                                                    setIsCoAssignModalOpen(true);
+                                                                }}
+                                                                className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
+                                                                title="Sumar a otro técnico a esta cirugía"
+                                                            >
+                                                                <span className="material-symbols-outlined text-base">person_add</span>
+                                                                <span className="hidden xl:inline">+ Sumar Técnico</span>
+                                                            </button>
+                                                        )}
+
+                                                        {/* Botón Quitar/Eliminar Cirugía Manual */}
+                                                        {s.isManual && (
+                                                            <button
+                                                                onClick={() => handleRemoveManualSurgery(s.id)}
+                                                                className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg transition-colors"
+                                                                title={s.manualStatus === 'pending' ? "Cancelar solicitud de adición" : "Quitar cirugía del listado"}
+                                                            >
+                                                                <span className="material-symbols-outlined text-base">delete</span>
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -2347,8 +2582,17 @@ Sistema de Coordinación de Quirófano ITEO
                         </div>
 
                         <p className="text-xs text-slate-500">
-                            Seleccione una cirugía completada en el período para incluirla manualmente en el listado del técnico seleccionado.
+                            Seleccione una cirugía completada en el período para incluirla en el listado del técnico seleccionado.
                         </p>
+
+                        {!canValidateManualSurgeries && (
+                            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                                <span className="material-symbols-outlined text-base text-amber-600 shrink-0 mt-0.5">info</span>
+                                <p>
+                                    <strong>Nota de validación:</strong> Al agregarla, la cirugía quedará en estado <strong>"Pendiente de Validación"</strong> y solo podrá ser aprobada para liquidación por un usuario de tipo <strong>SuperAdmin, Dirección o Administrativo de Gerencia</strong>.
+                                </p>
+                            </div>
+                        )}
 
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-700">Cirugías Disponibles ({surgeries.length}):</label>
@@ -2384,7 +2628,7 @@ Sistema de Coordinación de Quirófano ITEO
                                 disabled={!selectedManualSurgeryId || isSavingManualSurgery}
                                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1"
                             >
-                                {isSavingManualSurgery ? 'Guardando...' : 'Confirmar e Incluir'}
+                                {isSavingManualSurgery ? 'Guardando...' : canValidateManualSurgeries ? 'Confirmar e Incluir' : 'Solicitar Inclusión'}
                             </button>
                         </div>
                     </div>
@@ -2415,6 +2659,15 @@ Sistema de Coordinación de Quirófano ITEO
                         <p className="text-xs text-slate-500">
                             Seleccione un técnico disponible (fijo o de guardia) para coparticipar al 50% en los honorarios de esta cirugía.
                         </p>
+
+                        {!canValidateManualSurgeries && (
+                            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                                <span className="material-symbols-outlined text-base text-amber-600 shrink-0 mt-0.5">info</span>
+                                <p>
+                                    <strong>Nota de validación:</strong> La coparticipación quedará en estado <strong>"Pendiente de Validación"</strong> hasta ser aprobada por <strong>SuperAdmin, Dirección o Administrativo de Gerencia</strong>.
+                                </p>
+                            </div>
+                        )}
 
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-700">Técnico a incorporar:</label>
