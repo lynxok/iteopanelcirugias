@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { supabase } from '../src/lib/supabase';
 import { useAuth } from '../src/lib/AuthContext';
 import nomencladorData from '../src/data/nomenclador_mapping.json';
