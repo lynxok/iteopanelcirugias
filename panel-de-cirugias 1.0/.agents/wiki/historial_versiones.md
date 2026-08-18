@@ -4,6 +4,14 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.94 [2026-08-18]**: Lanzada la versión **v3.10.94**.
+    *   **Edición Rápida de Tarifas desde Liquidación de Cirugías**: Habilitado el modal interactivo de carga y edición directa de tarifas de práctica desde la tabla de liquidación para usuarios con rol `SuperAdmin`, `Direccion` y `Administrativo Direccion` en [TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx).
+    *   **Trazabilidad y Auditoría de Tarifas**: Incorporado en la pestaña *Tarifas y Ajustes* el indicador en tiempo real de la última fecha/hora de edición y el usuario autor para todos los campos globales (hora, guardia, IP WiFi, correo de cierre) y para cada práctica del nomenclador, persistiendo `updated_at`, `updated_by` y `updated_by_name` en `quirofano.tecnico_rates`.
+    *   **Experiencia de Usuario**: El botón "Cargar Precio" / "Editar" ahora abre directamente la ventana emergente con foco automático para guardar y recalcular inmediatamente los honorarios.
+*   **v3.10.93 [2026-08-10]**: Lanzada la versión **v3.10.93**.
+    *   **Pestaña Exclusiva "Pendientes Ortopedia"**: Incorporada la pestaña restringida para `SuperAdmin` y `Ortopedia Capital` en Planificación ([Kanban.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Kanban.tsx)), organizando en 3 subsecciones independientes las cirugías **Activas**, **Suspendidas** y **Canceladas** que requieren aprobación de materiales.
+    *   **Filtro Específico de Ortopedia**: Se restringe la pestaña y los contadores a cirugías asignadas al proveedor **"Capital"** O con cobertura **"OSER"** con material pendiente.
+    *   **Badge de Días en Espera**: Integrado en las tarjetas de paciente un badge morado animado que indica dinámicamente el tiempo transcurrido (en días) desde la fecha de creación de la solicitud (`created_at`).
 *   **v3.10.92 [2026-08-10]**: Lanzada la versión **v3.10.92**.
     *   **Imputación por Ficha Técnica y Alertas**: Incorporado el rastreo de la instrumentadora en `surgery_forms.instrumentadora`. Si un técnico figura en la ficha, la cirugía se adjudica en su mensualidad, desplegando un badge de advertencia en ámbar cuando no pertenece al turno tarde ni a la guardia del día.
     *   **Reglas Horarias de Guardia y Turnos**: Cirugías iniciadas antes de las 06:00 AM o después de las 19:00 HS en días hábiles computan 100% para la Guardia Nocturna. El Turno Mañana (06:00 a 15:00 hs) no imputa automáticamente a la guardia.

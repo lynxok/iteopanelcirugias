@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.94 (2026-08-18)
+- **Gestión de Técnicos (Tarifas y Liquidación)**:
+    - **Edición Rápida en Liquidación de Cirugías**: Habilitado el modal interactivo de carga y edición directa de tarifas de práctica desde la tabla de liquidación para usuarios con rol `SuperAdmin`, `Direccion` y `Administrativo Direccion`.
+    - **Trazabilidad y Auditoría de Tarifas**: Incorporado en la pestaña *Tarifas y Ajustes* el indicador en tiempo real de la última fecha/hora de edición y el usuario autor para todos los campos globales (hora, guardia, IP WiFi, correo de cierre) y para cada práctica del nomenclador, persistiendo `updated_at`, `updated_by` y `updated_by_name` en la base de datos.
+    - **Experiencia de Usuario**: El botón "Cargar Precio" / "Editar" ahora abre directamente la ventana emergente con foco automático para guardar y recalcular inmediatamente los honorarios.
+
 ## v3.10.93 (2026-08-13)
 - **Cirugías Ambulatorias**:
     - **Validación de Prequirúrgicos**: Se confirma y mantiene la regla de flexibilización por la cual las cirugías ambulatorias o agendadas en quirófano ambulatorio no requieren la fecha de prequirúrgicos para su carga y aprobación clínica.

@@ -34,9 +34,12 @@ const isHoliday = (date: Date) => {
 
 interface Rate {
     id?: string;
-    rate_type: 'practice' | 'hour' | 'guard' | 'clinic_ip';
+    rate_type: 'practice' | 'hour' | 'guard' | 'clinic_ip' | 'notification_email';
     practice_code?: string;
     value: number;
+    updated_at?: string;
+    updated_by?: string;
+    updated_by_name?: string;
 }
 
 interface Attendance {
@@ -58,7 +61,7 @@ interface Consent {
 
 export default function TecnicoPanel() {
     const { user } = useAuth();
-    const isLevelAdmin = user?.role === 'SuperAdmin' || user?.role === 'Direccion';
+    const isLevelAdmin = user?.role === 'SuperAdmin' || user?.role === 'Direccion' || user?.role === 'Administrativo Direccion';
 
     // Tabs
     const [activeTab, setActiveTab] = useState<'clock' | 'billing' | 'guards' | 'rates'>(
@@ -95,6 +98,22 @@ export default function TecnicoPanel() {
     const [todayUserLogs, setTodayUserLogs] = useState<Attendance[]>([]);
     const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
+    // Modal de Edición Directa de Tarifa de Práctica
+    const [rateModalConfig, setRateModalConfig] = useState<{
+        isOpen: boolean;
+        code: string;
+        oserCode?: string;
+        description?: string;
+        currentValue: number;
+        updated_at?: string;
+        updated_by_name?: string;
+    }>({
+        isOpen: false,
+        code: '',
+        currentValue: 0
+    });
+    const [rateModalInputValue, setRateModalInputValue] = useState<number>(0);
+
     // Rate Form State
     const [hourRate, setHourRate] = useState<number>(0);
     const [guardRate, setGuardRate] = useState<number>(0);
@@ -105,6 +124,56 @@ export default function TecnicoPanel() {
     const [practiceValueInput, setPracticeValueInput] = useState<number>(0);
     const [practiceSearchFilter, setPracticeSearchFilter] = useState<string>('');
     const [practiceSortOption, setPracticeSortOption] = useState<'cases_desc' | 'cases_asc' | 'code_asc' | 'code_desc' | 'price_desc' | 'price_asc'>('cases_desc');
+
+    // Helper: Formato de última edición de tarifas
+    const formatLastUpdated = (updated_at?: string, updated_by_name?: string) => {
+        if (!updated_at) return null;
+        const d = new Date(updated_at);
+        if (isNaN(d.getTime())) return null;
+
+        const dateStr = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+        const now = new Date();
+        const diffMs = now.getTime() - d.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        let relativeStr = '';
+        if (diffDays <= 0) relativeStr = 'hoy';
+        else if (diffDays === 1) relativeStr = 'ayer';
+        else if (diffDays < 30) relativeStr = `hace ${diffDays} días`;
+        else if (diffDays < 365) {
+            const months = Math.floor(diffDays / 30);
+            relativeStr = `hace ${months} ${months === 1 ? 'mes' : 'meses'}`;
+        } else {
+            const years = Math.floor(diffDays / 365);
+            relativeStr = `hace ${years} ${years === 1 ? 'año' : 'años'}`;
+        }
+
+        return {
+            fullText: `${dateStr} a las ${timeStr} hs (${relativeStr})`,
+            dateStr,
+            timeStr,
+            relativeStr,
+            byText: updated_by_name ? `por ${updated_by_name}` : ''
+        };
+    };
+
+    // Helper: Abrir modal de edición rápida de tarifa
+    const openRateModal = (code: string, oserCode?: string, description?: string, currentValue: number = 0, updated_at?: string, updated_by_name?: string) => {
+        const cleanCode = code.replace(/\./g, '').trim();
+        const existingRate = rates.find(r => r.rate_type === 'practice' && r.practice_code === cleanCode);
+
+        setRateModalConfig({
+            isOpen: true,
+            code: cleanCode,
+            oserCode: oserCode || code,
+            description: description || '',
+            currentValue: existingRate?.value ?? currentValue ?? 0,
+            updated_at: existingRate?.updated_at || updated_at,
+            updated_by_name: existingRate?.updated_by_name || updated_by_name
+        });
+        setRateModalInputValue(existingRate?.value ?? currentValue ?? 0);
+    };
 
     // Helpers de liquidación
     const getRoundedDurationMinutes = (realMin: number) => {
@@ -516,17 +585,26 @@ export default function TecnicoPanel() {
         return filteredSurgeries.map(s => {
             // 1. Extraer código del nomenclador y unificar a AOTER
             let rawCode = '';
-            const matchBracket = s.procedure?.match(/^\[(.*?)\]/);
-            const matchColon = s.procedure?.match(/^(.*?):/);
-            if (matchBracket) rawCode = matchBracket[1].trim();
-            else if (matchColon) rawCode = matchColon[1].trim();
+            let procedureText = '';
+            const matchBracket = s.procedure?.match(/^\[(.*?)\]\s*(.*)/);
+            const matchColon = s.procedure?.match(/^(.*?):\s*(.*)/);
+            if (matchBracket) {
+                rawCode = matchBracket[1].trim();
+                procedureText = matchBracket[2].trim();
+            } else if (matchColon) {
+                rawCode = matchColon[1].trim();
+                procedureText = matchColon[2].trim();
+            } else if (s.procedure) {
+                procedureText = s.procedure.trim();
+            }
 
             // Mapear a AOTER si existe equivalencia
             const mappedAoterCode = (nomencladorData.mapping as Record<string, string>)[rawCode] || rawCode;
-            const code = mappedAoterCode.replace(/\./g, '');
+            const code = mappedAoterCode.replace(/\./g, '').trim();
 
             // 2. Obtener tarifa de la práctica
-            const practiceRate = rates.find(r => r.rate_type === 'practice' && r.practice_code === code)?.value || 0;
+            const existingRate = rates.find(r => r.rate_type === 'practice' && (r.practice_code === code || r.practice_code === rawCode.replace(/\./g, '').trim()));
+            const practiceRate = existingRate?.value || 0;
 
             // 3. Duración redondeada
             const realMin = calculateDurationMinutes(s.actual_start_time, s.actual_end_time);
@@ -605,6 +683,9 @@ export default function TecnicoPanel() {
                 date: s.date,
                 patient: s.patient?.full_name || s.patient?.name || 'Desconocido',
                 procedure: s.procedure,
+                procedureText: procedureText || s.procedure,
+                rawCode,
+                practiceCode: code || rawCode.replace(/\./g, '').trim(),
                 realMin,
                 roundedMin,
                 practiceRate,
@@ -615,7 +696,9 @@ export default function TecnicoPanel() {
                 isSingleAssignee: !hasMultipleAssignees,
                 coAssignedCount: manualAssignees.length,
                 formInstrumentadora: formInstrumentadora || null,
-                isInstrumentadoraMismatch: !!isInstrumentadoraMismatch
+                isInstrumentadoraMismatch: !!isInstrumentadoraMismatch,
+                rateUpdatedAt: existingRate?.updated_at,
+                rateUpdatedByName: existingRate?.updated_by_name
             };
         });
     }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate]);
@@ -757,10 +840,34 @@ export default function TecnicoPanel() {
         return totalSurgeriesAmount + guardsReport.totalAmount + attendanceHoursReport.amount;
     }, [totalSurgeriesAmount, guardsReport, attendanceHoursReport]);
 
+    // Helper para registrar en audit_logs de forma segura
+    const logAudit = async (action: 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE', resource: string, resourceId: string, description: string, meta?: any) => {
+        try {
+            await supabase.from('audit_logs').insert({
+                user_name: user?.name || user?.email || 'Usuario',
+                user_role: user?.role || 'Desconocido',
+                user_avatar: user?.avatarUrl || '',
+                action,
+                resource,
+                resource_id: resourceId,
+                description,
+                meta: {
+                    ...meta,
+                    timestamp: new Date().toISOString()
+                }
+            });
+        } catch (err) {
+            console.error('Error registrando auditoría en Gestión de Técnicos:', err);
+        }
+    };
+
     // Gestión de Adición Manual de Cirugías por Técnico
     const handleAddManualSurgery = async () => {
         if (!selectedManualSurgeryId || !selectedTecnicoId) return;
         setIsSavingManualSurgery(true);
+        const targetTecnico = tecnicos.find(t => t.id === selectedTecnicoId);
+        const targetSurgery = surgeries.find(s => s.id === selectedManualSurgeryId);
+
         try {
             const { error } = await supabase
                 .from('tecnico_manual_surgeries')
@@ -776,6 +883,14 @@ export default function TecnicoPanel() {
                     alert('Error al agregar cirugía: ' + error.message);
                 }
             } else {
+                await logAudit(
+                    'CREATE',
+                    'Técnicos - Cirugía Manual',
+                    selectedManualSurgeryId,
+                    `${user?.name || 'Usuario'} agregó manualmente la cirugía de ${targetSurgery?.patient?.full_name || 'Paciente'} al técnico ${targetTecnico?.name || 'Técnico'}.`,
+                    { tecnico_id: selectedTecnicoId, tecnico_name: targetTecnico?.name, surgery_id: selectedManualSurgeryId }
+                );
+
                 setManualSurgeryIds(prev => [...prev, selectedManualSurgeryId]);
                 setIsAddManualModalOpen(false);
                 setSelectedManualSurgeryId('');
@@ -792,6 +907,9 @@ export default function TecnicoPanel() {
     const handleCoAssignTecnico = async () => {
         if (!coAssignSurgeryId || !coAssignTecnicoId) return;
         setIsSavingManualSurgery(true);
+        const targetTecnico = tecnicos.find(t => t.id === coAssignTecnicoId);
+        const targetSurgery = surgeries.find(s => s.id === coAssignSurgeryId);
+
         try {
             const { error } = await supabase
                 .from('tecnico_manual_surgeries')
@@ -807,6 +925,14 @@ export default function TecnicoPanel() {
                     alert('Error al sumar técnico: ' + error.message);
                 }
             } else {
+                await logAudit(
+                    'CREATE',
+                    'Técnicos - Co-asignación',
+                    coAssignSurgeryId,
+                    `${user?.name || 'Usuario'} co-asignó (sumó) al técnico ${targetTecnico?.name || 'Técnico'} a la cirugía de ${targetSurgery?.patient?.full_name || 'Paciente'}.`,
+                    { tecnico_id: coAssignTecnicoId, tecnico_name: targetTecnico?.name, surgery_id: coAssignSurgeryId }
+                );
+
                 setIsCoAssignModalOpen(false);
                 setCoAssignSurgeryId('');
                 setCoAssignTecnicoId('');
@@ -824,6 +950,9 @@ export default function TecnicoPanel() {
         if (!selectedTecnicoId) return;
         if (!confirm('¿Desea quitar esta cirugía cargada manualmente del listado del técnico?')) return;
 
+        const targetTecnico = tecnicos.find(t => t.id === selectedTecnicoId);
+        const targetSurgery = surgeries.find(s => s.id === surgeryId);
+
         try {
             const { error } = await supabase
                 .from('tecnico_manual_surgeries')
@@ -834,6 +963,14 @@ export default function TecnicoPanel() {
             if (error) {
                 alert('Error al remover cirugía: ' + error.message);
             } else {
+                await logAudit(
+                    'DELETE',
+                    'Técnicos - Cirugía Manual',
+                    surgeryId,
+                    `${user?.name || 'Usuario'} removió la cirugía manual de ${targetSurgery?.patient?.full_name || 'Paciente'} del técnico ${targetTecnico?.name || 'Técnico'}.`,
+                    { tecnico_id: selectedTecnicoId, tecnico_name: targetTecnico?.name, surgery_id: surgeryId }
+                );
+
                 setManualSurgeryIds(prev => prev.filter(id => id !== surgeryId));
                 fetchData();
             }
@@ -851,6 +988,26 @@ export default function TecnicoPanel() {
         const allowedIps = clinicIp ? clinicIp.split(',').map(ip => ip.trim()) : [];
         const isIpOk = allowedIps.includes(clientIp) || isLevelAdmin;
         if (!isIpOk) {
+            const errorMsg = `Acceso denegado en fichada: IP no autorizada (${clientIp || 'Desconocida'}). IPs permitidas: ${clinicIp || 'No configurada'}`;
+            
+            // Guardar registro de error silencioso en la base de datos para auditoría
+            supabase.from('system_errors').insert({
+                user_name: user?.name || user?.email || 'Técnico',
+                user_role: user?.role || 'tecnico',
+                context: 'Fichada IP Validation',
+                message: errorMsg,
+                severity: 'warning',
+                metadata: {
+                    client_ip: clientIp || null,
+                    allowed_ips: allowedIps,
+                    action_type: type,
+                    selected_tecnico_id: selectedTecnicoId || null,
+                    user_agent: navigator.userAgent
+                }
+            }).then(({ error }) => {
+                if (error) console.error('Error logging IP error to system_errors:', error);
+            });
+
             alert(`Acceso denegado: Fichada solo disponible desde la red WiFi de la clínica (IPs autorizadas: ${clinicIp || 'No configurada'}, tu IP: ${clientIp || 'Desconocida'}).`);
             return;
         }
@@ -859,6 +1016,8 @@ export default function TecnicoPanel() {
             alert('Por favor, seleccione un técnico.');
             return;
         }
+
+        const targetTecnico = tecnicos.find(t => t.id === selectedTecnicoId);
 
         try {
             const { error } = await supabase
@@ -869,6 +1028,14 @@ export default function TecnicoPanel() {
                     ip_address: clientIp || 'Local'
                 });
             if (error) throw error;
+
+            await logAudit(
+                'CREATE',
+                'Técnicos - Fichada',
+                selectedTecnicoId,
+                `Fichada de jornada (${type.toUpperCase()}) registrada para ${targetTecnico?.name || 'Técnico'} desde IP ${clientIp || 'Local'}.`,
+                { type, clientIp, tecnico_id: selectedTecnicoId, tecnico_name: targetTecnico?.name }
+            );
 
             alert('Fichada registrada con éxito');
             fetchData();
@@ -911,6 +1078,22 @@ export default function TecnicoPanel() {
                     status: 'consented'
                 });
             if (error) throw error;
+
+            await logAudit(
+                'STATUS_CHANGE',
+                'Técnicos - Conformidad Mensual',
+                `${selectedTecnicoId}-${periodStr}`,
+                `Conformidad digital de liquidación otorgada para el período ${periodStr} (${targetTecnico?.name || 'Técnico'}) por un monto de $${grandTotalAmount.toLocaleString()}.`,
+                {
+                    period: periodStr,
+                    amount: grandTotalAmount,
+                    tecnico_id: selectedTecnicoId,
+                    tecnico_name: targetTecnico?.name,
+                    surgeries_amount: totalSurgeriesAmount,
+                    guards_amount: guardsReport.totalAmount,
+                    attendance_amount: attendanceHoursReport.amount
+                }
+            );
 
             // Encolar Notificaciones por Correo si hay emails configurados
             const nowFormatted = new Date().toLocaleString('es-ES');
@@ -956,8 +1139,20 @@ Sistema de Coordinación de Quirófano ITEO
     const handleSaveGlobalRates = async () => {
         setIsSavingRate(true);
         try {
+            const oldHourRate = rates.find(r => r.rate_type === 'hour')?.value ?? 0;
+            const oldGuardRate = rates.find(r => r.rate_type === 'guard')?.value ?? 0;
+            const oldClinicIp = clinicIp;
+            const oldNotificationEmail = notificationEmail;
+            const authorName = user?.name || user?.email || 'Administración';
+
             const upsertRate = async (type: 'hour' | 'guard' | 'clinic_ip' | 'notification_email', val: number, code?: string) => {
-                const payload: any = { rate_type: type, value: val };
+                const payload: any = { 
+                    rate_type: type, 
+                    value: val,
+                    updated_at: new Date().toISOString(),
+                    updated_by: user?.id,
+                    updated_by_name: authorName
+                };
                 if (code !== undefined) payload.practice_code = code;
                 
                 // buscar si existe
@@ -973,6 +1168,19 @@ Sistema de Coordinación de Quirófano ITEO
             await upsertRate('clinic_ip', 0, inputClinicIp);
             await upsertRate('notification_email', 0, inputNotificationEmail);
 
+            await logAudit(
+                'UPDATE',
+                'Técnicos - Tarifas Globales',
+                'GLOBAL_RATES',
+                `${user?.name || 'Usuario'} actualizó los valores globales de liquidación de técnicos.`,
+                {
+                    hour_rate: { old: oldHourRate, new: hourRate },
+                    guard_rate: { old: oldGuardRate, new: guardRate },
+                    clinic_ip: { old: oldClinicIp, new: inputClinicIp },
+                    notification_email: { old: oldNotificationEmail, new: inputNotificationEmail }
+                }
+            );
+
             alert('Tarifas y correos de notificación actualizados con éxito.');
             fetchData();
         } catch (e: any) {
@@ -982,39 +1190,79 @@ Sistema de Coordinación de Quirófano ITEO
         }
     };
 
-    const handleSavePracticeRate = async () => {
-        if (!practiceCodeInput.trim()) return alert('Ingrese un código de práctica.');
+    const savePracticeRateValue = async (rawCode: string, value: number, oserDisplayCode?: string) => {
+        if (!rawCode.trim()) {
+            alert('Código de práctica inválido.');
+            return false;
+        }
         setIsSavingRate(true);
         try {
-            const code = practiceCodeInput.trim().replace(/\./g, '');
+            const code = rawCode.trim().replace(/\./g, '');
+            const authorName = user?.name || user?.email || 'Administración';
             const payload: any = {
                 rate_type: 'practice',
                 practice_code: code,
-                value: practiceValueInput
+                value: value,
+                updated_at: new Date().toISOString(),
+                updated_by: user?.id,
+                updated_by_name: authorName
             };
 
             const match = rates.find(r => r.rate_type === 'practice' && r.practice_code === code);
+            const isUpdate = !!match;
+            const oldValue = match?.value ?? 0;
             if (match?.id) payload.id = match.id;
 
             const { error } = await supabase.from('tecnico_rates').upsert(payload);
             if (error) throw error;
 
-            alert('Tarifa de práctica guardada.');
-            setPracticeCodeInput('');
-            setPracticeValueInput(0);
-            fetchData();
+            await logAudit(
+                isUpdate ? 'UPDATE' : 'CREATE',
+                'Técnicos - Tarifa Práctica',
+                code,
+                `${user?.name || 'Usuario'} ${isUpdate ? 'actualizó' : 'creó'} la tarifa para la práctica [${oserDisplayCode || code}] a $${value.toLocaleString()}.`,
+                {
+                    practice_code: code,
+                    value: isUpdate ? { old: oldValue, new: value } : value
+                }
+            );
+
+            await fetchData();
+            return true;
         } catch (e: any) {
-            alert('Error: ' + e.message);
+            alert('Error al guardar tarifa de práctica: ' + e.message);
+            return false;
         } finally {
             setIsSavingRate(false);
         }
     };
 
+    const handleSavePracticeRate = async () => {
+        if (!practiceCodeInput.trim()) return alert('Ingrese un código de práctica.');
+        const ok = await savePracticeRateValue(practiceCodeInput, practiceValueInput);
+        if (ok) {
+            alert('Tarifa de práctica guardada.');
+            setPracticeCodeInput('');
+            setPracticeValueInput(0);
+        }
+    };
+
     const handleDeletePracticeRate = async (id: string) => {
-        if (!confirm('¿Eliminar tarifa de práctica?')) return;
+        const targetRate = rates.find(r => r.id === id);
+        if (!confirm(`¿Eliminar tarifa de la práctica [${targetRate?.practice_code || id}]?`)) return;
+
         try {
             const { error } = await supabase.from('tecnico_rates').delete().eq('id', id);
             if (error) throw error;
+
+            await logAudit(
+                'DELETE',
+                'Técnicos - Tarifa Práctica',
+                targetRate?.practice_code || id,
+                `${user?.name || 'Usuario'} eliminó la tarifa de la práctica [${targetRate?.practice_code || id}] (Monto anterior: $${targetRate?.value || 0}).`,
+                { practice_code: targetRate?.practice_code, value: targetRate?.value }
+            );
+
             fetchData();
         } catch (e: any) {
             alert('Error: ' + e.message);
@@ -1339,14 +1587,45 @@ Sistema de Coordinación de Quirófano ITEO
                                                 <td className="px-6 py-4 font-bold text-slate-700">
                                                     {new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
                                                 </td>
-                                                <td className="px-6 py-4 font-bold text-slate-900">{s.patient}</td>
+                                                <td className="px-6 py-4 font-bold text-slate-900 uppercase">{s.patient}</td>
                                                 <td className="px-6 py-4 max-w-xs truncate font-medium text-slate-600" title={s.procedure}>
                                                     {s.procedure}
                                                 </td>
                                                 <td className="px-6 py-4 text-center font-semibold text-slate-700">
                                                     {s.realMin}m / <span className="text-indigo-600">{s.roundedMin}m</span>
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-medium text-slate-600">${s.practiceRate.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-right font-medium text-slate-600">
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        {s.practiceRate > 0 ? (
+                                                            <span className="font-bold text-slate-800">${s.practiceRate.toLocaleString()}</span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[11px] font-bold" title="Sin tarifa de nomenclador establecida">
+                                                                <span className="material-symbols-outlined text-xs text-amber-500">warning</span>
+                                                                $0
+                                                            </span>
+                                                        )}
+                                                        {isLevelAdmin && (
+                                                            <button
+                                                                onClick={() => openRateModal(s.practiceCode || s.rawCode, s.rawCode, s.procedureText || s.procedure, s.practiceRate, s.rateUpdatedAt, s.rateUpdatedByName)}
+                                                                className={`p-1 rounded-md transition-all ${
+                                                                    s.practiceRate > 0 
+                                                                        ? 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50' 
+                                                                        : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100 font-bold text-[10px] px-1.5 py-0.5 flex items-center gap-0.5 border border-indigo-200'
+                                                                }`}
+                                                                title={s.practiceRate > 0 ? `Editar tarifa de ${s.rawCode || s.practiceCode}` : `Cargar tarifa para ${s.rawCode || s.practiceCode}`}
+                                                            >
+                                                                {s.practiceRate > 0 ? (
+                                                                    <span className="material-symbols-outlined text-sm">edit</span>
+                                                                ) : (
+                                                                    <>
+                                                                        <span className="material-symbols-outlined text-xs">add</span>
+                                                                        <span>Cargar</span>
+                                                                    </>
+                                                                )}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
                                                 <td className="px-6 py-4 text-right font-medium text-slate-600">${s.timeCost.toLocaleString()}</td>
                                                 <td className="px-6 py-4 text-right font-semibold bg-slate-50/50 text-slate-700">${s.totalCost.toLocaleString()}</td>
                                                 <td className="px-6 py-4 text-left text-xs font-bold text-slate-500">
@@ -1562,7 +1841,9 @@ Sistema de Coordinación de Quirófano ITEO
                             </div>
                         </div>
                     </div>
-                )}                {/* RATES TAB (ADMIN ONLY) */}
+                )}
+
+                {/* RATES TAB (ADMIN ONLY) */}
                 {activeTab === 'rates' && isLevelAdmin && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fadeIn">
                         
@@ -1573,55 +1854,124 @@ Sistema de Coordinación de Quirófano ITEO
                                 Valores Globales
                             </h3>
 
-                            <div className="space-y-4 flex-1">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Valor de la Hora de Cirugía ($)</label>
-                                    <input
-                                        type="number"
-                                        className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                        value={hourRate}
-                                        onChange={e => setHourRate(Number(e.target.value))}
-                                    />
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Valor del Día de Guardia ($)</label>
-                                    <input
-                                        type="number"
-                                        className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                        value={guardRate}
-                                        onChange={e => setGuardRate(Number(e.target.value))}
-                                    />
-                                </div>
+                            {(() => {
+                                const hourRateObj = rates.find(r => r.rate_type === 'hour');
+                                const guardRateObj = rates.find(r => r.rate_type === 'guard');
+                                const clinicIpObj = rates.find(r => r.rate_type === 'clinic_ip');
+                                const notifEmailObj = rates.find(r => r.rate_type === 'notification_email');
 
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">IP Pública WiFi Clínica</label>
-                                    <input
-                                        type="text"
-                                        className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500 font-mono"
-                                        placeholder="Ej: 181.104.119.15, 190.57.246.74"
-                                        value={inputClinicIp}
-                                        onChange={e => setInputClinicIp(e.target.value)}
-                                    />
-                                    <p className="text-[10px] text-indigo-600 mt-1 italic">
-                                        Admite múltiples IPs separadas por coma. Tu IP actual es: {clientIp || 'No detectada'}
-                                    </p>
-                                </div>
+                                return (
+                                    <div className="space-y-4 flex-1">
+                                        <div>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="block text-xs font-bold text-slate-700 uppercase">Valor de la Hora de Cirugía ($)</label>
+                                                {hourRateObj?.updated_at && (
+                                                    <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                                        {formatLastUpdated(hourRateObj.updated_at, hourRateObj.updated_by_name)?.relativeStr}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-slate-50 text-slate-900 font-bold rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                                value={hourRate}
+                                                onChange={e => setHourRate(Number(e.target.value))}
+                                            />
+                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                                                <span className="material-symbols-outlined text-xs text-slate-400">history</span>
+                                                {hourRateObj?.updated_at ? (
+                                                    <span>Última edición: <strong className="text-slate-700">{formatLastUpdated(hourRateObj.updated_at)?.dateStr} {formatLastUpdated(hourRateObj.updated_at)?.timeStr} hs</strong> {hourRateObj.updated_by_name ? `por ${hourRateObj.updated_by_name}` : ''}</span>
+                                                ) : (
+                                                    <span className="text-slate-400 italic">Sin registro de edición previa</span>
+                                                )}
+                                            </p>
+                                        </div>
+                                        
+                                        <div>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="block text-xs font-bold text-slate-700 uppercase">Valor del Día de Guardia ($)</label>
+                                                {guardRateObj?.updated_at && (
+                                                    <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                                        {formatLastUpdated(guardRateObj.updated_at, guardRateObj.updated_by_name)?.relativeStr}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="number"
+                                                className="w-full bg-slate-50 text-slate-900 font-bold rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                                value={guardRate}
+                                                onChange={e => setGuardRate(Number(e.target.value))}
+                                            />
+                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                                                <span className="material-symbols-outlined text-xs text-slate-400">history</span>
+                                                {guardRateObj?.updated_at ? (
+                                                    <span>Última edición: <strong className="text-slate-700">{formatLastUpdated(guardRateObj.updated_at)?.dateStr} {formatLastUpdated(guardRateObj.updated_at)?.timeStr} hs</strong> {guardRateObj.updated_by_name ? `por ${guardRateObj.updated_by_name}` : ''}</span>
+                                                ) : (
+                                                    <span className="text-slate-400 italic">Sin registro de edición previa</span>
+                                                )}
+                                            </p>
+                                        </div>
 
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Correo Notificación Cierre de Mes (Administración)</label>
-                                    <input
-                                        type="email"
-                                        className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                        placeholder="Ej: administracion@iteo.com.ar"
-                                        value={inputNotificationEmail}
-                                        onChange={e => setInputNotificationEmail(e.target.value)}
-                                    />
-                                    <p className="text-[10px] text-slate-400 mt-1 italic">
-                                        Al dar conformidad, se enviará el resumen a este correo y con copia al técnico.
-                                    </p>
-                                </div>
-                            </div>
+                                        <div>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="block text-xs font-bold text-slate-700 uppercase">IP Pública WiFi Clínica</label>
+                                                {clinicIpObj?.updated_at && (
+                                                    <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                                        {formatLastUpdated(clinicIpObj.updated_at, clinicIpObj.updated_by_name)?.relativeStr}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500 font-mono"
+                                                placeholder="Ej: 181.104.119.15, 190.57.246.74"
+                                                value={inputClinicIp}
+                                                onChange={e => setInputClinicIp(e.target.value)}
+                                            />
+                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                                                <span className="material-symbols-outlined text-xs text-slate-400">history</span>
+                                                {clinicIpObj?.updated_at ? (
+                                                    <span>Última edición: <strong className="text-slate-700">{formatLastUpdated(clinicIpObj.updated_at)?.dateStr} {formatLastUpdated(clinicIpObj.updated_at)?.timeStr} hs</strong> {clinicIpObj.updated_by_name ? `por ${clinicIpObj.updated_by_name}` : ''}</span>
+                                                ) : (
+                                                    <span className="text-slate-400 italic">Sin registro de edición previa</span>
+                                                )}
+                                            </p>
+                                            <p className="text-[10px] text-indigo-600 mt-1 italic">
+                                                Admite múltiples IPs separadas por coma. Tu IP actual es: {clientIp || 'No detectada'}
+                                            </p>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="block text-xs font-bold text-slate-700 uppercase">Correo Notificación Cierre de Mes</label>
+                                                {notifEmailObj?.updated_at && (
+                                                    <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                                        {formatLastUpdated(notifEmailObj.updated_at, notifEmailObj.updated_by_name)?.relativeStr}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <input
+                                                type="email"
+                                                className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                                placeholder="Ej: administracion@iteo.com.ar"
+                                                value={inputNotificationEmail}
+                                                onChange={e => setInputNotificationEmail(e.target.value)}
+                                            />
+                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                                                <span className="material-symbols-outlined text-xs text-slate-400">history</span>
+                                                {notifEmailObj?.updated_at ? (
+                                                    <span>Última edición: <strong className="text-slate-700">{formatLastUpdated(notifEmailObj.updated_at)?.dateStr} {formatLastUpdated(notifEmailObj.updated_at)?.timeStr} hs</strong> {notifEmailObj.updated_by_name ? `por ${notifEmailObj.updated_by_name}` : ''}</span>
+                                                ) : (
+                                                    <span className="text-slate-400 italic">Sin registro de edición previa</span>
+                                                )}
+                                            </p>
+                                            <p className="text-[10px] text-slate-400 mt-0.5 italic">
+                                                Al dar conformidad, se enviará el resumen a este correo y con copia al técnico.
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
                             <button
                                 onClick={handleSaveGlobalRates}
@@ -1691,7 +2041,7 @@ Sistema de Coordinación de Quirófano ITEO
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Monto ($)</label>
                                     <input
                                         type="number"
-                                        className="w-full bg-white text-slate-900 rounded-lg border border-slate-300 px-3 py-1.5 text-xs"
+                                        className="w-full bg-white text-slate-900 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold"
                                         value={practiceValueInput}
                                         onChange={e => setPracticeValueInput(Number(e.target.value))}
                                     />
@@ -1700,7 +2050,7 @@ Sistema de Coordinación de Quirófano ITEO
                                     <button
                                         onClick={handleSavePracticeRate}
                                         disabled={isSavingRate}
-                                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition-colors"
+                                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition-colors shadow-sm"
                                     >
                                         Agregar / Actualizar
                                     </button>
@@ -1884,6 +2234,14 @@ Sistema de Coordinación de Quirófano ITEO
                                                                 {desc}
                                                             </span>
                                                         )}
+                                                        {existingRate?.updated_at ? (
+                                                            <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1 mt-0.5">
+                                                                <span className="material-symbols-outlined text-[11px] text-slate-400">history</span>
+                                                                Editado: <strong className="text-slate-600 font-semibold">{formatLastUpdated(existingRate.updated_at)?.dateStr} {formatLastUpdated(existingRate.updated_at)?.timeStr} hs</strong> {existingRate.updated_by_name ? `por ${existingRate.updated_by_name}` : ''} ({formatLastUpdated(existingRate.updated_at)?.relativeStr})
+                                                            </span>
+                                                        ) : hasPrice ? (
+                                                            <span className="text-[10px] text-slate-400 italic mt-0.5">Sin registro de fecha previa</span>
+                                                        ) : null}
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-3 shrink-0">
@@ -1899,12 +2257,12 @@ Sistema de Coordinación de Quirófano ITEO
                                                     )}
                                                     <button
                                                         onClick={() => {
-                                                            setPracticeCodeInput(entry.aoterCode);
-                                                            setPracticeValueInput(existingRate?.value || 0);
+                                                            openRateModal(entry.rateCode, entry.oserCode, desc, existingRate?.value || 0, existingRate?.updated_at, existingRate?.updated_by_name);
                                                         }}
-                                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-bold px-2 py-1 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                                                        className={`text-xs font-bold px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${hasPrice ? 'text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100' : 'text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 shadow-sm'}`}
                                                         title={`Cargar o modificar precio para ${entry.oserCode} (${entry.aoterCode})`}
                                                     >
+                                                        <span className="material-symbols-outlined text-xs">{hasPrice ? 'edit' : 'add_circle'}</span>
                                                         {hasPrice ? 'Editar' : 'Cargar Precio'}
                                                     </button>
                                                     {existingRate?.id && (
@@ -2092,6 +2450,118 @@ Sistema de Coordinación de Quirófano ITEO
                                 {isSavingManualSurgery ? 'Guardando...' : 'Confirmar Coparticipación'}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal para Carga / Edición Directa de Tarifa de Práctica */}
+            {rateModalConfig.isOpen && (
+                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden animate-scaleUp">
+                        <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 p-5 text-white flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white/10 rounded-xl">
+                                    <span className="material-symbols-outlined text-2xl">receipt_long</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold">Tarifa de Práctica</h3>
+                                    <p className="text-xs text-indigo-100">Configuración de valor para liquidación</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setRateModalConfig(prev => ({ ...prev, isOpen: false }))}
+                                className="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                            >
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+
+                        <form
+                            onSubmit={async (e) => {
+                                e.preventDefault();
+                                const success = await savePracticeRateValue(
+                                    rateModalConfig.code, 
+                                    rateModalInputValue, 
+                                    rateModalConfig.oserCode
+                                );
+                                if (success) {
+                                    setRateModalConfig(prev => ({ ...prev, isOpen: false }));
+                                }
+                            }}
+                            className="p-6 space-y-4"
+                        >
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-mono font-bold text-slate-800">
+                                        Práctica {rateModalConfig.oserCode || rateModalConfig.code}
+                                    </span>
+                                    {rateModalConfig.code && rateModalConfig.code !== rateModalConfig.oserCode && (
+                                        <span className="text-[11px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                            AOTER: {rateModalConfig.code}
+                                        </span>
+                                    )}
+                                </div>
+                                {rateModalConfig.description && (
+                                    <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                                        {rateModalConfig.description}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                                    Monto de la Tarifa ($)
+                                </label>
+                                <div className="relative">
+                                    <span className="absolute left-3.5 top-3 text-slate-400 font-bold text-base">$</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="any"
+                                        autoFocus
+                                        required
+                                        className="w-full bg-slate-50 focus:bg-white text-slate-900 font-black rounded-xl border border-slate-300 pl-8 pr-4 py-2.5 text-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                                        placeholder="0"
+                                        value={rateModalInputValue}
+                                        onChange={e => setRateModalInputValue(Number(e.target.value))}
+                                    />
+                                </div>
+                            </div>
+
+                            {rateModalConfig.updated_at && (
+                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-500 flex items-start gap-2.5">
+                                    <span className="material-symbols-outlined text-slate-400 text-base shrink-0 mt-0.5">history</span>
+                                    <div>
+                                        <p className="font-semibold text-slate-700">
+                                            Última edición: {formatLastUpdated(rateModalConfig.updated_at)?.fullText}
+                                        </p>
+                                        {rateModalConfig.updated_by_name && (
+                                            <p className="text-slate-400 mt-0.5">
+                                                Modificado por: <strong className="text-slate-600">{rateModalConfig.updated_by_name}</strong>
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex gap-3 pt-3 border-t border-slate-100">
+                                <button
+                                    type="button"
+                                    onClick={() => setRateModalConfig(prev => ({ ...prev, isOpen: false }))}
+                                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSavingRate}
+                                    className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+                                >
+                                    <span className="material-symbols-outlined text-sm">save</span>
+                                    {isSavingRate ? 'Guardando...' : 'Guardar Tarifa'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

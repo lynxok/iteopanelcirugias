@@ -27,8 +27,16 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     *   **Leyenda de Colores Explicativa**: Incluye en la barra superior una guía visual interactiva con los significados de colores: **Fondo/Borde Naranja** (OSER sin material aprobado), **Borde Lateral Rojo** (Prioridad Urgente/Alta), **Borde Lateral Azul** (Prioridad Normal), y Badges de estado (**OK / Verde** = Validado, **Pend / Amarillo** = Pendiente, **Falta / Rojo** = Faltante).
     *   **Badges de Cobertura**: Cada tarjeta muestra en su cuerpo la cobertura específica registrada (ej: `ART - Prevención`, `Particular`, `Swiss Medical`, `OSDE`, etc.).
     *   **Resalte Naranja en OSER**: Toda cirugía de OSER que requiera material y su estado de ortopedia esté pendiente (`materialStatus !== 'OK'`) se resalta visualmente en la tarjeta con **fondo y borde naranja** para su rápida identificación.
-    *   **Visibilidad por defecto**: Muestra únicamente las cirugías autorizadas (y urgencias). Al realizar una búsqueda en la barra superior, incluye de forma automática las cirugías no autorizadas.
-    *   **Prioridad en OSER y Prepagas**: 1° Autorizadas con material OK / No requiere material, 2° Autorizadas con material pendiente, 3° No Autorizadas.
+    *   **Visibilidad por defecto**: Muestra únicamente las cirugías activas/autorizadas (y urgencias). Se excluyen estrictamente de la lista base del Ranking (`rankingBase`) las cirugías canceladas (`status === 'cancelled'`) y suspendidas (`status === 'suspended'`). Al realizar una búsqueda en la barra superior, incluye de forma automática las cirugías activas no autorizadas.
+    *   **Pestaña Exclusiva "Pendientes Ortopedia" (SuperAdmin / Ortopedia Capital)**:
+    *   **Acceso Restringido**: Accesible de forma exclusiva para usuarios con rol `SuperAdmin` o usuarios de `Ortopedia` vinculados al proveedor **"Capital"**.
+    *   **Filtro Específico de Cirugías**: Agrupa únicamente aquellas solicitudes que requieren material, cuya aprobación por parte de la ortopedia se encuentra pendiente (`materialStatus !== 'OK'`), y cuyo proveedor asignado sea **"Capital"** O su cobertura/obra social sea **"OSER"**.
+    *   **Subsecciones Independientes**: Presenta los registros organizados en 3 secciones bien delimitadas:
+        1. **Cirugías Activas Pendientes de Aprobación**: Solicitudes activas/programadas/en espera ordenadas de mayor a menor según los días en espera.
+        2. **Cirugías Suspendidas Pendientes de Aprobación**: Subsección independiente destacada en tono ámbar para cirugías suspendidas.
+        3. **Cirugías Canceladas**: Subsección independiente destacada en tono rojo para cirugías canceladas con material pendiente.
+    *   **Contador / Badge de Días en Espera**: En las tarjetas de paciente de estas cirugías se renderiza un badge violeta animado que calcula y muestra dinámicamente la cantidad de días transcurridos desde que se dio de alta la solicitud (`created_at`). Ejemplo: `Esperando ortopedia: X días`.
+*   **Prioridad en OSER y Prepagas**: 1° Autorizadas con material OK / No requiere material, 2° Autorizadas con material pendiente, 3° No Autorizadas.
     *   **Desempate de prioridad**: Se ordena cronológicamente por fecha de creación de la solicitud (`created_at` ascendente, las solicitudes más antiguas arriba de todo).
     *   **Orden en ART y Particulares**: Directo por fecha de creación (`created_at` ascendente).
 *   **Cirugías Ambulatorias**: Una cirugía se considera ambulatoria si el switch **"Modalidad Ambulatoria"** (`is_ambulatory`) está activo en su Ficha Clínica o si está agendada en un quirófano configurado como ambulatorio (`operating_room.is_ambulatory`). Las cirugías de guardia (`isGuardia`) **no se marcan automáticamente como ambulatorias**, permitiendo requerir internación si el cuadro clínico lo exige. Cuando una cirugía es ambulatoria, el sistema omite automáticamente los requerimientos y bloqueos de guardado de **Exámenes Pre-quirúrgicos** (sin exigir la fecha de realización de pre-quirúrgicos), **Firma de Consentimiento Informado** y **Validación Cama/ART**, mostrando avisos informativos y computando la validación clínica como completada (`OK`).
@@ -53,6 +61,7 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 ## Reglas de Control de Accesos y Roles
 
 ### Permisos por Sección y Campos Dinámicos
+*   **Oficina ART y Tablero de Control ART (`isArtUser`)**: Los usuarios con rol `Oficina ART` o `ART` acceden al **Tablero de Control ART** ([AdminDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/AdminDashboard.tsx)). El filtrado exclusivo de cirugías pendientes/activas para este tablero evalúa dinámicamente si la cobertura/obra social del paciente está configurada como una Aseguradora de ART en la tabla `quirofano.coverages` (`type = 'ART'`), conectándose directamente con la opción **"Es Aseguradora (ART)"** del panel de Coberturas (además de validar palabras clave de resguardo).
 *   **Sección Guardias (`on_duty`)**: Los usuarios con permiso `'view'` en la matriz de permisos pueden ver el drawer de guardias de la semana en modo solo lectura. Aquellos con `'edit'` pueden modificar el personal general y excepciones.
 *   **Guardias de Residentes (Edición de Turnos)**: Los residentes habilitados mediante el indicador `can_edit_shifts` (y usuarios con roles administrativos o SuperAdmin) pueden crear, modificar horarios (inicio, fin, fecha) y eliminar guardias asignadas tanto desde el calendario como desde el panel de "Mis Guardias" (`MyConsentsView` / `LogShiftModal`).
 *   **Modo Visor (Solo Lectura)**:
@@ -186,3 +195,15 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 
 ### Cierre y Conformidad Mensual
 *   Al fin de mes, cada técnico debe auditar su planilla (que ahora consolida Horas Fichadas, Cirugías y Guardias) y presionar "Dar Conformidad" para registrar firma en `tecnico_monthly_consents` y bloquear liquidaciones.
+
+### Rol "Administrativo Dirección" y Auditoría de Gestión de Técnicos (18/08/2026)
+*   **Rol "Administrativo Dirección" (`Administrativo Direccion`)**: Dispone de permisos de nivel SuperAdmin exclusivamente para la sección **"Gestión de Técnicos"** (`/tecnicos`), permitiéndole:
+    1. Auditar y consultar liquidaciones de cualquier técnico en el panel.
+    2. Modificar valores globales (Valor Hora, Valor Guardia, IPs autorizadas WiFi de la clínica y correo de administración).
+    3. Cargar, modificar y eliminar tarifas de prácticas nomencladas (OSER / AOTER).
+    4. Agregar y co-asignar cirugías a técnicos de forma manual.
+*   **Trazabilidad y Registro de Auditoría (`audit_logs`)**: Todas las acciones mutadoras en el panel de técnicos se graban de manera persistente en `quirofano.audit_logs`:
+    - **Tarifas Globales (`UPDATE`)**: Registra cambios en valor hora, valor guardia, IP y correos, persistiendo los valores anteriores (`old`) y nuevos (`new`).
+    - **Tarifas por Práctica (`CREATE` / `UPDATE` / `DELETE`)**: Guarda el código de práctica, montos modificados/eliminados y el usuario responsable.
+    - **Cirugías Manuales y Co-asignaciones (`CREATE` / `DELETE`)**: Identifica paciente, técnico sumado o removido, y quién ejecutó la acción.
+    - **Fichadas y Conformidades (`CREATE` / `STATUS_CHANGE`)**: Registra la IP, tipo de fichada o monto liquidado al momento de otorgar la conformidad mensual.

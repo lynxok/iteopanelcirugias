@@ -38,6 +38,6 @@ El RLS está habilitado y es altamente restrictivo en todas las tablas sensibles
 *   **Estadísticas de Ocupación (10/07/2026)**: Creación de la tabla `practice_bed_occupancy_stats`, función de agregación analítica de estancias `recalculate_practice_bed_occupancy_stats` (excluyendo outliers mayores a 30 días) y su respectivo trigger automático de alta.
 *   **Gestión de Técnicos (28/07/2026)**:
     *   Campos añadidos a `quirofano.users`: `is_turno_tarde` (boolean, indica si es técnico fijo) y `has_tecnico_section_access` (boolean, permite visualización del panel).
-    *   Tabla `quirofano.tecnico_rates`: Almacena tarifas de horas, guardias, IP de la clínica y tarifas por práctica del nomenclador.
+    *   Tabla `quirofano.tecnico_rates`: Almacena tarifas de horas, guardias, IP de la clínica y tarifas por práctica del nomenclador. Incluye columnas `updated_at`, `updated_by` y `updated_by_name` para trazabilidad y auditoría de ediciones.
     *   Tabla `quirofano.tecnico_attendance`: Almacena registros de fichadas/asistencia (Check-In, Break-Out, Break-In, Check-Out) y la dirección IP.
     *   Tabla `quirofano.tecnico_monthly_consents`: Registra las firmas mensuales de conformidad de los técnicos sobre el período liquidado.
