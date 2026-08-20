@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v3.10.98 (2026-08-20)
+- **Liquidación de Técnicos e Instrumentadores**:
+    - **Corrección de Fórmula al 50%**: Corregido el cálculo de honorarios de cirugías para turnos tarde y coparticipadas, dividiendo de forma directa el Monto QX Total (Tarifa Nomenclador + Tarifa Tiempo QX) al 50% (`totalQx / 2`) y eliminando la división previa duplicada sobre la duración.
+
 ## v3.10.97 (2026-08-20)
 - **Planificación y Flujo Quirúrgico**:
     - **Filtro de Cirugías Canceladas**: Se excluyen explícitamente las cirugías canceladas (`status: 'cancelled'`) de los bloques de planificación activa (`authorizedPatients`, `readyToSchedule`, `unscheduledNew`, `materialBlockers`, `clinicalBlockers`, `otherBlockers`), evitando que figuren en "OSER sin aprobar material" o secciones de agendado pendiente.

@@ -685,24 +685,18 @@ export default function TecnicoPanel() {
 
             if (dayOfWeek === 0 || dayOfWeek === 6 || isAfter19) {
                 if (isCoAssigned) {
-                    const modifiedTimeCost = (roundedHrs / 2) * hourRate;
-                    const modifiedTotalQx = practiceRate + modifiedTimeCost;
-                    myShare = modifiedTotalQx / 2;
+                    myShare = totalQx / 2;
                     shareNotes = "50% Coparticipada (Fin de Semana / Nocturno)";
                 } else {
                     myShare = totalQx;
                     shareNotes = "100% Guardia (Fin de Semana / Nocturno)";
                 }
             } else if (isWithinTardeShift) {
-                const modifiedTimeCost = (roundedHrs / 2) * hourRate;
-                const modifiedTotalQx = practiceRate + modifiedTimeCost;
-                myShare = modifiedTotalQx / 2;
-                shareNotes = "50% Turno Tarde (Duración / 2)";
+                myShare = totalQx / 2;
+                shareNotes = "50% Turno Tarde";
             } else {
                 if (isCoAssigned) {
-                    const modifiedTimeCost = (roundedHrs / 2) * hourRate;
-                    const modifiedTotalQx = practiceRate + modifiedTimeCost;
-                    myShare = modifiedTotalQx / 2;
+                    myShare = totalQx / 2;
                     shareNotes = "50% Coparticipada";
                 } else {
                     myShare = totalQx;

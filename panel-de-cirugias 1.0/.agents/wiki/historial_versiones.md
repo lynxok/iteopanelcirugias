@@ -4,6 +4,8 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.98 [2026-08-20]**: Lanzada la versión **v3.10.98**.
+    *   **Corrección de Fórmula al 50% en Liquidación de Técnicos**: Corregido el cálculo de honorarios para cirugías en turno tarde y coparticipadas en [TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx). Se eliminó la doble división accidental sobre la duración quirúrgica, dividiendo de forma limpia el Monto QX Total (Tarifa Nomenclador + Tarifa Tiempo QX) al 50% (`totalQx / 2`).
 *   **v3.10.97 [2026-08-20]**: Lanzada la versión **v3.10.97**.
     *   **Exclusión de Cirugías Canceladas en Planificación**: Se actualizaron todos los filtros de grupos activos en el tablero Kanban ([Kanban.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Kanban.tsx)) (`authorizedPatients`, `readyToSchedule`, `unscheduledNew`, `materialBlockers`, `clinicalBlockers`, `otherBlockers`) para excluir explícitamente cirugías con estado `cancelled`.
     *   **Badge de Estado en Detalle de Cirugía**: Corregida la visualización en el header de [SurgeryHeader.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/surgery-detail/SurgeryHeader.tsx) para reflejar fielmente el badge **"Cancelada"** con coloración distintiva.
