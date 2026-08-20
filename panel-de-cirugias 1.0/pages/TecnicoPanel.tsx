@@ -33,6 +33,13 @@ const isHoliday = (date: Date) => {
     return ARGENTINA_HOLIDAYS.has(getLocalStr(date));
 };
 
+const formatCurrency = (val: number) => {
+    return (Number(val) || 0).toLocaleString('es-AR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+};
+
 interface Rate {
     id?: string;
     rate_type: 'practice' | 'hour' | 'guard' | 'clinic_ip' | 'notification_email';
@@ -1182,7 +1189,7 @@ export default function TecnicoPanel() {
             return;
         }
 
-        if (!confirm(`¿Confirmas conformidad con la planilla de ${periodStr} por un total de $${grandTotalAmount.toLocaleString()}?`)) {
+        if (!confirm(`¿Confirmas conformidad con la planilla de ${periodStr} por un total de $${formatCurrency(grandTotalAmount)}?`)) {
             return;
         }
 
@@ -1201,7 +1208,7 @@ export default function TecnicoPanel() {
                 'STATUS_CHANGE',
                 'Técnicos - Conformidad Mensual',
                 `${selectedTecnicoId}-${periodStr}`,
-                `Conformidad digital de liquidación otorgada para el período ${periodStr} (${targetTecnico?.name || 'Técnico'}) por un monto de $${grandTotalAmount.toLocaleString()}.`,
+                `Conformidad digital de liquidación otorgada para el período ${periodStr} (${targetTecnico?.name || 'Técnico'}) por un monto de $${formatCurrency(grandTotalAmount)}.`,
                 {
                     period: periodStr,
                     amount: grandTotalAmount,
@@ -1223,10 +1230,10 @@ Se ha registrado la conformidad de liquidación mensual de Técnicos de Quirófa
 
 - Técnico: ${targetTecnico?.name || 'No especificado'} (${targetTecnico?.email || 'Sin correo registrado'})
 - Período: ${periodStr}
-- Monto Total Liquidado: $${grandTotalAmount.toLocaleString()}
-  * Cirugías: $${totalSurgeriesAmount.toLocaleString()}
-  * Guardias: $${guardsReport.totalAmount.toLocaleString()} (${guardsReport.daysCount} días)
-  * Asistencia Horas Fichadas: $${attendanceHoursReport.amount.toLocaleString()} (${attendanceHoursReport.totalHours.toFixed(1)} hs)
+- Monto Total Liquidado: $${formatCurrency(grandTotalAmount)}
+  * Cirugías: $${formatCurrency(totalSurgeriesAmount)}
+  * Guardias: $${formatCurrency(guardsReport.totalAmount)} (${guardsReport.daysCount} días)
+  * Asistencia Horas Fichadas: $${formatCurrency(attendanceHoursReport.amount)} (${attendanceHoursReport.totalHours.toFixed(1)} hs)
 - Fecha y Hora de Conformidad: ${nowFormatted}
 
 Atentamente,
@@ -1395,7 +1402,7 @@ Sistema de Coordinación de Quirófano ITEO
     const isIpMatch = allowedIps.includes(clientIp) || isLevelAdmin;
 
     return (
-        <div className="flex flex-col min-h-screen bg-slate-50 relative p-4 md:p-6 overflow-y-auto pb-24">
+        <div className="flex flex-col min-h-screen bg-slate-50 relative p-4 md:p-6 overflow-y-auto pb-36">
              <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2 tracking-tight">
@@ -1667,11 +1674,11 @@ Sistema de Coordinación de Quirófano ITEO
                                 </button>
                                 <div className="text-right bg-slate-50 p-4 rounded-xl border border-slate-200 w-full md:w-auto">
                                     <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Horas Fichadas ({attendanceHoursReport.totalHours.toFixed(2)} hs)</p>
-                                    <p className="text-2xl font-black text-indigo-600 mt-1">${attendanceHoursReport.amount.toLocaleString()}</p>
+                                    <p className="text-2xl font-black text-indigo-600 mt-1">${formatCurrency(attendanceHoursReport.amount)}</p>
                                 </div>
                                 <div className="text-right bg-slate-50 p-4 rounded-xl border border-slate-200 w-full md:w-auto">
                                     <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Subtotal Cirugías</p>
-                                    <p className="text-2xl font-black text-indigo-600 mt-1">${totalSurgeriesAmount.toLocaleString()}</p>
+                                    <p className="text-2xl font-black text-indigo-600 mt-1">${formatCurrency(totalSurgeriesAmount)}</p>
                                 </div>
                             </div>
                         </div>
@@ -1921,7 +1928,7 @@ Sistema de Coordinación de Quirófano ITEO
                             </div>
                             <div className="text-right bg-slate-50 p-4 rounded-xl border border-slate-200 w-full md:w-auto">
                                 <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Subtotal Guardias ({guardsReport.daysCount.toFixed(2)} días)</p>
-                                <p className="text-2xl font-black text-emerald-600 mt-1">${guardsReport.totalAmount.toLocaleString()}</p>
+                                <p className="text-2xl font-black text-emerald-600 mt-1">${formatCurrency(guardsReport.totalAmount)}</p>
                             </div>
                         </div>
 
@@ -2517,26 +2524,26 @@ Sistema de Coordinación de Quirófano ITEO
 
             {/* Bottom Consent Panel */}
             {selectedTecnicoId && (
-                <div className="mt-8 bg-white border border-slate-200 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden">
+                <div className="mt-10 bg-white border border-slate-200 rounded-2xl p-6 pt-7 shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
                     <div className="absolute top-0 inset-x-0 h-1.5 bg-indigo-600"></div>
-                    <div>
+                    <div className="flex-1">
                         <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-                            <span className="material-symbols-outlined text-indigo-600">verified</span>
+                            <span className="material-symbols-outlined text-indigo-600 text-2xl">verified</span>
                             Liquidación Total y Cierre Mensual
                         </h3>
                         <p className="text-xs text-slate-500 mt-1 leading-normal">
-                            Suma acumulada de cirugías y guardias para el período seleccionado.
+                            Suma acumulada de cirugías, guardias y horas de asistencia para el período seleccionado.
                         </p>
                     </div>
 
-                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full md:w-auto">
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center md:text-right min-w-[200px]">
+                    <div className="flex flex-wrap md:flex-nowrap items-center gap-4 w-full md:w-auto justify-end">
+                        <div className="bg-slate-50 px-6 py-3.5 rounded-xl border border-slate-200 text-center md:text-right min-w-[220px]">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total a Liquidar</p>
-                            <p className="text-3xl font-black text-indigo-700 mt-1">${grandTotalAmount.toLocaleString()}</p>
+                            <p className="text-2xl md:text-3xl font-black text-indigo-700 mt-0.5 font-mono tracking-tight">${formatCurrency(grandTotalAmount)}</p>
                         </div>
                         
                         {currentConsent ? (
-                            <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl p-4 flex flex-col justify-center items-center gap-1">
+                            <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl px-5 py-3 flex flex-col justify-center items-center gap-0.5 min-w-[200px]">
                                 <span className="px-2 py-0.5 bg-emerald-600 text-white text-[9px] font-bold uppercase tracking-wider rounded-md">Conformidad Brindada</span>
                                 <p className="text-[10px] font-bold mt-1 text-center">
                                     Firmado el {new Date(currentConsent.consented_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })} a las {new Date(currentConsent.consented_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} hs
@@ -2545,9 +2552,9 @@ Sistema de Coordinación de Quirófano ITEO
                         ) : (
                             <button
                                 onClick={handleGiveConsent}
-                                className="px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-100 flex items-center justify-center gap-2 transition-all active:scale-97 text-sm"
+                                className="px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-100 flex items-center justify-center gap-2 transition-all active:scale-97 text-sm whitespace-nowrap"
                             >
-                                <span className="material-symbols-outlined">edit_document</span>
+                                <span className="material-symbols-outlined text-xl">edit_document</span>
                                 Dar Consentimiento / Conformidad
                             </button>
                         )}

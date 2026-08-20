@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v3.10.99 (2026-08-20)
+- **Panel de Técnicos (Diseño y Liquidación)**:
+    - **Formato Monetario Argentino**: Formateo estricto a 2 decimales (`es-AR`) para el Monto Total a Liquidar y todos los subtotales, eliminando centavos fraccionarios con múltiples dígitos.
+    - **Diseño del Panel de Consentimiento**: Corregido el padding superior (`pt-7`) y el espaciado del banner inferior de Liquidación Total para evitar solapamientos con la barra superior de acento. Expandido el padding inferior de la vista a `pb-36`.
+
 ## v3.10.98 (2026-08-20)
 - **Liquidación de Técnicos e Instrumentadores**:
     - **Corrección de Fórmula al 50%**: Corregido el cálculo de honorarios de cirugías para turnos tarde y coparticipadas, dividiendo de forma directa el Monto QX Total (Tarifa Nomenclador + Tarifa Tiempo QX) al 50% (`totalQx / 2`) y eliminando la división previa duplicada sobre la duración.

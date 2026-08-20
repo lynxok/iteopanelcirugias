@@ -4,6 +4,8 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.99 [2026-08-20]**: Lanzada la versión **v3.10.99**.
+    *   **Formato de Moneda y Ajuste Estético del Panel de Consentimiento**: Implementada la función `formatCurrency` (`es-AR`) para evitar decimales flotantes anómalos en el Total a Liquidar y subtotales. Ajustado el espaciado y padding superior del card de cierre mensual en [TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx) para prevenir solapamiento con la barra superior.
 *   **v3.10.98 [2026-08-20]**: Lanzada la versión **v3.10.98**.
     *   **Corrección de Fórmula al 50% en Liquidación de Técnicos**: Corregido el cálculo de honorarios para cirugías en turno tarde y coparticipadas en [TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx). Se eliminó la doble división accidental sobre la duración quirúrgica, dividiendo de forma limpia el Monto QX Total (Tarifa Nomenclador + Tarifa Tiempo QX) al 50% (`totalQx / 2`).
 *   **v3.10.97 [2026-08-20]**: Lanzada la versión **v3.10.97**.
