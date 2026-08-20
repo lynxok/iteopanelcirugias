@@ -42,7 +42,22 @@
 *   **Asistente de Solución de Problemas de Conexión**: En `ObsRecordingSection.tsx`, ante desconexiones de la PC de Quirófano (`sensors_off`), se ofrece la guía desplegable `¿Cómo solucionar?` que cubre los 5 puntos clave de verificación (App de escritorio activa, OBS Studio abierto, Quirófano asociado correcto, WebSocket habilitado en puerto `4455` y conectividad de red).
 *   **Asignación de IP/Host en OBS WebSocket**: Para evitar que la IP cambie tras reiniciar la notebook por DHCP dinámico, cuando la aplicación corre en la misma notebook se debe configurar el Host/IP como `localhost` o `127.0.0.1`. Si se conecta desde otro dispositivo en la red local, se debe reservar la IP en el router por MAC address o asignar IP fija estática en la interfaz de red de Windows.
 
-### Publicación de Releases en GitHub
+### Publicación de Releases en GitHub (Protocolo Obligatorio)
+*   **Archivos Binarios Requeridos**: Para que las aplicaciones de escritorio de los usuarios y el módulo de actualización automática (`electron-updater`) funcionen correctamente, cada release de GitHub **DEBE CONTENER** los 3 artefactos generados en `release/`:
+    1. `PanelCirugias_ITEO_Setup.exe` (Instalador NSIS ejecutable).
+    2. `PanelCirugias_ITEO_Setup.exe.blockmap` (Bloques de actualización diferencial).
+    3. `latest.yml` (Hash y manifiesto de versión).
+*   **Secuencia de Comandos Estándar**:
+    1. Actualizar versión en `package.json` y `public/version.json`.
+    2. Actualizar notas en `CHANGELOG.md`, `historial_versiones.md` e `index.md`.
+    3. Compilar instaladores: `npm run electron:build` (compila Vite y empaqueta NSIS en `release/`).
+    4. Git commit y push a `main`.
+    5. Crear release y subir binarios:
+       ```bash
+       gh release create vX.Y.Z --title "vX.Y.Z - Titulo" --notes "Notas del release..."
+       gh release upload vX.Y.Z "release\PanelCirugias_ITEO_Setup.exe" "release\PanelCirugias_ITEO_Setup.exe.blockmap" "release\latest.yml" --clobber
+       ```
+
 ### Módulos Clínicos y Administrativos Recientes
 
 *   **Gestión de Guardias de Residentes (`ResidentShifts.tsx`)**:
