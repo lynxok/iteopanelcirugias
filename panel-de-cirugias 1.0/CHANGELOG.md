@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v3.10.102 (2026-08-20)
+- **Módulo Facturación (Filtros e Impresión Formal)**:
+    - **Filtro por Fecha AOTER (FE AOTER)**: Incorporado el selector de rango de fechas *Desde* y *Hasta* para filtrar sobre `fe_aoter` en la pestaña Planilla de [Billing.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Billing.tsx), con soporte reactivo y combinable con fechas de práctica y facturación.
+    - **Impresión de Planilla Filtrada como Documento**: Agregado el botón *"Imprimir Listado"* en la barra de herramientas de la planilla, generando una plantilla formal con membrete institucional, resumen de filtros aplicados, fecha de emisión, totales tabulados y optimización para impresión A4/PDF (`@media print`).
+
 ## v3.10.101 (2026-08-20)
 - **Panel de Técnicos (Responsividad Móvil y Web)**:
     - **Eliminación de Doble Scrollbar**: Eliminado el `overflow-y-auto` y `min-h-screen` anidado en el contenedor de `TecnicoPanel.tsx`, permitiendo un scroll natural y sin cortes a través del contenedor principal de la aplicación.

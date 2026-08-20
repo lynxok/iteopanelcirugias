@@ -65,6 +65,8 @@ const Billing = () => {
     const [planillaEndDate, setPlanillaEndDate] = useState('');
     const [planillaBillingStartDate, setPlanillaBillingStartDate] = useState('');
     const [planillaBillingEndDate, setPlanillaBillingEndDate] = useState('');
+    const [planillaAoterStartDate, setPlanillaAoterStartDate] = useState('');
+    const [planillaAoterEndDate, setPlanillaAoterEndDate] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(100);
 
@@ -509,7 +511,7 @@ const Billing = () => {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [planillaSearch, planillaFilterType, planillaStartDate, planillaEndDate, planillaBillingStartDate, planillaBillingEndDate, rowsPerPage]);
+    }, [planillaSearch, planillaFilterType, planillaStartDate, planillaEndDate, planillaBillingStartDate, planillaBillingEndDate, planillaAoterStartDate, planillaAoterEndDate, rowsPerPage]);
 
     // Filtered Planilla Rows
     const filteredPlanilla = useMemo(() => {
@@ -562,9 +564,17 @@ const Billing = () => {
                 if (planillaBillingEndDate && feFacturDate > planillaBillingEndDate) return false;
             }
 
+            // Date range filter for AOTER Date (fe_aoter)
+            if (planillaAoterStartDate || planillaAoterEndDate) {
+                if (!row.fe_aoter) return false;
+                const feAoterDate = row.fe_aoter.substring(0, 10);
+                if (planillaAoterStartDate && feAoterDate < planillaAoterStartDate) return false;
+                if (planillaAoterEndDate && feAoterDate > planillaAoterEndDate) return false;
+            }
+
             return true;
         });
-    }, [planillaRows, planillaSearch, planillaFilterType, planillaStartDate, planillaEndDate, planillaBillingStartDate, planillaBillingEndDate]);
+    }, [planillaRows, planillaSearch, planillaFilterType, planillaStartDate, planillaEndDate, planillaBillingStartDate, planillaBillingEndDate, planillaAoterStartDate, planillaAoterEndDate]);
 
     // Sorted Planilla Rows
     const sortedPlanilla = useMemo(() => {
@@ -1146,17 +1156,34 @@ const Billing = () => {
                                 </select>
                             </div>
 
-                            <button
-                                onClick={fetchPlanilla}
-                                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-sm font-bold text-slate-600 transition-all ml-auto"
-                            >
-                                <span className="material-symbols-outlined text-sm">refresh</span>
-                                Actualizar
-                            </button>
+                            <div className="flex items-center gap-2 ml-auto">
+                                <button
+                                    onClick={() => {
+                                        if ((window as any).electronAPI) {
+                                            (window as any).electronAPI.sendReadyToPrint();
+                                        } else {
+                                            window.print();
+                                        }
+                                    }}
+                                    disabled={filteredPlanilla.length === 0}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                                    title="Imprimir reporte en documento con los filtros actuales"
+                                >
+                                    <span className="material-symbols-outlined text-sm">print</span>
+                                    Imprimir Listado
+                                </button>
+                                <button
+                                    onClick={fetchPlanilla}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-600 transition-all cursor-pointer"
+                                >
+                                    <span className="material-symbols-outlined text-sm">refresh</span>
+                                    Actualizar
+                                </button>
+                            </div>
                         </div>
 
-                        {/* Rango de fechas de ingreso / cirugía y fecha de facturación */}
-                        <div className="flex flex-wrap items-center gap-4 pt-3 border-t border-slate-100 text-xs text-slate-500 font-bold">
+                        {/* Rango de fechas de ingreso / cirugía, fecha de facturación y fecha AOTER */}
+                        <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-100 text-xs text-slate-500 font-bold">
                             <div className="flex items-center gap-2 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200">
                                 <span className="material-symbols-outlined text-sm text-slate-400">calendar_today</span>
                                 <span>Práctica:</span>
@@ -1193,14 +1220,35 @@ const Billing = () => {
                                 />
                             </div>
 
-                            {(planillaStartDate || planillaEndDate || planillaBillingStartDate || planillaBillingEndDate || planillaFilterType !== 'todos') && (
+                            <div className="flex items-center gap-2 bg-indigo-50/70 px-2.5 py-1 rounded-xl border border-indigo-200/80">
+                                <span className="material-symbols-outlined text-sm text-indigo-600">event_note</span>
+                                <span className="text-indigo-900 font-bold">FE AOTER:</span>
+                                <input
+                                    type="date"
+                                    value={planillaAoterStartDate}
+                                    onChange={e => setPlanillaAoterStartDate(e.target.value)}
+                                    className="px-2 py-1 rounded-lg border border-indigo-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-semibold bg-white cursor-pointer"
+                                />
+                                <span className="text-indigo-600">a</span>
+                                <input
+                                    type="date"
+                                    value={planillaAoterEndDate}
+                                    onChange={e => setPlanillaAoterEndDate(e.target.value)}
+                                    className="px-2 py-1 rounded-lg border border-indigo-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-semibold bg-white cursor-pointer"
+                                />
+                            </div>
+
+                            {(planillaStartDate || planillaEndDate || planillaBillingStartDate || planillaBillingEndDate || planillaAoterStartDate || planillaAoterEndDate || planillaFilterType !== 'todos' || planillaSearch) && (
                                 <button
                                     onClick={() => {
                                         setPlanillaStartDate('');
                                         setPlanillaEndDate('');
                                         setPlanillaBillingStartDate('');
                                         setPlanillaBillingEndDate('');
+                                        setPlanillaAoterStartDate('');
+                                        setPlanillaAoterEndDate('');
                                         setPlanillaFilterType('todos');
+                                        setPlanillaSearch('');
                                     }}
                                     className="text-primary hover:underline flex items-center gap-1 font-black uppercase text-[10px]"
                                 >
@@ -2111,6 +2159,105 @@ const Billing = () => {
                 document.body
             )}
 
+            {/* PRINT PORTAL: Listado Completo Filtrado */}
+            {activeTab === 'planilla' && !selectedAdmission && selectedRows.size === 0 && createPortal(
+                <div id="print-filtered-planilla" className="hidden print:block fixed inset-0 bg-white z-[9999]">
+                    <div className="max-w-[28cm] mx-auto p-4 space-y-4 bg-white text-black text-[10px]">
+                        {/* Header */}
+                        <div className="flex justify-between items-center border-b-2 border-black pb-2 mb-3">
+                            <div className="flex items-center gap-3">
+                                <img src={logoIteo} className="h-12 object-contain print-force-adjust" alt="ITEO" />
+                                <div>
+                                    <h1 className="text-xl font-bold uppercase tracking-wider">Planilla de Facturación e Internaciones</h1>
+                                    <p className="text-[9px] uppercase font-bold text-gray-600">Sanatorio de Traumatología y Especialidades Ortopédicas</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[9px] uppercase font-bold text-gray-500">Fecha de Emisión: {format(new Date(), 'dd/MM/yyyy HH:mm')}</p>
+                                {user?.name && <p className="text-[9px] uppercase font-bold text-gray-500">Generado por: {user.name}</p>}
+                                <p className="text-[10px] font-black uppercase text-black mt-0.5">Total registros: {sortedPlanilla.length}</p>
+                            </div>
+                        </div>
+
+                        {/* Resumen de Filtros Aplicados */}
+                        <div className="border border-black bg-gray-50 p-2 text-[9px] grid grid-cols-4 gap-2 mb-3">
+                            <div>
+                                <span className="font-black uppercase text-gray-700 block">Filtro Estado:</span>
+                                <span className="font-bold uppercase">
+                                    {planillaFilterType === 'todos' ? 'Todos los registros' :
+                                     planillaFilterType === 'sin_factur' ? 'Sin fecha factura' :
+                                     planillaFilterType === 'con_factur' ? 'Con fecha factura' :
+                                     planillaFilterType === 'sin_aoter' ? 'Sin fecha AOTER' :
+                                     planillaFilterType === 'con_aoter' ? 'Con fecha AOTER' :
+                                     planillaFilterType === 'completas' ? 'Con ambas fechas' :
+                                     planillaFilterType === 'solo_ambulatorias' ? 'Solo Ambulatorias' : 'Solo Internaciones'}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="font-black uppercase text-gray-700 block">Fecha Práctica:</span>
+                                <span>{planillaStartDate || planillaEndDate ? `${planillaStartDate || 'Inicio'} a ${planillaEndDate || 'Hoy'}` : 'Todos los períodos'}</span>
+                            </div>
+                            <div>
+                                <span className="font-black uppercase text-gray-700 block">Fecha Facturación:</span>
+                                <span>{planillaBillingStartDate || planillaBillingEndDate ? `${planillaBillingStartDate || 'Inicio'} a ${planillaBillingEndDate || 'Hoy'}` : 'Sin filtro de fecha'}</span>
+                            </div>
+                            <div>
+                                <span className="font-black uppercase text-gray-700 block">Fecha FE AOTER:</span>
+                                <span>{planillaAoterStartDate || planillaAoterEndDate ? `${planillaAoterStartDate || 'Inicio'} a ${planillaAoterEndDate || 'Hoy'}` : 'Sin filtro de fecha'}</span>
+                            </div>
+                            {planillaSearch && (
+                                <div className="col-span-4 border-t border-gray-300 pt-1 mt-1">
+                                    <span className="font-black uppercase text-gray-700">Término de búsqueda: </span>
+                                    <span className="font-bold italic">"{planillaSearch}"</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Tabla de Resultados */}
+                        <table className="w-full text-left border-collapse border-2 border-black text-[9px]">
+                            <thead className="bg-gray-100 border-b-2 border-black">
+                                <tr>
+                                    <th className="border border-black px-2 py-1 font-black uppercase whitespace-nowrap">Fecha</th>
+                                    <th className="border border-black px-2 py-1 font-black uppercase">Profesional</th>
+                                    <th className="border border-black px-2 py-1 font-black uppercase">Paciente</th>
+                                    <th className="border border-black px-2 py-1 font-black uppercase whitespace-nowrap">Cobertura</th>
+                                    <th className="border border-black px-2 py-1 font-black uppercase whitespace-nowrap">Fe Factur</th>
+                                    <th className="border border-black px-2 py-1 font-black uppercase whitespace-nowrap">Fe Aoter</th>
+                                    <th className="border border-black px-2 py-1 font-black uppercase whitespace-nowrap">Nro HC</th>
+                                    <th className="border border-black px-2 py-1 font-black uppercase whitespace-nowrap">NUC</th>
+                                    <th className="border border-black px-2 py-1 font-black uppercase whitespace-nowrap">DNI</th>
+                                    <th className="border border-black px-2 py-1 font-black uppercase whitespace-nowrap">Tipo</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-black">
+                                {sortedPlanilla.map((row, idx) => (
+                                    <tr key={row.admission_id + '-' + idx} className="avoid-break">
+                                        <td className="border border-black px-2 py-1 font-bold whitespace-nowrap">{row.fecha}</td>
+                                        <td className="border border-black px-2 py-1 uppercase">{row.profesional}</td>
+                                        <td className="border border-black px-2 py-1 uppercase font-black">{row.paciente}</td>
+                                        <td className="border border-black px-2 py-1 uppercase font-bold">{row.cobertura}</td>
+                                        <td className="border border-black px-2 py-1 whitespace-nowrap font-semibold">{row.fe_factur || '—'}</td>
+                                        <td className="border border-black px-2 py-1 whitespace-nowrap font-semibold">{row.fe_aoter || '—'}</td>
+                                        <td className="border border-black px-2 py-1 whitespace-nowrap">{row.nro_hc}</td>
+                                        <td className="border border-black px-2 py-1 whitespace-nowrap">{row.nuc || '—'}</td>
+                                        <td className="border border-black px-2 py-1 whitespace-nowrap">{row.dni}</td>
+                                        <td className="border border-black px-2 py-1 whitespace-nowrap uppercase text-[8px] font-bold">
+                                            {row.is_guardia ? 'Ambulatoria' : 'Internación'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+
+                        <div className="flex justify-between items-center pt-2 text-[9px] font-bold text-gray-500">
+                            <span>ITEO Quirófano & Internaciones</span>
+                            <span>Total listados: {sortedPlanilla.length} registros</span>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
             {/* Modal de Detalle de Tarjeta Estadística */}
             {statModalData && createPortal(
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fadeIn">
@@ -2283,9 +2430,9 @@ const Billing = () => {
                 @media print {
                     #root { display: none !important; }
                     body { background: white !important; margin: 0 !important; padding: 0 !important; }
-                    #print-billing-portal, #print-selected-rows { display: block !important; visibility: visible !important; position: static !important; }
-                    @page { size: auto; margin: 1cm; }
-                    .avoid-break { page-break-inside: avoid; }
+                    #print-billing-portal, #print-selected-rows, #print-filtered-planilla { display: block !important; visibility: visible !important; position: static !important; }
+                    @page { size: landscape; margin: 1cm; }
+                    .avoid-break { page-break-inside: avoid; break-inside: avoid; }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                     img, .print-force-adjust { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; image-rendering: -webkit-optimize-contrast !important; }
                 }
