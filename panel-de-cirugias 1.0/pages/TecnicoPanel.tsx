@@ -1402,7 +1402,7 @@ Sistema de Coordinación de Quirófano ITEO
     const isIpMatch = allowedIps.includes(clientIp) || isLevelAdmin;
 
     return (
-        <div className="flex flex-col min-h-screen bg-slate-50 relative p-4 md:p-6 overflow-y-auto pb-36">
+        <div className="w-full flex-1 flex flex-col bg-slate-50 relative p-3 sm:p-4 md:p-6 pb-28 max-w-full">
              <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2 tracking-tight">
@@ -1465,7 +1465,7 @@ Sistema de Coordinación de Quirófano ITEO
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex bg-white rounded-xl p-1 border border-slate-200 shadow-sm w-fit mb-6">
+            <div className="flex overflow-x-auto max-w-full bg-white rounded-xl p-1 border border-slate-200 shadow-sm w-full md:w-fit mb-6 scrollbar-none">
                 <button
                     onClick={() => setActiveTab('clock')}
                     className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'clock' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
@@ -1659,26 +1659,26 @@ Sistema de Coordinación de Quirófano ITEO
                 {activeTab === 'billing' && (
                     <div className="space-y-6 animate-fadeIn">
                         {/* Overview Card */}
-                        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
                             <div>
                                 <h3 className="text-base font-bold text-slate-900">Cirugías Realizadas</h3>
                                 <p className="text-sm text-slate-500 mt-1">Cálculo de honorarios por procedimiento y tiempo de quirófano</p>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto justify-start xl:justify-end">
                                 <button
                                     onClick={() => setIsAddManualModalOpen(true)}
-                                    className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all"
+                                    className="flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all w-full sm:w-auto"
                                 >
                                     <span className="material-symbols-outlined text-base">add_circle</span>
                                     Agregar Cirugía a mi Listado
                                 </button>
-                                <div className="text-right bg-slate-50 p-4 rounded-xl border border-slate-200 w-full md:w-auto">
-                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Horas Fichadas ({attendanceHoursReport.totalHours.toFixed(2)} hs)</p>
-                                    <p className="text-2xl font-black text-indigo-600 mt-1">${formatCurrency(attendanceHoursReport.amount)}</p>
+                                <div className="text-center sm:text-right bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 flex-1 sm:flex-initial min-w-[150px]">
+                                    <p className="text-[10px] sm:text-xs text-slate-400 font-bold uppercase tracking-wider">Horas Fichadas ({attendanceHoursReport.totalHours.toFixed(2)} hs)</p>
+                                    <p className="text-xl sm:text-2xl font-black text-indigo-600 mt-1">${formatCurrency(attendanceHoursReport.amount)}</p>
                                 </div>
-                                <div className="text-right bg-slate-50 p-4 rounded-xl border border-slate-200 w-full md:w-auto">
-                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Subtotal Cirugías</p>
-                                    <p className="text-2xl font-black text-indigo-600 mt-1">${formatCurrency(totalSurgeriesAmount)}</p>
+                                <div className="text-center sm:text-right bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 flex-1 sm:flex-initial min-w-[150px]">
+                                    <p className="text-[10px] sm:text-xs text-slate-400 font-bold uppercase tracking-wider">Subtotal Cirugías</p>
+                                    <p className="text-xl sm:text-2xl font-black text-indigo-600 mt-1">${formatCurrency(totalSurgeriesAmount)}</p>
                                 </div>
                             </div>
                         </div>
@@ -1708,13 +1708,13 @@ Sistema de Coordinación de Quirófano ITEO
                         )}
 
                         {/* List Table */}
-                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto">
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto w-full max-w-full">
                             {surgeriesReport.length === 0 ? (
                                 <div className="text-center py-12 text-slate-400 font-bold italic uppercase tracking-wider text-sm">
                                     No se registran cirugías realizadas para el técnico seleccionado en el período.
                                 </div>
                             ) : (
-                                <table className="w-full text-left">
+                                <table className="w-full min-w-[950px] text-left">
                                     <thead className="bg-slate-100 text-slate-500 text-[10px] uppercase font-bold tracking-widest border-b border-slate-200">
                                         <tr>
                                             <th className="px-6 py-4">Fecha</th>
@@ -2524,34 +2524,36 @@ Sistema de Coordinación de Quirófano ITEO
 
             {/* Bottom Consent Panel */}
             {selectedTecnicoId && (
-                <div className="mt-12 bg-white border border-slate-200/80 rounded-3xl p-6 md:p-8 shadow-xl shadow-slate-200/50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative overflow-hidden">
+                <div className="mt-8 bg-white border border-slate-200/90 rounded-2xl md:rounded-3xl p-5 md:p-7 shadow-xl shadow-slate-200/60 flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-6 relative overflow-hidden max-w-full">
                     {/* Top gradient accent line */}
                     <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-indigo-500 via-indigo-600 to-indigo-700"></div>
 
                     {/* Left: Icon, Title, Subtitle, and Breakdown Badges */}
-                    <div className="flex items-start gap-4 flex-1">
-                        <div className="p-3.5 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100 flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+                    <div className="flex flex-col sm:flex-row items-start gap-4 flex-1">
+                        <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100 flex items-center justify-center shrink-0 shadow-sm">
                             <span className="material-symbols-outlined text-2xl">verified_user</span>
                         </div>
-                        <div className="space-y-1.5">
-                            <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                                Liquidación Total y Cierre Mensual
-                            </h3>
-                            <p className="text-xs md:text-sm text-slate-500 font-medium">
-                                Suma consolidada de cirugías realizadas, guardias cubiertas y horas de asistencia del período.
-                            </p>
+                        <div className="space-y-2 flex-1 w-full">
+                            <div>
+                                <h3 className="text-lg md:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                                    Liquidación Total y Cierre Mensual
+                                </h3>
+                                <p className="text-xs md:text-sm text-slate-500 font-medium mt-0.5">
+                                    Suma consolidada de cirugías realizadas, guardias cubiertas y horas de asistencia del período.
+                                </p>
+                            </div>
                             
                             {/* Breakdown Pills */}
                             <div className="flex flex-wrap items-center gap-2 pt-1">
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-200/80">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-200">
                                     <span className="size-1.5 rounded-full bg-indigo-500"></span>
                                     Cirugías: <strong className="text-slate-900">${formatCurrency(totalSurgeriesAmount)}</strong>
                                 </span>
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-200/80">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-200">
                                     <span className="size-1.5 rounded-full bg-emerald-500"></span>
                                     Guardias ({guardsReport.daysCount.toFixed(2)}d): <strong className="text-slate-900">${formatCurrency(guardsReport.totalAmount)}</strong>
                                 </span>
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-200/80">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 text-slate-700 rounded-lg text-xs font-bold border border-slate-200">
                                     <span className="size-1.5 rounded-full bg-blue-500"></span>
                                     Asistencia ({attendanceHoursReport.totalHours.toFixed(1)}h): <strong className="text-slate-900">${formatCurrency(attendanceHoursReport.amount)}</strong>
                                 </span>
@@ -2560,18 +2562,18 @@ Sistema de Coordinación de Quirófano ITEO
                     </div>
 
                     {/* Right: Total Card & Action */}
-                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-4 w-full lg:w-auto justify-end shrink-0 pt-2 lg:pt-0">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto justify-end shrink-0 pt-2 xl:pt-0 border-t xl:border-t-0 border-slate-100">
                         {/* Total Card */}
-                        <div className="bg-gradient-to-br from-indigo-50/50 via-slate-50 to-white px-6 py-4 rounded-2xl border border-indigo-100/90 text-right shadow-sm min-w-[220px] flex-1 sm:flex-initial">
+                        <div className="bg-gradient-to-br from-indigo-50/60 via-slate-50 to-white px-5 py-3.5 rounded-2xl border border-indigo-100 text-center sm:text-right shadow-sm w-full sm:w-auto min-w-[200px]">
                             <p className="text-[10px] font-black text-indigo-900/60 uppercase tracking-widest">Total a Liquidar</p>
-                            <p className="text-2xl md:text-3xl font-black text-indigo-700 mt-1 font-mono tracking-tight">
+                            <p className="text-2xl md:text-3xl font-black text-indigo-700 mt-0.5 font-mono tracking-tight">
                                 ${formatCurrency(grandTotalAmount)}
                             </p>
                         </div>
                         
                         {/* Action button or signed status */}
                         {currentConsent ? (
-                            <div className="bg-emerald-50 text-emerald-800 border border-emerald-200/90 rounded-2xl px-6 py-3.5 flex flex-col justify-center items-center gap-1 min-w-[210px] shadow-sm">
+                            <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-2xl px-5 py-3.5 flex flex-col justify-center items-center gap-1 w-full sm:w-auto min-w-[200px] shadow-sm">
                                 <span className="px-2.5 py-0.5 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider rounded-md">
                                     ✓ Conformidad Brindada
                                 </span>
@@ -2582,7 +2584,7 @@ Sistema de Coordinación de Quirófano ITEO
                         ) : (
                             <button
                                 onClick={handleGiveConsent}
-                                className="px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-indigo-300 flex items-center justify-center gap-2.5 transition-all duration-200 active:scale-95 text-sm whitespace-nowrap"
+                                className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-indigo-300 flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 text-sm w-full sm:w-auto whitespace-nowrap"
                             >
                                 <span className="material-symbols-outlined text-xl">edit_document</span>
                                 Dar Consentimiento / Conformidad

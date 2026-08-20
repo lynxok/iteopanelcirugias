@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.101 (2026-08-20)
+- **Panel de Técnicos (Responsividad Móvil y Web)**:
+    - **Eliminación de Doble Scrollbar**: Eliminado el `overflow-y-auto` y `min-h-screen` anidado en el contenedor de `TecnicoPanel.tsx`, permitiendo un scroll natural y sin cortes a través del contenedor principal de la aplicación.
+    - **Aislamiento Horizontal de Tablas**: Agregado `overflow-x-auto` con ancho mínimo controlado (`min-w-[950px]`) para que las tablas de cirugías no ensanchen ni distorsionen la vista en pantallas móviles.
+    - **Tarjeta de Cierre y Liquidación Total Totalmente Adaptable**: La tarjeta inferior ahora adapta sus columnas, badges y botones al 100% en pantallas móviles y desktop sin cortar texto ni salirse del viewport.
+
 ## v3.10.100 (2026-08-20)
 - **Panel de Técnicos (Rediseño de Cierre Mensual)**:
     - **Rediseño Integral de la Tarjeta de Liquidación**: Rediseñada la tarjeta inferior con estructura espaciosa en dos columnas, badge de estado, pills con el desglose parcial de cirugías, guardias y horas de asistencia, y caja destacada de Total a Liquidar.

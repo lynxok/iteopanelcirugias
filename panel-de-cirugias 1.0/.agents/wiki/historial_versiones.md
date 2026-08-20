@@ -4,6 +4,8 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.101 [2026-08-20]**: Lanzada la versión **v3.10.101**.
+    *   **Responsividad Móvil y Web en Panel de Técnicos**: Eliminado el scroll anidado (`overflow-y-auto` y `min-h-screen`) de [TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx) para evitar que la sección de cierre mensual quede oculta o recortada. Contenidas las tablas de cirugías con `overflow-x-auto` para que no distorsionen el ancho en pantallas móviles.
 *   **v3.10.100 [2026-08-20]**: Lanzada la versión **v3.10.100**.
     *   **Rediseño Integral de la Tarjeta de Liquidación y Cierre Mensual**: Rediseñado el card inferior en [TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx) con contenedor espacioso, badges de desglose parcial (Cirugías, Guardias, Asistencia), y card destacado de Total a Liquidar y botón de acción.
 *   **v3.10.99 [2026-08-20]**: Lanzada la versión **v3.10.99**.
