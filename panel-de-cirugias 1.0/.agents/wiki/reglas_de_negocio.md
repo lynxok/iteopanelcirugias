@@ -154,49 +154,19 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     *   Cualquier cirugía iniciada **antes de las 06:00 hs AM** en días hábiles, **después de las 19:00 hs** en días hábiles, o en **sábados, domingos y feriados** se asigna al 100% al **Técnico de Guardia** de esa fecha.
 *   **Turno Mañana (06:00 a 14:00/15:00 hs en Días Hábiles):** 
     *   Corresponde al personal del turno mañana. **No se asigna automáticamente al Técnico de Guardia ni al Fijo**, a menos que en la Ficha Técnica de Cirugía (`surgery_forms.instrumentadora`) se encuentre especificado su nombre expresamente.
-*   **Turno Tarde (15:00 a 19:00 hs / Viernes 14:00 a 19:00 hs en Días Hábiles):** 
-    *   Participan el **Técnico Fijo** y el **Técnico de Guardia**, condicionado a que hayan marcado ingreso (`check_in`). Se liquida al 50% para cada uno.
-*   **Adición Manual y Coparticipación de Cirugías**:
-    *   Cualquier técnico puede incluir manualmente una cirugía realizada a su planilla a través del botón **"+ Agregar Cirugía a mi Listado"**.
-    *   **Incorporar un Segundo Técnico**: En cirugías con 1 solo técnico asignado originalmente (ej. cirugías fuera del turno tarde, nocturnas o de fin de semana), el técnico asignado puede sumar a un segundo técnico disponible (fijo o de guardia) presionando el botón **"+ Sumar Técnico"**. Al hacerlo, los honorarios y tiempos de la cirugía se recalculan automáticamente al **50% para cada uno**.
-    *   Las cirugías agregadas manualmente o coparticipadas se marcan visualmente como `[Cargada Manualmente]` / `[50% Coparticipada]` y se persisten en la tabla `quirofano.tecnico_manual_surgeries`. También pueden ser removidas manualmente.
-*   **Fines de Semana y Horario Nocturno (Post-19:00 hs)**:
-    *   Cualquier cirugía los sábados y domingos, o que inicie después de las 19:00 hs en días hábiles, se le abona al **100% al Técnico de Guardia** de ese día.
-*   **Resto de Horarios**: Cualquier otra cirugía fuera del turno tarde (ej: mañanas hábiles) se distribuye al **50% para el Técnico de Guardia**.
+### Cómputo de Honorarios al 50% (Turno Tarde y Coparticipación)
+*   **Fórmula Directa de Liquidación**: Para toda cirugía realizada en Turno Tarde o marcada como Coparticipada, el cálculo de honorarios se realiza directamente dividiendo el **Monto QX Total** al 50%:
+    $$\text{Monto QX Total} = \text{Tarifa Nomenclador} + \text{Tarifa Tiempo QX}$$
+    $$\text{Mi Parte (50\%)} = \frac{\text{Monto QX Total}}{2}$$
+*   **Alineación de Tiempos**: Se eliminó la división duplicada previa que dividía la duración antes del cómputo del tiempo, asegurando que tanto la práctica como el tiempo quirúgico se abonen en exacta paridad del 50%.
+*   **Formato de Moneda Estricto (`es-AR`)**: Todos los subtotales y el Total a Liquidar se formatean con 2 decimales fijos bajo el locale argentino (`$ X.XXX,XX`), suprimiendo decimales flotantes anómalos.
 
-### Unificación de Nomenclador al Estándar AOTER
-*   **Mapeo Automático**: Todas las cirugías procesadas en el panel (incluidas las cirugías de OSER o con nomenclador numérico alternativo `121.xx.xx`) se mapean automáticamente al código **AOTER unificado** (`MS.xx.xx`, `RO.xx.xx`, `PP.xx.xx`) utilizando el mapa de equivalencias `nomenclador_mapping.json`.
-*   **Cómputo de Tarifas**: Las tarifas de práctica configuradas en `tecnico_rates` se consultan contra el código AOTER unificado, asegurando liquidaciones parejas entre todas las obras sociales.
-
-### Cierre Mensual y Notificaciones por Correo Electrónico
+### Cierre, Conformidad Mensual y Responsividad Multi-Dispositivo
 *   **Firma de Conformidad**: Al presionar **"Dar Consentimiento / Conformidad"**, el técnico otorga conformidad digital sobre la planilla del mes seleccionado.
-*   **Notificación Automática por Correo**: El sistema genera y encola un correo en `quirofano.email_notifications` que se envía a:
-    1. La casilla de **Administración** configurada en la pestaña *Tarifas y Ajustes* (`notification_email`).
-    2. Una **copia (CC)** a la casilla de correo registrada del propio **Técnico**.
-*   **Detalle del Resumen**: El correo enviado incluye el desglose completo del monto total ($), especificando parciales de cirugías, días de guardia y horas de asistencia fichadas.
-
-### Cómputo de Guardias Acumuladas y Cortes de Mes (Evitar Duplicados)
-*   **Semana Hábil**: Por cada 5 días hábiles (lunes a viernes) de guardia trabajados, se computa 1 día de guardia. Fracciones menores de forma proporcional.
-*   **Fines de Semana y Feriados**: Cada sábado, domingo o feriado en día de semana suma 1 día de guardia completo directo.
-*   **Corte Mensual (Semana Cruzada)**: 
-    *   Si una semana de guardia cruza el cambio de mes (ej. fin de junio y principio de julio), se le contempla la semana completa de guardia al técnico asignado en el mes que finaliza.
-    *   Los días que cayeron en ese mes de transición y ya fueron incluidos en la liquidación anterior **se excluyen/restan estrictamente del mes siguiente** para evitar pagar dos veces el mismo día de guardia.
-
-### Nomenclador de Prácticas y Tarifas (10/08/2026)
-*   **Listado Pre-Cargado:** En la pestaña *Tarifas y Ajustes* ([TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx)), el recuadro "Tarifas por Práctica" despliega el listado completo de prácticas nomencladas (OSER / AOTER).
-*   **Formato de Código Dual:** Cada ítem despliega el código numérico **OSER** como identificador principal (ej: `121.01.04`). Únicamente si cuenta con un homónimo **AOTER** diferente, se añade entre paréntesis `(MS0104)`. Si ambos coinciden, se presenta limpio sin paréntesis redundantes.
-*   **Ordenamiento por Frecuencia de Casos:** Por defecto (`cases_desc`), las prácticas se ordenan según la cantidad de cirugías registradas en el período (mayor a menor), indicando un badge índigo con el conteo de casos (ej: `4 casos`). Se incluye un selector para ordenar por: *Más Frecuentes*, *Menos Frecuentes*, *Código (Asc/Desc)* o *Precio (Asc/Desc)*.
-*   **Descripciones Médicas Doble Fuente:** Las descripciones de los procedimientos quirúrgicos se obtienen dinámicamente de los partes de cirugías realizadas; para aquellas prácticas aún sin cirugías cargadas en el período, el sistema consulta el catálogo estático del nomenclador.
-*   **Gestión Rápida de Tarifas:** Las prácticas sin tarifa configurada se muestran con la etiqueta ⚠️ `Sin Precio ($0)`. Cuenta con un buscador en tiempo real por código/descripción y botones de "Cargar Precio" / "Editar" para asignar montos a medida que se cuente con la información.
-
-
-### Control de Asistencia y WiFi
-*   Los técnicos marcan Entrada, Salida, Descanso y Retorno desde su celular.
-*   La acción está bloqueada si la IP pública de navegación no coincide con alguna de las IPs configuradas de la clínica (soporta múltiples IPs separadas por comas).
-*   **Cierre Automático de Salida por Olvido (22:00 hs)**: Si un técnico marca ingreso (`check_in`) en el turno tarde y pasada las 22:00 hs del mismo día (o en días posteriores) no registró su marca de salida (`check_out`), el sistema le computa automáticamente el egreso a las **19:00 hs** de esa misma fecha.
-
-### Cierre y Conformidad Mensual
-*   Al fin de mes, cada técnico debe auditar su planilla (que ahora consolida Horas Fichadas, Cirugías y Guardias) y presionar "Dar Conformidad" para registrar firma en `tecnico_monthly_consents` y bloquear liquidaciones.
+*   **Tarjeta de Cierre Mensual Adaptable**: El panel inferior consolida el desglose parcial en píldoras informativas (Cirugías, Guardias y Horas de Asistencia) junto a la caja de Total a Liquidar.
+*   **Estructura de Scroll y Aislamiento de Tablas**:
+    - La vista de `TecnicoPanel.tsx` no posee scroll interno forzado (`overflow-y-auto` o `min-h-screen`), delegando el desplazamiento al layout general para evitar dobles scrollbars y recortes de componentes.
+    - La tabla de cirugías contiene un contenedor de scroll horizontal exclusivo (`overflow-x-auto` con `min-w-[950px]`), previniendo que la grilla de 10 columnas ensanche la vista en smartphones y garantizando que la tarjeta de liquidación permanezca 100% legible y dentro del ancho de la pantalla.
 
 ### Rol "Administrativo Dirección" y Auditoría de Gestión de Técnicos (18/08/2026)
 *   **Rol "Administrativo Dirección" (`Administrativo Direccion`)**: Dispone de permisos de nivel SuperAdmin exclusivamente para la sección **"Gestión de Técnicos"** (`/tecnicos`), permitiéndole:
