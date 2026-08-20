@@ -64,9 +64,10 @@
     *   Habilitada la edición completa y eliminación de turnos de guardia asignados o pendientes para residentes con permiso `can_edit_shifts` y administradores.
     *   Se integraron acciones directas de edición en el panel `MyConsentsView`, el calendario mensual `ShiftsCalendarView` y el modal `LogShiftModal.tsx`.
 
-*   **Filtro por Fecha de Facturación (`Billing.tsx`)**:
-    *   Implementado filtrado independiente por rango de **Fecha Facturación** (`fe_factur`) mediante los estados `planillaBillingStartDate` y `planillaBillingEndDate`.
-    *   Convive dinámicamente con el filtro de fecha de práctica en las vistas de **Estadísticas** y **Planilla de Internaciones**.
+*   **Filtros de Facturación y AOTER (`Billing.tsx`)**:
+    *   **Filtro por Fecha Facturación**: Rango de fechas independiente mediante los estados `planillaBillingStartDate` y `planillaBillingEndDate` sobre el campo `fe_factur`.
+    *   **Filtro por FE AOTER**: Rango de fechas independiente mediante los estados `planillaAoterStartDate` y `planillaAoterEndDate` sobre el campo `fe_aoter`, permitiendo auditar y conciliar entregas de documentación a la asociación traumatológica en tiempo real.
+    *   **Plantilla de Documento Formal para Impresión (`#print-filtered-planilla`)**: Se implementó un portal de renderizado exclusivo `@media print` (`avoid-break`, hoja horizontal A4 landscape) que genera un reporte institucional membretado con logo ITEO, resumen de filtros aplicados, fecha de emisión, autor, desglose por paciente/profesional/cobertura y totales, evitando capturas de pantalla o distorsiones de interfaz.
 
 *   **Exención Automática y Lógica de Cirugías Ambulatorias**:
     *   **Determinación de Modalidad Ambulatoria**: Una cirugía se evalúa como ambulatoria si cumple cualquiera de las condiciones: `isGuardia === true`, `surgery.is_ambulatory === true`, o si está agendada en un quirófano con `operating_room.is_ambulatory === true`.
