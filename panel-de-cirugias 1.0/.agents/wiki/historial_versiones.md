@@ -4,6 +4,9 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.97 [2026-08-20]**: Lanzada la versión **v3.10.97**.
+    *   **Exclusión de Cirugías Canceladas en Planificación**: Se actualizaron todos los filtros de grupos activos en el tablero Kanban ([Kanban.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Kanban.tsx)) (`authorizedPatients`, `readyToSchedule`, `unscheduledNew`, `materialBlockers`, `clinicalBlockers`, `otherBlockers`) para excluir explícitamente cirugías con estado `cancelled`.
+    *   **Badge de Estado en Detalle de Cirugía**: Corregida la visualización en el header de [SurgeryHeader.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/surgery-detail/SurgeryHeader.tsx) para reflejar fielmente el badge **"Cancelada"** con coloración distintiva.
 *   **v3.10.96 [2026-08-18]**: Lanzada la versión **v3.10.96**.
     *   **Validación de Cirugías Manuales de Técnicos e Instrumentadores**: Implementado el flujo de aprobación administrativa para toda cirugía o co-asignación agregada manualmente en [TecnicoPanel.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/TecnicoPanel.tsx).
     *   **Estado Pendiente y Regla de Liquidación**: Toda adición por parte de un instrumentador queda registrada en estado `pending` ("Pendiente de Validación"), mostrando el importe estimado pero computando `$0` en los subtotales oficiales hasta su confirmación por Dirección.

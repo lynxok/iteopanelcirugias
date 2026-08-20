@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v3.10.97 (2026-08-20)
+- **Planificación y Flujo Quirúrgico**:
+    - **Filtro de Cirugías Canceladas**: Se excluyen explícitamente las cirugías canceladas (`status: 'cancelled'`) de los bloques de planificación activa (`authorizedPatients`, `readyToSchedule`, `unscheduledNew`, `materialBlockers`, `clinicalBlockers`, `otherBlockers`), evitando que figuren en "OSER sin aprobar material" o secciones de agendado pendiente.
+    - **Detalle de Cirugía**: El badge superior de "Estado y Registro" ahora indica "Cancelada" en rojo claro cuando la cirugía ha sido cancelada definitivamente.
+
 ## v3.10.94 (2026-08-18)
 - **Gestión de Técnicos (Tarifas y Liquidación)**:
     - **Edición Rápida en Liquidación de Cirugías**: Habilitado el modal interactivo de carga y edición directa de tarifas de práctica desde la tabla de liquidación para usuarios con rol `SuperAdmin`, `Direccion` y `Administrativo Direccion`.
