@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v3.10.100 (2026-08-20)
+- **Panel de Técnicos (Rediseño de Cierre Mensual)**:
+    - **Rediseño Integral de la Tarjeta de Liquidación**: Rediseñada la tarjeta inferior con estructura espaciosa en dos columnas, badge de estado, pills con el desglose parcial de cirugías, guardias y horas de asistencia, y caja destacada de Total a Liquidar.
+
 ## v3.10.99 (2026-08-20)
 - **Panel de Técnicos (Diseño y Liquidación)**:
     - **Formato Monetario Argentino**: Formateo estricto a 2 decimales (`es-AR`) para el Monto Total a Liquidar y todos los subtotales, eliminando centavos fraccionarios con múltiples dígitos.
