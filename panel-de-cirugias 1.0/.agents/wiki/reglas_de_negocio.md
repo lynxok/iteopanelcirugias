@@ -79,6 +79,9 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     *   **R2**: 2 guardias de 24hs y 6 de 12hs.
     *   **R3**: 2 guardias de 24hs y 4 de 12hs.
     *   **R4**: 1 guardia de 24hs y 5 de 12hs.
+*   **Vigencia Histórica de Categorías / Promociones (v3.10.103)**:
+    *   Los cambios de nivel de residencia (ej. de R1 a R2) se registran con una fecha de inicio de vigencia mensual (`resident_level_history` en formato `YYYY-MM-01`).
+    *   Al calcular el cumplimiento en el Dashboard Resumen de Guardias (`ResidentShifts.tsx`), el sistema evalúa dinámicamente el nivel correspondiente al mes consultado (`getResidentLevelForDate`), aplicando las metas de la categoría nueva exclusivamente **a partir del mes de vigencia en adelante** y conservando intactos los requisitos históricos de los meses previos.
 *   **Horarios y Cobertura Obligatoria**:
     *   **Lunes a Viernes (hábiles y días no laborables optativos)**: Cobertura nocturna de **17:00 a 07:00 del día siguiente** (14 horas).
     *   **Fines de semana y Feriados Nacionales (Argentina)**: Cobertura de **24 horas** de **08:00 a 08:00 del día siguiente** (puede ser cubierto por uno o más turnos).

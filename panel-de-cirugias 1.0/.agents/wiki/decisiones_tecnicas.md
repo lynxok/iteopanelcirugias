@@ -58,6 +58,42 @@
        gh release upload vX.Y.Z "release\PanelCirugias_ITEO_Setup.exe" "release\PanelCirugias_ITEO_Setup.exe.blockmap" "release\latest.yml" --clobber
        ```
 
+### Plan de Seguridad, Ciberseguridad y Estado de Ramas
+
+Para garantizar la estabilidad hospitalaria durante las auditorías de seguridad, el desarrollo se segmentó en ramas aisladas con scripts de rollback en 1 clic:
+
+*   **Fase 1: Blindaje RLS y Autenticación Nativa (Rama `security/rls-auth-hardening`) - [COMPLETADO]**:
+    *   Sincronización del 100% de las 67 cuentas de personal hacia `auth.users` con cifrado bcrypt. Trigger automático `trg_sync_user_to_auth` para altas y ediciones.
+    *   Eliminación de políticas permisivas anónimas (`public ALL true`) en `patients`, `surgeries`, `users`, `surgery_documents`, `surgery_forms`, `surgery_materials`, `admin_settings`, `email_notifications` y `tecnico_manual_surgeries`.
+    *   Refactorización de `AuthContext.tsx` y validación estricta de TLS en `main.cjs`.
+    *   Rollback: `supabase/migrations/revert_security_hardening.sql`.
+
+*   **Fase 2: Privacidad de Contraseñas y Desacople (Rama `security/credentials-and-passwords-protection`) - [COMPLETADO]**:
+    *   Respaldo de contraseñas previas en la tabla protegida `quirofano.users_password_backup` con RLS restringido a SuperAdmin/Dirección.
+    *   Enmascaramiento de la columna `password` en `quirofano.users` (`'PROTECTED_BCRYPT'`).
+    *   Migración de cambio de credenciales en `Sidebar.tsx` a las APIs criptográficas nativas de Supabase Auth.
+    *   Rollback: `supabase/migrations/revert_point2_credentials_protection.sql`.
+
+*   **Fase 3: Protección de Service Role Key en Vault (Rama `security/webhook-service-role-protection`) - [COMPLETADO / ACTIVA]**:
+    *   Almacenamiento cifrado de la clave de servicio en `supabase_vault` (`vault.decrypted_secrets`).
+    *   Refactorización de `quirofano.email_notifications_webhook_custom()` con `SECURITY DEFINER` y lectura dinámica, eliminando tokens JWT quemados en funciones de Postgres.
+    *   Rollback: `supabase/migrations/revert_point3_webhook_service_role.sql`.
+
+*   **Puntos Pendientes para Retomar (Backlog de Seguridad)**:
+    *   **Punto 4: Sanitización de IPC Handlers y Seguridad en Electron Desktop**:
+        *   *Archivos involucrados:* [`main.cjs`](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/main.cjs), [`preload.cjs`](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/preload.cjs).
+        *   *Objetivo:* Validar y sanitizar estrictamente todos los argumentos recibidos por los canales IPC (`obs:rename-video`, `obs:save-screenshot`, `save-file`, `save-pdf`, `run-oser-scraper`, `run-oser-writer-scraper`).
+        *   *Medidas a implementar:*
+            1. Prevenir *Path Traversal* asegurando que las rutas de destino de video y capturas se ubiquen dentro de carpetas permitidas (ej. `userData` o carpeta configurada por el usuario).
+            2. Sanitizar caracteres especiales en nombres de médicos y pacientes antes de concatenar nombres de archivos en el sistema operativo.
+            3. Desacoplar definitivamente las credenciales OSER de variables de entorno/código estático, exponiendo un modal de configuración de primer uso en `Settings.tsx` con almacenamiento seguro local en `safeStorage` (Windows DPAPI).
+    *   **Punto 5: Endurecimiento de Control de Acceso por Roles (RBAC en Frontend)**:
+        *   *Archivos involucrados:* [`App.tsx`](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/App.tsx), [`components/Sidebar.tsx`](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/Sidebar.tsx), [`pages/Billing.tsx`](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Billing.tsx), [`pages/Audit.tsx`](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Audit.tsx).
+        *   *Objetivo:* Asegurar que las rutas sensibles (`/billing`, `/audit`, `/settings/email`, `/settings/users`) no solo estén protegidas a nivel de base de datos (RLS ya activo), sino que tampoco se rendericen ni permitan navegación manual en el router para roles operativos auxiliares (`Mucama`, `Residente`, `Proveedor`, `Tecnico`).
+        *   *Medidas a implementar:*
+            1. Envolver rutas en componentes `RoleProtectedRoute` que redirijan a `/unauthorized` o al dashboard principal si el rol no tiene privilegios.
+            2. Ocultar del DOM los botones de exportación masiva de planillas contables para roles no administrativos.
+
 ### Módulos Clínicos y Administrativos Recientes
 
 *   **Gestión de Guardias de Residentes (`ResidentShifts.tsx`)**:
@@ -79,5 +115,25 @@
     *   **Patrón `Promise.all` para Vistas Complejas**: En paneles que consolidan múltiples dominios de datos (usuarios, tarifas, guardias, cirugías, consentimientos, asistencias), se ejecutan las consultas independientes en paralelo en lugar de cascadas síncronas (`await` secuenciales), reduciendo el tiempo de respuesta inicial en más del 80%.
     *   **Unificación de Lecturas de Asistencia**: Los registros de `tecnico_attendance` del período seleccionado se solicitan una única vez y se reutilizan en memoria para el cómputo de horas mensuales, la verificación de ingresos para la regla del Turno Tarde y el listado de fichadas recientes de hoy.
     *   **Desacople de Servicios Externos**: Peticiones externas no clínicas (ej. determinación de IP pública mediante `api.ipify.org`) se ejecutan de forma asíncrona una sola vez al montar y no bloquean el ciclo de renderizado ni la carga de datos del quirófano.
+
+### Protocolo de Pruebas Aisladas y Rollback Rápido (Volver Atrás)
+
+Para cambios experimentales de arquitectura o UX que requieran validación previa antes de fusionarse a producción:
+1. **Rama de Aislamiento Activa**: `feature/resilient-network-cache`
+   * Módulo de monitoreo pasivo de red: `useNetworkStatus.ts`
+   * Banner de alerta y reconexión: `NetworkStatusBanner.tsx`
+   * Caché en memoria no bloqueante con TTL: `memoryCache.ts`
+2. **Instrucciones para Descartar / Volver Atrás (Rollback 100%)**:
+   Si se solicita revertir o descartar estos cambios, ejecutar:
+   ```bash
+   git checkout main
+   git branch -D feature/resilient-network-cache
+   ```
+3. **Instrucciones para Aprobar y Fusionar a Producción**:
+   Si los cambios son aprobados por el usuario:
+   ```bash
+   git checkout main
+   git merge feature/resilient-network-cache
+   ```
 
 

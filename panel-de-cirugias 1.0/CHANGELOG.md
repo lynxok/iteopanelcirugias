@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.104 (2026-08-24)
+- **Guardias de Residentes y Control de Categorías**:
+    * **Vigencia Histórica de Niveles de Residencia**: Los ascensos o cambios de categoría (ej: de R1 a R2 en agosto) ahora se calculan exclusivamente a partir del mes de vigencia seleccionado hacia adelante, conservando intactas las metas y cumplimientos de los meses anteriores.
+    * **Cálculo Dinámico en Dashboard de Guardias**: En [ResidentShifts.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResidentShifts.tsx), el reporte mensual aplica las metas de guardias (24hs y 12hs) correspondientes a la categoría que el residente tenía en el mes consultado.
+    * **Selector de Vigencia e Historial en Configuración de Usuarios**: En [UserModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/modals/UserModal.tsx), se incorporó el selector de mes de vigencia y la visualización interactiva del historial cronológico de hitos de categoría.
+
 ## v3.10.103 (2026-08-24)
 - **Rendimiento y Menú Lateral**:
     - **Ocultamiento de Centro de Alertas**: Removida la sección y botón de "Centro de Alertas" del menú lateral principal para optimizar la interfaz y evitar elementos en desuso.

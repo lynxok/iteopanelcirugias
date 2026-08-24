@@ -18,7 +18,20 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
-*   `[2026-08-24]`: **Blindaje de Seguridad RLS, Sincronización Auth y Endurecimiento de Electron** (`security/rls-auth-hardening`):
+*   `[2026-08-24]`: **Cálculo Histórico y Vigencia Temporal de Niveles de Residentes (`quirofano.users.resident_level_history`)**:
+    *   Se agregó la columna `resident_level_history` (JSONB) en `quirofano.users` para registrar el historial cronológico de promociones con fechas de vigencia mensual (`valid_from`).
+    *   Se implementó la función auxiliar `getResidentLevelForDate` en `types.ts` para determinar con precisión el nivel que correspondía a un residente en el mes específico consultado.
+    *   Se adaptó [ResidentShifts.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResidentShifts.tsx) (Dashboard Resumen y Asignación) para que los ascensos de categoría (ej: R1 a R2 en agosto) apliquen las nuevas metas de guardias exclusivamente **a partir del mes de vigencia en adelante**, manteniendo inalterado el cálculo de meses anteriores.
+    *   Se actualizó [UserModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/modals/UserModal.tsx) y [useSettings.ts](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/hooks/useSettings.ts) con selector de mes de vigencia y visualizador/gestor del historial de hitos de residencia.
+*   `[2026-08-24]`: **Protección de Service Role Key con Supabase Vault - Punto 3** (`security/webhook-service-role-protection`):
+    *   Se creó la rama de aislamiento `security/webhook-service-role-protection` y el script de reversión `supabase/migrations/revert_point3_webhook_service_role.sql`.
+    *   Se cifró y almacenó la Service Role Key dentro de `supabase_vault` (`vault.decrypted_secrets`).
+    *   Se refactorizó la función trigger `quirofano.email_notifications_webhook_custom()` con `SECURITY DEFINER` y lectura dinámica de Vault, eliminando tokens JWT quemados en funciones de Postgres.
+*   `[2026-08-24]`: **Protección de Contraseñas y Privacidad de Usuarios - Punto 2** (`security/credentials-and-passwords-protection`):
+    *   Se creó la rama de aislamiento `security/credentials-and-passwords-protection` y el script de reversión `supabase/migrations/revert_point2_credentials_protection.sql`.
+    *   Se respaldaron las contraseñas previas en la tabla protegida `quirofano.users_password_backup` con RLS restringido a SuperAdmin/Dirección.
+    *   Se enmascaró la columna `password` en `quirofano.users` (`'PROTECTED_BCRYPT'`) y se adaptó [`Sidebar.tsx`](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/Sidebar.tsx) para validación y actualización directa mediante las APIs criptográficas nativas de Supabase Auth.
+*   `[2026-08-24]`: **Blindaje de Seguridad RLS, Sincronización Auth y Endurecimiento de Electron - Punto 1** (`security/rls-auth-hardening`):
     *   Se creó la rama de aislamiento `security/rls-auth-hardening` y se implementó el protocolo de reversión en 1 clic (`supabase/migrations/revert_security_hardening.sql`).
     *   Se sincronizó el 100% de los usuarios de `quirofano.users` (67 cuentas) hacia `auth.users` con contraseñas encriptadas con bcrypt, y se instaló el trigger `trg_sync_user_to_auth` para sincronizaciones automáticas de altas y ediciones.
     *   Se eliminaron todas las políticas permisivas anónimas (`public ALL true`) en `patients`, `surgeries`, `users`, `surgery_documents`, `surgery_forms`, `surgery_materials`, `system_alerts`, `system_errors` y `admin_settings`, activando RLS en `email_notifications` y `tecnico_manual_surgeries`.

@@ -17,7 +17,7 @@ Las tablas principales en el esquema `quirofano` son:
 *   `doctors`: Listado de médicos profesionales.
 *   `operating_rooms`: Quirófanos disponibles. Columna agregada: `is_ambulatory` (boolean, marca si el quirófano está destinado a cirugías ambulatorias de forma predeterminada).
 *   `users`: Tabla personalizada de datos de usuarios autenticados.
-    *   Campos añadidos: `resident_level` (para guardar R1, R2, R3, R4) y `can_view_all_vendors` (para proveedores de ortopedia habilitados a ver cirugías de otras empresas).
+    *   Campos añadidos: `resident_level` (para guardar nivel actual: R1, R2, R3, R4), `resident_level_history` (JSONB, registro histórico de niveles con fechas de vigencia `valid_from`) y `can_view_all_vendors` (para proveedores de ortopedia habilitados a ver cirugías de otras empresas).
 *   `audit_logs`: Tabla inmutable utilizada para registrar cambios críticos de estados, creaciones y eliminaciones (`old` -> `new`).
 
 ## Row Level Security (RLS)
@@ -37,6 +37,17 @@ El RLS está habilitado y es altamente restrictivo en todas las tablas sensibles
 *   **Recálculo de Estadísticas de Camas (`trg_admission_checkout_bed_occupancy`)**: Trigger en `quirofano.hospital_admissions` que se dispara al establecer `check_out` de una internación, recalculando y actualizando las estadísticas de días de cama del procedimiento asociado.
 
 ## Ajustes e Historial SQL
+*   **Protección de Service Role Key con Supabase Vault - Punto 3 (24/08/2026)**:
+    *   Almacenada la `service_role_key` de Supabase cifrada dentro de `vault.decrypted_secrets` (`supabase_vault`).
+    *   Refactorizada la función trigger `quirofano.email_notifications_webhook_custom()` con `SECURITY DEFINER` y lectura dinámica de Vault, eliminando tokens JWT quemados en el código de funciones de PostgreSQL.
+    *   Script de aplicación: `supabase/migrations/apply_point3_webhook_service_role.sql`.
+    *   Script de rollback: `supabase/migrations/revert_point3_webhook_service_role.sql`.
+*   **Protección de Contraseñas y Privacidad de Usuarios - Punto 2 (24/08/2026)**:
+    *   Respaldadas todas las contraseñas previas en la tabla protegida `quirofano.users_password_backup`.
+    *   Enmascarada la columna `password` en `quirofano.users` (`'PROTECTED_BCRYPT'`), desacoplando el almacenamiento de claves en texto claro y confiando 100% en el hashing criptográfico de `auth.users`.
+    *   Trigger `trg_sync_user_to_auth` actualizado para cifrar cualquier nueva contraseña enviada y mantener `quirofano.users.password` enmascarado.
+    *   Script de aplicación: `supabase/migrations/apply_point2_credentials_protection.sql`.
+    *   Script de rollback: `supabase/migrations/revert_point2_credentials_protection.sql`.
 *   **Blindaje de Seguridad RLS y Sincronización Auth (24/08/2026)**:
     *   Sincronización completa de los 67 usuarios de `quirofano.users` hacia `auth.users` con contraseñas encriptadas en bcrypt.
     *   Eliminadas todas las políticas públicas anónimas (`public ALL true`) en `patients`, `surgeries`, `users`, `surgery_documents`, `surgery_forms`, `surgery_form_items`, `surgery_materials`, `system_alerts`, `system_errors` y `admin_settings`.
