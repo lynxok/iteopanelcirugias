@@ -231,8 +231,8 @@ export default function TecnicoPanel() {
         return diff;
     };
 
-    // Obtener IP pública del cliente
-    const fetchClientIp = async () => {
+    // Obtener IP pública del cliente (se ejecuta una sola vez al montar)
+    const fetchClientIp = useCallback(async () => {
         setLoadingIp(true);
         try {
             const res = await fetch('https://api.ipify.org?format=json');
@@ -244,34 +244,93 @@ export default function TecnicoPanel() {
         } finally {
             setLoadingIp(false);
         }
-    };
+    }, []);
 
     const fetchData = useCallback(async () => {
         try {
-            // 1. Obtener todos los técnicos activos asignados a guardias o turno tarde
-            const { data: tecData } = await supabase
-                .from('users')
-                .select('id, name, email, is_turno_tarde, has_tecnico_section_access, does_guardias')
-                .eq('role', 'Tecnico')
-                .eq('active', true);
-            if (tecData) {
-                const filteredTecs = tecData.filter(t => t.does_guardias || t.is_turno_tarde);
+            const monthStr = String(selectedMonth + 1).padStart(2, '0');
+            const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+            const startStr = `${selectedYear}-${monthStr}-01T00:00:00`;
+            const endStr = `${selectedYear}-${monthStr}-${String(lastDayOfMonth).padStart(2, '0')}T23:59:59`;
+            const surgStartStr = `${selectedYear}-${monthStr}-01`;
+            const surgEndStr = `${selectedYear}-${monthStr}-${String(lastDayOfMonth).padStart(2, '0')}`;
+            const periodStr = `${selectedYear}-${monthStr}`;
+
+            // Determinar técnico efectivo a consultar
+            let targetTecnicoId = selectedTecnicoId;
+
+            // 1. Ejecutar consultas en paralelo con Promise.all
+            const [
+                usersRes,
+                ratesRes,
+                onDutyRes,
+                manualSurgeriesRes,
+                surgeriesRes,
+                attendanceRes,
+                consentRes
+            ] = await Promise.all([
+                supabase
+                    .from('users')
+                    .select('id, name, email, is_turno_tarde, has_tecnico_section_access, does_guardias')
+                    .eq('role', 'Tecnico')
+                    .eq('active', true),
+                supabase
+                    .from('tecnico_rates')
+                    .select('*'),
+                supabase
+                    .from('admin_settings')
+                    .select('value')
+                    .eq('key', 'on_duty_tecnicos')
+                    .maybeSingle(),
+                supabase
+                    .from('tecnico_manual_surgeries')
+                    .select('*'),
+                supabase
+                    .from('surgeries')
+                    .select(`
+                        id, 
+                        patient:patients(full_name), 
+                        procedure:procedure_name, 
+                        date:surgery_date, 
+                        actual_start_time, 
+                        actual_end_time
+                    `)
+                    .eq('status', 'completed')
+                    .gte('surgery_date', surgStartStr)
+                    .lte('surgery_date', surgEndStr),
+                targetTecnicoId ? supabase
+                    .from('tecnico_attendance')
+                    .select('*')
+                    .eq('user_id', targetTecnicoId)
+                    .gte('timestamp', startStr)
+                    .lte('timestamp', endStr)
+                    .order('timestamp', { ascending: false }) : Promise.resolve({ data: [] }),
+                targetTecnicoId ? supabase
+                    .from('tecnico_monthly_consents')
+                    .select('*')
+                    .eq('user_id', targetTecnicoId)
+                    .eq('period', periodStr)
+                    .maybeSingle() : Promise.resolve({ data: null })
+            ]);
+
+            // Procesar Técnicos
+            if (usersRes?.data) {
+                const filteredTecs = usersRes.data.filter((t: any) => t.does_guardias || t.is_turno_tarde);
                 setTecnicos(filteredTecs);
-                if (!selectedTecnicoId && filteredTecs.length > 0 && isLevelAdmin) {
-                    setSelectedTecnicoId(filteredTecs[0].id);
+                if (!targetTecnicoId && filteredTecs.length > 0 && isLevelAdmin) {
+                    targetTecnicoId = filteredTecs[0].id;
+                    setSelectedTecnicoId(targetTecnicoId);
                 }
             }
 
-            // 2. Obtener Tarifas
-            const { data: rateData } = await supabase
-                .from('tecnico_rates')
-                .select('*');
-            if (rateData) {
+            // Procesar Tarifas
+            if (ratesRes?.data) {
+                const rateData = ratesRes.data;
                 setRates(rateData);
-                const hr = rateData.find(r => r.rate_type === 'hour')?.value || 0;
-                const gr = rateData.find(r => r.rate_type === 'guard')?.value || 0;
-                const cip = rateData.find(r => r.rate_type === 'clinic_ip')?.practice_code || '';
-                const ne = rateData.find(r => r.rate_type === 'notification_email')?.practice_code || '';
+                const hr = rateData.find((r: any) => r.rate_type === 'hour')?.value || 0;
+                const gr = rateData.find((r: any) => r.rate_type === 'guard')?.value || 0;
+                const cip = rateData.find((r: any) => r.rate_type === 'clinic_ip')?.practice_code || '';
+                const ne = rateData.find((r: any) => r.rate_type === 'notification_email')?.practice_code || '';
                 setHourRate(hr);
                 setGuardRate(gr);
                 setClinicIp(cip);
@@ -280,65 +339,45 @@ export default function TecnicoPanel() {
                 setInputNotificationEmail(ne);
             }
 
-            // 3. Configuración de guardias semanales de técnicos
-            const { data: onDutyData } = await supabase
-                .from('admin_settings')
-                .select('value')
-                .eq('key', 'on_duty_tecnicos')
-                .maybeSingle();
-            if (onDutyData?.value) {
-                setOnDutyTecnicosConfig(JSON.parse(onDutyData.value));
+            // Procesar Configuración de Guardias
+            if (onDutyRes?.data?.value) {
+                try {
+                    setOnDutyTecnicosConfig(JSON.parse(onDutyRes.data.value));
+                } catch {
+                    setOnDutyTecnicosConfig({});
+                }
             }
 
-            // 4. Cargar Fichadas del mes seleccionado para el técnico bajo consulta
-            if (selectedTecnicoId) {
-                const monthStr = String(selectedMonth + 1).padStart(2, '0');
-                const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-                const startStr = `${selectedYear}-${monthStr}-01T00:00:00`;
-                const endStr = `${selectedYear}-${monthStr}-${String(lastDayOfMonth).padStart(2, '0')}T23:59:59`;
-
-                const { data: attData } = await supabase
-                    .from('tecnico_attendance')
-                    .select('*')
-                    .eq('user_id', selectedTecnicoId)
-                    .gte('timestamp', startStr)
-                    .lte('timestamp', endStr)
-                    .order('timestamp', { ascending: false });
-                if (attData) setAttendanceLogs(attData);
-
-                // Cargar Consentimiento del período
-                const periodStr = `${selectedYear}-${monthStr}`;
-                const { data: conData } = await supabase
-                    .from('tecnico_monthly_consents')
-                    .select('*')
-                    .eq('user_id', selectedTecnicoId)
-                    .eq('period', periodStr)
-                    .maybeSingle();
-                setCurrentConsent(conData || null);
+            // Procesar Cirugías Manuales
+            if (manualSurgeriesRes?.data) {
+                const allManData = manualSurgeriesRes.data;
+                setAllManualSurgeries(allManData);
+                if (targetTecnicoId) {
+                    setManualSurgeryIds(allManData.filter((m: any) => m.user_id === targetTecnicoId).map((m: any) => m.surgery_id));
+                } else {
+                    setManualSurgeryIds([]);
+                }
+            } else {
+                setAllManualSurgeries([]);
+                setManualSurgeryIds([]);
             }
 
-            // 5. Cargar Cirugías completadas del mes
-            const monthStr = String(selectedMonth + 1).padStart(2, '0');
-            const lastDay = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-            const surgStartStr = `${selectedYear}-${monthStr}-01`;
-            const surgEndStr = `${selectedYear}-${monthStr}-${String(lastDay).padStart(2, '0')}`;
+            // Procesar Asistencia / Fichadas (Unificado: resuelve mes, cálculo y fichadas de hoy en 1 sola consulta)
+            const attLogs: Attendance[] = (attendanceRes?.data as Attendance[]) || [];
+            setAttendanceLogs(attLogs);
+            setAllMonthAttendance(attLogs);
 
-            const { data: rawSurgData } = await supabase
-                .from('surgeries')
-                .select(`
-                    id, 
-                    patient:patients(full_name), 
-                    procedure:procedure_name, 
-                    date:surgery_date, 
-                    actual_start_time, 
-                    actual_end_time
-                `)
-                .eq('status', 'completed')
-                .gte('surgery_date', surgStartStr)
-                .lte('surgery_date', surgEndStr);
+            const todayStr = new Date().toDateString();
+            const todayLogs = attLogs.filter((log: Attendance) => new Date(log.timestamp).toDateString() === todayStr);
+            setTodayUserLogs(todayLogs);
 
+            // Procesar Consentimiento
+            setCurrentConsent((consentRes?.data as Consent) || null);
+
+            // Procesar Cirugías + Fichas Técnicas
+            const rawSurgData = surgeriesRes?.data;
             if (rawSurgData && rawSurgData.length > 0) {
-                const surgeryIds = rawSurgData.map(s => s.id);
+                const surgeryIds = rawSurgData.map((s: any) => s.id);
                 const { data: formsData } = await supabase
                     .from('surgery_forms')
                     .select('surgery_id, instrumentadora')
@@ -346,14 +385,14 @@ export default function TecnicoPanel() {
 
                 const formsMap = new Map<string, string>();
                 if (formsData) {
-                    formsData.forEach(f => {
+                    formsData.forEach((f: any) => {
                         if (f.surgery_id && f.instrumentadora) {
                             formsMap.set(f.surgery_id, f.instrumentadora);
                         }
                     });
                 }
 
-                const mergedSurgData = rawSurgData.map(s => ({
+                const mergedSurgData = rawSurgData.map((s: any) => ({
                     ...s,
                     surgery_forms: { instrumentadora: formsMap.get(s.id) || null }
                 }));
@@ -363,60 +402,18 @@ export default function TecnicoPanel() {
                 setSurgeries([]);
             }
 
-            // 5.b Cargar Mapeo de Cirugías Manuales y Asistencia del Mes
-            const { data: allManData } = await supabase
-                .from('tecnico_manual_surgeries')
-                .select('*');
-            if (allManData) {
-                setAllManualSurgeries(allManData);
-                if (selectedTecnicoId) {
-                    setManualSurgeryIds(allManData.filter(m => m.user_id === selectedTecnicoId).map(m => m.surgery_id));
-                }
-            } else {
-                setAllManualSurgeries([]);
-                setManualSurgeryIds([]);
-            }
-
-            if (selectedTecnicoId) {
-                const monthStr = String(selectedMonth + 1).padStart(2, '0');
-                const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-                const startStr = `${selectedYear}-${monthStr}-01T00:00:00`;
-                const endStr = `${selectedYear}-${monthStr}-${String(lastDayOfMonth).padStart(2, '0')}T23:59:59`;
-
-                const { data: monthAttData } = await supabase
-                    .from('tecnico_attendance')
-                    .select('*')
-                    .eq('user_id', selectedTecnicoId)
-                    .gte('timestamp', startStr)
-                    .lte('timestamp', endStr);
-                if (monthAttData) setAllMonthAttendance(monthAttData);
-                else setAllMonthAttendance([]);
-            }
-
-            // 6. Cargar fichadas de hoy del técnico seleccionado
-            if (selectedTecnicoId) {
-                const { data: userLogs } = await supabase
-                    .from('tecnico_attendance')
-                    .select('*')
-                    .eq('user_id', selectedTecnicoId)
-                    .order('timestamp', { ascending: false })
-                    .limit(20);
-                if (userLogs) {
-                    const todayStr = new Date().toDateString();
-                    const filtered = userLogs.filter(log => new Date(log.timestamp).toDateString() === todayStr);
-                    setTodayUserLogs(filtered);
-                } else {
-                    setTodayUserLogs([]);
-                }
-            }
-
         } catch (err) {
             console.error('Error fetching TecnicoPanel data:', err);
         }
-    }, [selectedYear, selectedMonth, selectedTecnicoId, isLevelAdmin, user]);
+    }, [selectedYear, selectedMonth, selectedTecnicoId, isLevelAdmin]);
 
+    // Obtener IP una sola vez al montar
     useEffect(() => {
         fetchClientIp();
+    }, [fetchClientIp]);
+
+    // Cargar datos al cambiar filtros
+    useEffect(() => {
         fetchData();
     }, [fetchData]);
 

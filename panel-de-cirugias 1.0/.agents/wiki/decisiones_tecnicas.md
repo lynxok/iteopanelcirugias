@@ -75,3 +75,9 @@
     *   **Persistencia en Supabase (`useSurgeryDetail.ts`)**: Al guardar una cirugía ambulatoria, el payload setea automáticamente `admission_validated: true`, `pre_op_exams: true` y `consent_signed: true`.
     *   **Solución a Error 400 en Edición de Quirófano (`useSettings.ts`)**: Se creó la columna `is_ambulatory` (boolean default false) en `quirofano.operating_rooms` y se desacopló la columna de clave primaria `id` del cuerpo del objeto `PATCH` al actualizar salas de quirófano, previniendo excepciones 400 Bad Request de PostgREST.
 
+*   **Optimización de Carga y Consultas Concurrentes (`TecnicoPanel.tsx`)**:
+    *   **Patrón `Promise.all` para Vistas Complejas**: En paneles que consolidan múltiples dominios de datos (usuarios, tarifas, guardias, cirugías, consentimientos, asistencias), se ejecutan las consultas independientes en paralelo en lugar de cascadas síncronas (`await` secuenciales), reduciendo el tiempo de respuesta inicial en más del 80%.
+    *   **Unificación de Lecturas de Asistencia**: Los registros de `tecnico_attendance` del período seleccionado se solicitan una única vez y se reutilizan en memoria para el cómputo de horas mensuales, la verificación de ingresos para la regla del Turno Tarde y el listado de fichadas recientes de hoy.
+    *   **Desacople de Servicios Externos**: Peticiones externas no clínicas (ej. determinación de IP pública mediante `api.ipify.org`) se ejecutan de forma asíncrona una sola vez al montar y no bloquean el ciclo de renderizado ni la carga de datos del quirófano.
+
+

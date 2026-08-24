@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v3.10.103 (2026-08-24)
+- **Rendimiento y Menú Lateral**:
+    - **Ocultamiento de Centro de Alertas**: Removida la sección y botón de "Centro de Alertas" del menú lateral principal para optimizar la interfaz y evitar elementos en desuso.
+    - **Optimización de Consultas en Red y Base de Datos**: Desactivado el polling cíclico (`fetchAlertCount` cada 60s) en el componente `Sidebar`, reduciendo significativamente la carga de consultas sobre `system_alerts` en Supabase y mejorando la fluidez del cliente.
+
 ## v3.10.102 (2026-08-20)
 - **Módulo Facturación (Filtros e Impresión Formal)**:
     - **Filtro por Fecha AOTER (FE AOTER)**: Incorporado el selector de rango de fechas *Desde* y *Hasta* para filtrar sobre `fe_aoter` en la pestaña Planilla de [Billing.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Billing.tsx), con soporte reactivo y combinable con fechas de práctica y facturación.
