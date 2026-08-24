@@ -210,9 +210,6 @@ ipcMain.on('restart-app', () => {
     autoUpdater.quitAndInstall();
 });
 
-// Forzar ignorar errores de certificado SSL para el actualizador
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 // Manejo de actualizaciones manuales desde la UI
 ipcMain.handle('check-for-updates', async () => {
     if (app.isPackaged) {
