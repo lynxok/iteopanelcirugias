@@ -71,6 +71,7 @@ Para garantizar la estabilidad hospitalaria durante las auditorías de seguridad
 *   **Fase 2: Privacidad de Contraseñas y Desacople (Rama `security/credentials-and-passwords-protection`) - [COMPLETADO]**:
     *   Respaldo de contraseñas previas en la tabla protegida `quirofano.users_password_backup` con RLS restringido a SuperAdmin/Dirección.
     *   Enmascaramiento de la columna `password` en `quirofano.users` (`'PROTECTED_BCRYPT'`).
+    *   Sincronización hacia `auth.users` y `auth.identities` asegurando consistencia de `id = user_id` para GoTrue email provider.
     *   Migración de cambio de credenciales en `Sidebar.tsx` a las APIs criptográficas nativas de Supabase Auth.
     *   Rollback: `supabase/migrations/revert_point2_credentials_protection.sql`.
 

@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.105 (2026-08-25)
+- **Navegación Móvil en Ajustes (Panel de Control)**:
+    * **Patrón Maestro-Detalle Adaptativo**: En dispositivos móviles, la pantalla de Ajustes ahora muestra un menú limpio de categorías con indicadores (`chevron_right`). Al seleccionar cualquier opción (Usuarios, Médicos, Medicamentos, Formularios, etc.), se oculta el menú lateral y se muestra la sección a pantalla completa.
+    * **Barra de Retorno Superior**: Agregada una barra superior en móvil con el botón **`← Menú de Ajustes`** y el nombre de la sección activa para regresar inmediatamente al listado de opciones sin perder el estado.
+    * **Vista de Escritorio Intacta**: Se mantiene el diseño de dos columnas (menú lateral a la izquierda y panel de contenido a la derecha) en pantallas de escritorio.
+
 ## v3.10.104 (2026-08-24)
 - **Guardias de Residentes y Control de Categorías**:
     * **Vigencia Histórica de Niveles de Residencia**: Los ascensos o cambios de categoría (ej: de R1 a R2 en agosto) ahora se calculan exclusivamente a partir del mes de vigencia seleccionado hacia adelante, conservando intactas las metas y cumplimientos de los meses anteriores.

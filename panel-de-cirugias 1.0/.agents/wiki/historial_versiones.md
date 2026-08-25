@@ -4,6 +4,10 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.105 [2026-08-25]**: Lanzada la versión **v3.10.105**.
+    *   **Navegación Móvil en Ajustes (Panel de Control)**: Implementado patrón Maestro-Detalle responsivo en [Settings.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Settings.tsx). En pantallas móviles, al seleccionar una categoría del menú de configuración, se oculta la lista y se expande el contenido a pantalla completa con un botón superior para volver al menú.
+*   **v3.10.104 [2026-08-24]**: Lanzada la versión **v3.10.104**.
+    *   **Vigencia Histórica de Niveles de Residencia y Guardias**: Se introdujo el cálculo dinámico de metas y cumplimientos de guardias según el nivel de residencia histórico del mes en [ResidentShifts.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResidentShifts.tsx) y el selector de vigencia en [UserModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/modals/UserModal.tsx).
 *   **v3.10.103 [2026-08-24]**: Lanzada la versión **v3.10.103**.
     *   **Ocultamiento de Centro de Alertas y Optimización de Polling**: Removido el acceso directo a "Centro de Alertas" en [Sidebar.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/Sidebar.tsx) y en las rutas de redirección de [App.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/App.tsx). Desactivado el polling de conteo periódico a Supabase cada 60 segundos, disminuyendo carga en base de datos y consumo de recursos.
 *   **v3.10.102 [2026-08-20]**: Lanzada la versión **v3.10.102**.
