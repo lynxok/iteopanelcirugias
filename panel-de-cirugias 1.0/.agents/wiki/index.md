@@ -18,6 +18,12 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-08-25]`: **Blindaje Anti-Caché y Auto-Actualización Web/PWA en iPhone / Safari (v3.10.106)**:
+    *   Se agregaron cabeceras anti-caché (`Cache-Control: no-cache, no-store, must-revalidate`, `Pragma: no-cache`, `Expires: 0`) en [index.html](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/index.html) para evitar que iOS mantenga versiones obsoletas en Home Screen / PWA.
+    *   Se implementó el detector inteligente en segundo plano en [UpdateNotification.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/UpdateNotification.tsx) que consulta nuevos hashes de compilación al reanudar (`visibilitychange`) o cada 5 min, mostrando un banner flotante interactivo (*"¡Nueva versión disponible! [Actualizar]"*).
+    *   Se integraron botones de recarga limpia de caché en la barra superior móvil de [App.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/App.tsx) y en el perfil de [Sidebar.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/Sidebar.tsx).
+*   `[2026-08-25]`: **Navegación Móvil Responsiva en Ajustes / Panel de Control (v3.10.105)**:
+    *   Se implementó el patrón Maestro-Detalle responsivo en [Settings.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Settings.tsx), permitiendo que en pantallas móviles el menú lateral se oculte al seleccionar una categoría y el contenido se expanda al 100% de la pantalla con una barra superior y botón de retorno **`← Menú de Ajustes`**.
 *   `[2026-08-24]`: **Cálculo Histórico y Vigencia Temporal de Niveles de Residentes (`quirofano.users.resident_level_history`)**:
     *   Se agregó la columna `resident_level_history` (JSONB) en `quirofano.users` para registrar el historial cronológico de promociones con fechas de vigencia mensual (`valid_from`).
     *   Se implementó la función auxiliar `getResidentLevelForDate` en `types.ts` para determinar con precisión el nivel que correspondía a un residente en el mes específico consultado.
