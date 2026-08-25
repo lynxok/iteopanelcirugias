@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.106 (2026-08-25)
+- **Soporte Anti-Caché y Actualización Automática en iPhone / Web / PWA**:
+    * **Cabeceras Anti-Caché en HTML**: Incorporados meta tags `Cache-Control: no-cache, no-store, must-revalidate`, `Pragma: no-cache` y `Expires: 0` en [index.html](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/index.html), impidiendo que Safari / iOS mantenga versiones obsoletas al abrir la app desde la pantalla de inicio.
+    * **Detector Automático de Versión Web**: En [UpdateNotification.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/UpdateNotification.tsx), se implementó un detector en segundo plano que consulta los hashes del servidor al iniciar, periódicamente (cada 5 min) y al reanudar la app (`visibilitychange`), mostrando un banner interactivo *"¡Nueva versión disponible! [Actualizar]"*.
+    * **Botones de Recarga Limpia**: Añadido botón de refresco rápido (`refresh`) en la barra superior móvil de [App.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/App.tsx) y botón *"Recargar / Actualizar App"* en el modal de perfil de [Sidebar.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/Sidebar.tsx) que vacía cachés locales y recarga limpiamente.
+
 ## v3.10.105 (2026-08-25)
 - **Navegación Móvil en Ajustes (Panel de Control)**:
     * **Patrón Maestro-Detalle Adaptativo**: En dispositivos móviles, la pantalla de Ajustes ahora muestra un menú limpio de categorías con indicadores (`chevron_right`). Al seleccionar cualquier opción (Usuarios, Médicos, Medicamentos, Formularios, etc.), se oculta el menú lateral y se muestra la sección a pantalla completa.
