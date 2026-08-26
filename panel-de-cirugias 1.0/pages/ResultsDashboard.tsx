@@ -243,7 +243,11 @@ const ResultsDashboard: React.FC = () => {
         successRate: '0%',
         suspensionRate: '0%',
         avgOccupancy: '0%',
-        totalPeriod: 0
+        totalPeriod: 0,
+        effectiveExpected: 0,
+        activeScheduledCount: 0,
+        suspendedCount: 0,
+        cancelledCount: 0
     });
     const [predictiveStats, setPredictiveStats] = useState<{
         topDeviations: { name: string, avg: number, max: number, count: number, doctors: any[], avg_total_time?: number, code?: string, relatedCodes?: string[] }[],
@@ -542,8 +546,13 @@ const ResultsDashboard: React.FC = () => {
         });
 
         const total = filteredSurgeries.length;
-        const completedCount = filteredSurgeries.filter((s: any) => s.status === 'completed').length;
+        const completedList = filteredSurgeries.filter((s: any) => s.status === 'completed');
+        const completedCount = completedList.length;
         const suspendedCount = filteredSurgeries.filter((s: any) => s.status === 'suspended').length;
+        const cancelledCount = filteredSurgeries.filter((s: any) => s.status === 'cancelled').length;
+        const activeScheduledList = filteredSurgeries.filter((s: any) => s.status !== 'completed' && s.status !== 'suspended' && s.status !== 'cancelled');
+        const effectiveExpectedList = filteredSurgeries.filter((s: any) => s.status !== 'suspended' && s.status !== 'cancelled');
+        const effectiveExpectedCount = effectiveExpectedList.length;
         const suspRate = total > 0 ? ((suspendedCount / total) * 100).toFixed(1) : '0';
         const succRate = total > 0 ? ((completedCount / total) * 100).toFixed(1) : '0';
 
@@ -573,7 +582,11 @@ const ResultsDashboard: React.FC = () => {
             successRate: `${succRate}%`,
             suspensionRate: `${suspRate}%`,
             avgOccupancy: `${avgOcc}%`,
-            totalPeriod: total
+            totalPeriod: total,
+            effectiveExpected: effectiveExpectedCount,
+            activeScheduledCount: activeScheduledList.length,
+            suspendedCount: suspendedCount,
+            cancelledCount: cancelledCount
         };
     }, [rawSurgeries, rawOrs, rawAdmissions, period, referenceDate, globalCustomRange, holidays]);
 
@@ -1452,13 +1465,14 @@ const ResultsDashboard: React.FC = () => {
                         </div>
 
                         {(() => {
-                            const diffCount = Math.max(0, Number(stats.totalPeriod) - Number(stats.totalCompleted));
-                            const effectiveCount = stats.effectiveExpected ?? (Number(stats.totalPeriod) - (stats.suspendedCount || 0) - (stats.cancelledCount || 0));
+                            const activeStats = card1Data?.stats || stats;
+                            const diffCount = Math.max(0, Number(activeStats.totalPeriod) - Number(activeStats.totalCompleted));
+                            const effectiveCount = activeStats.effectiveExpected ?? (Number(activeStats.totalPeriod) - (activeStats.suspendedCount || 0) - (activeStats.cancelledCount || 0));
                             return (
                                 <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 text-center border-t border-slate-100 pt-4">
                                     <div className="p-2">
                                         <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Ocupación Promedio</p>
-                                        <p className="font-black text-slate-900 text-lg">{stats.avgOccupancy}</p>
+                                        <p className="font-black text-slate-900 text-lg">{activeStats.avgOccupancy}</p>
                                     </div>
                                     <div 
                                         onClick={() => {
@@ -1472,7 +1486,7 @@ const ResultsDashboard: React.FC = () => {
                                             Cirugías Realizadas
                                             <span className="material-symbols-outlined text-[13px] opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
                                         </p>
-                                        <p className="font-black text-emerald-600 text-lg">{stats.totalCompleted}</p>
+                                        <p className="font-black text-emerald-600 text-lg">{activeStats.totalCompleted}</p>
                                         <span className="text-[9px] text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity leading-none mt-0.5">Ver listado</span>
                                     </div>
                                     <div 
@@ -1487,7 +1501,7 @@ const ResultsDashboard: React.FC = () => {
                                             Cirugías Programadas
                                             <span className="material-symbols-outlined text-[13px] opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
                                         </p>
-                                        <p className="font-black text-indigo-600 text-lg">{stats.totalPeriod}</p>
+                                        <p className="font-black text-indigo-600 text-lg">{activeStats.totalPeriod}</p>
                                         {diffCount > 0 ? (
                                             <button
                                                 type="button"
@@ -1520,7 +1534,7 @@ const ResultsDashboard: React.FC = () => {
                                         </p>
                                         <p className="font-black text-sky-600 text-lg">{effectiveCount}</p>
                                         <span className="text-[9px] text-sky-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity leading-none mt-0.5 whitespace-nowrap">
-                                            {stats.totalCompleted} real + {stats.activeScheduledCount || 0} agenda
+                                            {activeStats.totalCompleted} real + {activeStats.activeScheduledCount || 0} agenda
                                         </span>
                                     </div>
                                     <div className="p-2">

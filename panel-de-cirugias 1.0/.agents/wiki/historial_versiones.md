@@ -4,6 +4,8 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.110 [2026-08-26]**: Lanzada la versión **v3.10.110**.
+    *   **Corrección de Sincronización en Efectivas Esperadas**: Ajustada la alimentación de datos en la tarjeta de Volumen de [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx) (`activeStats`), sincronizando `globalStats` y `card1Data.stats` para restar correctamente las suspendidas/canceladas sobre el total de programadas (ej. 104 - 9 suspendidas = 95 efectivas esperadas).
 *   **v3.10.109 [2026-08-26]**: Lanzada la versión **v3.10.109**.
     *   **Métrica y Desglose de Efectivas Esperadas**: Incorporado en [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx) el indicador "Efectivas Esperadas" (suma de realizadas + programadas vigentes en agenda, excluyendo suspendidas y canceladas), con subtexto de desglose inmediato, apertura interactiva del modal en pestaña dedicada y exportación a Excel.
 *   **v3.10.108 [2026-08-26]**: Lanzada la versión **v3.10.108**.

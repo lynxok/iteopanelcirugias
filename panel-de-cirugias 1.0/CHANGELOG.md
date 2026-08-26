@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v3.10.110 (2026-08-26)
+- **Dashboard de Resultados (Sincronización Reactiva de Efectivas Esperadas)**:
+    * **Corrección de Fuente de Datos**: Corregido el cálculo reactivo de la tarjeta de Volumen Quirúrgico en [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx) para consumir directamente `card1Data.stats` y sincronizar `globalStats`, garantizando que **Efectivas Esperadas** refleje fielmente el valor de cirugías reales + programadas vigentes (restando con precisión las suspendidas, ej. 104 programadas - 9 suspendidas = 95 efectivas esperadas).
+
 ## v3.10.109 (2026-08-26)
 - **Dashboard de Resultados (Métrica y Drill-Down de Cirugías Efectivas Esperadas)**:
     * **Indicador "Efectivas Esperadas"**: Incorporada una nueva métrica gerencial en la tarjeta de Volumen Quirúrgico en [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx), que computa con exactitud la suma de cirugías *Realizadas* (`completed`) + cirugías *Programadas activas en agenda* (`scheduled`), excluyendo las suspendidas y canceladas.
