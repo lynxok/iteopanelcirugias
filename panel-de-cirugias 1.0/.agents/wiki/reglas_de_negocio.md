@@ -50,6 +50,17 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     *   **Auto-Completado de Cirugías Ambulatorias (Exclusivo Ambulatorias)**: El controlador de segundo plano (`AmbulatoryAutoCompleter`) verifica periódicamente y autocompleta (`status = 'completed'`) todas las cirugías pasadas (`surgery_date < fecha_actual`) que sean **estrictamente ambulatorias** (`is_ambulatory = true` o asignadas a quirófano ambulatorio) y que no hayan sido marcadas previamente como canceladas o suspendidas.
     *   **Auto-Completado por Alta Cruzada**: Una cirugía se considera finalizada si el paciente registra un alta de internación (`hospital_admissions.check_out` no nulo) en un rango de ±2 días sobre la fecha de la cirugía, siempre y cuando la cirugía cuente con un horario de inicio real en quirófano (`actual_start_time`). Esto previene completados prematuros de cirugías futuras si la cama se desocupa antes de tiempo.
 
+### Métricas del Dashboard de Resultados (Volumen y Eficiencia)
+*   **Cirugías Programadas**: Total de cirugías agendadas dentro del intervalo de tiempo evaluado (`totalPeriod`).
+*   **Cirugías Realizadas**: Cirugías con estado `completed` o que cuenten con horario real de finalización (`actual_end_time`) o alta cruzada de internación (`totalCompleted`).
+*   **Diferencia (`Δ sin completar`)**: Cantidad de cirugías programadas que no se han realizado a la fecha (`totalPeriod - totalCompleted`). Al hacer clic, el modal desglosa cuántas fueron canceladas o suspendidas (con su motivo registrado) y cuántas continúan pendientes en agenda.
+*   **Efectivas Esperadas**: Métrica gerencial para proyectar el volumen total de cirugías concretadas al cierre del período:
+    $$\text{Efectivas Esperadas} = \text{Programadas Totales} - \text{Suspendidas} - \text{Canceladas} = \text{Realizadas} + \text{Programadas vigentes en agenda}$$
+    *Subtexto interactivo*: Desglosa en tiempo real `{X} real + {Y} agenda` y permite aislar el listado en pestaña dedicada con exportación a Excel `.xlsx`.
+*   **Comportamiento de Selección Temporal**:
+    *   Al alternar entre *Esta Semana*, *Este Mes*, *Este Trimestre* o *Este Año*, la fecha de referencia se restablece automáticamente a la fecha en curso (`new Date()`).
+    *   *Este Trimestre* computa una ventana móvil de los últimos 3 meses respecto a hoy (`subMonths(new Date(), 2)` hasta fin de mes actual), garantizando que muestre los 3 meses en curso sin arrastrar selecciones históricas de los gráficos.
+
 ## Gestión de Alertas Críticas
 
 ### Alertas de Autorización Faltante
