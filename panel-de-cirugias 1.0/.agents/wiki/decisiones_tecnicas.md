@@ -119,22 +119,32 @@ Para garantizar la estabilidad hospitalaria durante las auditorías de seguridad
 
 ### Protocolo de Pruebas Aisladas y Rollback Rápido (Volver Atrás)
 
-Para cambios experimentales de arquitectura o UX que requieran validación previa antes de fusionarse a producción:
-1. **Rama de Aislamiento Activa**: `feature/resilient-network-cache`
+Para cambios experimentales de arquitectura, seguridad o UX que requieran validación previa antes de fusionarse a producción:
+
+1. **Rama de Aislamiento Activa para Seguridad**: `security/rbac-frontend-route-protection`
+   * **Tag de Respaldo Inmutable**: `backup-pre-security-p5`
+   * **Alcance**: Protección de rutas sensibles en `App.tsx` (`RoleProtectedRoute`), control de acceso por roles y prevención de navegación manual no autorizada.
+   * **Instrucciones para Descartar / Volver Atrás (Rollback 100%)**:
+     Si se solicita revertir o descartar estos cambios inmediatamente:
+     ```bash
+     git checkout main
+     git branch -D security/rbac-frontend-route-protection
+     ```
+   * **Instrucciones para Fusionar a Producción**:
+     Tras validación y aprobación final:
+     ```bash
+     git checkout main
+     git merge security/rbac-frontend-route-protection
+     ```
+
+2. **Rama de Aislamiento Activa para Red**: `feature/resilient-network-cache`
    * Módulo de monitoreo pasivo de red: `useNetworkStatus.ts`
    * Banner de alerta y reconexión: `NetworkStatusBanner.tsx`
    * Caché en memoria no bloqueante con TTL: `memoryCache.ts`
-2. **Instrucciones para Descartar / Volver Atrás (Rollback 100%)**:
-   Si se solicita revertir o descartar estos cambios, ejecutar:
-   ```bash
-   git checkout main
-   git branch -D feature/resilient-network-cache
-   ```
-3. **Instrucciones para Aprobar y Fusionar a Producción**:
-   Si los cambios son aprobados por el usuario:
-   ```bash
-   git checkout main
-   git merge feature/resilient-network-cache
-   ```
+   * **Instrucciones para Descartar / Volver Atrás (Rollback 100%)**:
+     ```bash
+     git checkout main
+     git branch -D feature/resilient-network-cache
+     ```
 
 
