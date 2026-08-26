@@ -18,6 +18,10 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-08-26]`: **Enriquecimiento de Tarjetas de Auditoría y Búsqueda Clínica (v3.10.107)**:
+    *   En [Audit.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Audit.tsx), se implementó la resolución automática en lote de recursos auditados (`surgeries` y `patients`) para asociar e inyectar el **Nombre y Apellido del Paciente**, su **DNI** y la **Práctica Quirúrgica**.
+    *   Se diseñó una insignia visual integrada en cada tarjeta de auditoría que identifica de inmediato al paciente y la práctica sin requerir consultar tablas externas ni UUIDs técnicos.
+    *   Se actualizó la exportación CSV del módulo de auditoría incorporando las columnas explícitas `Paciente`, `DNI` y `Practica`.
 *   `[2026-08-25]`: **Blindaje Anti-Caché y Auto-Actualización Web/PWA en iPhone / Safari (v3.10.106)**:
     *   Se agregaron cabeceras anti-caché (`Cache-Control: no-cache, no-store, must-revalidate`, `Pragma: no-cache`, `Expires: 0`) en [index.html](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/index.html) para evitar que iOS mantenga versiones obsoletas en Home Screen / PWA.
     *   Se implementó el detector inteligente en segundo plano en [UpdateNotification.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/UpdateNotification.tsx) que consulta nuevos hashes de compilación al reanudar (`visibilitychange`) o cada 5 min, mostrando un banner flotante interactivo (*"¡Nueva versión disponible! [Actualizar]"*).
