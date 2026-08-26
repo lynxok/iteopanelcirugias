@@ -117,6 +117,17 @@ Para garantizar la estabilidad hospitalaria durante las auditorías de seguridad
     *   **Unificación de Lecturas de Asistencia**: Los registros de `tecnico_attendance` del período seleccionado se solicitan una única vez y se reutilizan en memoria para el cómputo de horas mensuales, la verificación de ingresos para la regla del Turno Tarde y el listado de fichadas recientes de hoy.
     *   **Desacople de Servicios Externos**: Peticiones externas no clínicas (ej. determinación de IP pública mediante `api.ipify.org`) se ejecutan de forma asíncrona una sola vez al montar y no bloquean el ciclo de renderizado ni la carga de datos del quirófano.
 
+*   **Blindaje de Rutas por Roles (RBAC en Frontend - Punto 5)**:
+    *   **Envoltorio `RoleProtectedRoute` (`components/RoleProtectedRoute.tsx`)**: Cada ruta de la aplicación se encuentra encapsulada validando de forma reactiva la sesión de Supabase y los permisos asignados en `admin_settings` / `LEGACY_PERMISSIONS`.
+    *   **Prevención de Navegación Manual Maliciosa**: Si un usuario con rol auxiliar (ej. `Mucama`, `Residente`, `Proveedor`) ingresa manualmente rutas sensibles como `/#/billing`, `/#/audit` o `/#/settings`, el router rechaza el acceso y redirige limpiamente a `/` (donde `HomeRedirect` lo posiciona en su primera vista operativa autorizada).
+    *   **Caché de Permisos en Memoria (`src/lib/useRolePermissions.ts`)**: Se implementó un singleton a nivel módulo que carga la matriz de permisos de roles una única vez por sesión, evitando consultas redundantes a la base de datos en cada navegación.
+    *   **Pase Libre de Dirección**: Roles `SuperAdmin` y `Direccion` conservan acceso irrestricto inmediato sin latencia.
+    *   **Protección de Exportación de Auditoría (`Audit.tsx`)**: El botón `Exportar CSV` se condiciona para mostrarse exclusivamente a roles administrativos y de auditoría.
+
+*   **Sanitización de IPC Handlers en Electron contra Path Traversal (Punto 4)**:
+    *   **Función `isPathSafe` en `main.cjs`**: Valida que las rutas recibidas desde el Renderer (`obs:rename-video`, `obs:get-screenshot-path`, `obs:save-screenshot`) no contengan secuencias de escalamiento (`..`), caracteres nulos ni intenten escribir en directorios críticos del sistema operativo (`C:\Windows`).
+    *   **Restricción de Extensiones**: `obs:save-screenshot` valida de forma estricta que la extensión sea de imagen permitida (`.png`, `.jpg`, `.jpeg`, `.webp`), previniendo la inyección de ejecutables.
+
 ### Protocolo de Pruebas Aisladas y Rollback Rápido (Volver Atrás)
 
 Para cambios experimentales de arquitectura, seguridad o UX que requieran validación previa antes de fusionarse a producción:
