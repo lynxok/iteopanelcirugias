@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v3.10.112 (2026-08-26)
+- **Calendario Quirúrgico (Optimizaciones y Correcciones en Vista Diaria)**:
+    * **Prioridad y Selección por Defecto de Quirófano 1**: Al acceder a la vista diaria del calendario, el sistema selecciona y despliega automáticamente las cirugías de **Quirófano 1 (General)** en lugar de Ambulatoria. Las pestañas de quirófanos se ordenan priorizando Quirófano 1 y quirófanos centrales, ubicando Ambulatoria al final.
+    * **Corrección de Colisión y Superposición en Tarjetas Simultáneas**: Subsanado el cálculo de solapamiento de columnas en `DayView` ([Calendar.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Calendar.tsx)), asegurando que cirugías con finalización anterior o simultánea no se superpongan en la misma columna y se desplieguen limpiamente en paralelo con separación de margen.
+    * **Blindaje de Controles de Reordenamiento**: Se ocultaron las flechas de reordenar en cirugías con estado *Realizada* o *Suspendida*, se añadió diálogo de confirmación antes de desplazar la secuencia horaria para evitar clics accidentales, se deshabilitaron los extremos y se acotó la altura de los botones a un tamaño proporcionado.
+    * **Contexto en "+ Agendar"**: Al hacer clic en un horario vacío de la grilla diaria, el modal de agendamiento preselecciona automáticamente el quirófano que se está visualizando activamente.
+    * **Línea de Hora Actual y Grilla Dinámica**: Incorporada la línea indicadora de tiempo actual en tiempo real para el día de hoy y cálculo dinámico de horas para evitar desbordes en cirugías de guardia tempranas (< 07:00) o nocturnas (> 19:00).
+
 ## v3.10.111 (2026-08-26)
 - **Dashboard de Resultados (Reseteo de Referencia en Selector de Períodos)**:
     * **Reseteo Automático a Fecha Actual**: Al alternar entre *Esta Semana*, *Este Mes*, *Este Trimestre* o *Este Año*, el sistema restablece de inmediato la fecha de referencia a la fecha en curso (`new Date()`). Esto evita arrastrar meses históricos seleccionados en drill-downs previos del gráfico, asegurando que *"Este Trimestre"* despliegue siempre los últimos 3 meses móviles respecto a hoy (**junio, julio, agosto**).

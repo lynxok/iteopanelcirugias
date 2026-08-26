@@ -4,6 +4,10 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.112 [2026-08-26]**: Lanzada la versión **v3.10.112**.
+    *   **Prioridad a Quirófano 1 en Vista Diaria del Calendario**: En [Calendar.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Calendar.tsx), se preselecciona automáticamente el Quirófano 1 (General) al ingresar a la vista diaria y se ordenan las pestañas priorizando quirófanos centrales antes de salas ambulatorias.
+    *   **Solución a Colisiones y Superposición en Tarjetas Simultáneas**: Corregida la condición de asignación de columnas en `DayView` para evitar que cirugías superpuestas en horario se monten directamente una sobre la otra haciéndose invisibles.
+    *   **Blindaje de Controles de Reordenamiento**: Se eliminaron las flechas de reordenar de cirugías finalizadas/suspendidas y se añadió cuadro de confirmación previo a la reprogramación horaria en lote. Se preserva el quirófano activo al abrir el modal "+ Agendar" y se integró la línea de hora actual.
 *   **v3.10.111 [2026-08-26]**: Lanzada la versión **v3.10.111**.
     *   **Reseteo de Referencia en Selector de Períodos de Resultados**: En [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx), al seleccionar cualquier período predefinido (*Esta Semana*, *Este Mes*, *Este Trimestre*, *Este Año*), se resetea automáticamente la fecha de referencia a `new Date()`, garantizando que *"Este Trimestre"* muestre fielmente los últimos 3 meses móviles reales (**junio, julio, agosto**) sin arrastrar fechas pasadas de drill-downs previos.
 *   **v3.10.110 [2026-08-26]**: Lanzada la versión **v3.10.110**.
