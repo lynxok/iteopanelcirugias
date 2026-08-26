@@ -942,11 +942,37 @@ ipcMain.handle('save-file', async (event, fileContent, defaultName, fileType) =>
     }
 });
 
+// Helper de validación de rutas y prevención de Path Traversal
+function isPathSafe(filePath) {
+    if (!filePath || typeof filePath !== 'string') return false;
+    
+    // Normalizar la ruta
+    const normalized = path.normalize(filePath);
+    
+    // Rechazar secuencias de escalamiento o caracteres de control
+    if (normalized.includes('..') || /[\x00-\x1f\x7f]/.test(filePath)) {
+        return false;
+    }
+    
+    // Rechazar rutas que intenten acceder al directorio del sistema operativo
+    const winDir = (process.env.WINDIR || process.env.SystemRoot || 'C:\\Windows').toLowerCase();
+    const resolved = path.resolve(normalized).toLowerCase();
+    if (resolved.startsWith(winDir)) {
+        return false;
+    }
+    
+    return true;
+}
+
 // Handler to move and rename OBS video files into doctor-specific subfolders
 ipcMain.handle('obs:rename-video', async (event, tempFilePath, globalDestFolder, doctorName, patientName) => {
     try {
         if (!tempFilePath || !globalDestFolder || !doctorName || !patientName) {
             throw new Error('Faltan parámetros requeridos para renombrar el video.');
+        }
+
+        if (!isPathSafe(tempFilePath) || !isPathSafe(globalDestFolder)) {
+            throw new Error('Rutas no válidas o potencialmente inseguras.');
         }
 
         // Check if the temporary recording exists
@@ -1027,6 +1053,10 @@ ipcMain.handle('obs:get-screenshot-path', async (event, globalDestFolder, doctor
             throw new Error('Faltan parámetros requeridos para generar la ruta de captura.');
         }
 
+        if (!isPathSafe(globalDestFolder)) {
+            throw new Error('Carpeta de destino no válida o potencialmente insegura.');
+        }
+
         const sanitize = (name) => {
             return name
                 .normalize("NFD")
@@ -1063,12 +1093,24 @@ ipcMain.handle('obs:get-screenshot-path', async (event, globalDestFolder, doctor
     }
 });
 
-// Handler to save base64 screenshot image file to disk
+// Handler to save base64 screenshot image file to disk with strict path & extension validation
 ipcMain.handle('obs:save-screenshot', async (event, filePath, base64Data) => {
     try {
         if (!filePath || !base64Data) {
             throw new Error('Ruta de archivo o datos de imagen no especificados.');
         }
+
+        // Validación de seguridad contra Path Traversal y carpetas del sistema
+        if (!isPathSafe(filePath)) {
+            throw new Error('Ruta de archivo no válida o potencialmente insegura.');
+        }
+
+        // Validación estricta de extensión de imagen autorizada
+        const ext = path.extname(filePath).toLowerCase();
+        if (!['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
+            throw new Error('Extensión de archivo no permitida para captura de imagen.');
+        }
+
         const base64Clean = base64Data.replace(/^data:image\/\w+;base64,/, '');
         const buffer = Buffer.from(base64Clean, 'base64');
 
