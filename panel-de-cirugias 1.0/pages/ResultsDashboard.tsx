@@ -1263,7 +1263,10 @@ const ResultsDashboard: React.FC = () => {
                                 {['Esta Semana', 'Este Mes', 'Este Trimestre', 'Este Año', 'Personalizado'].map((p) => (
                                     <button
                                         key={p}
-                                        onClick={() => setPeriod(p)}
+                                        onClick={() => {
+                                            setPeriod(p);
+                                            setReferenceDate(new Date());
+                                        }}
                                         className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 active:scale-95 ${period === p
                                             ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/20 translate-y-[-1px]'
                                             : 'text-slate-500 hover:text-slate-900 hover:bg-white/80 hover:shadow-sm'

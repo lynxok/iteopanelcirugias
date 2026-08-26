@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v3.10.111 (2026-08-26)
+- **Dashboard de Resultados (Reseteo de Referencia en Selector de Períodos)**:
+    * **Reseteo Automático a Fecha Actual**: Al alternar entre *Esta Semana*, *Este Mes*, *Este Trimestre* o *Este Año*, el sistema restablece de inmediato la fecha de referencia a la fecha en curso (`new Date()`). Esto evita arrastrar meses históricos seleccionados en drill-downs previos del gráfico, asegurando que *"Este Trimestre"* despliegue siempre los últimos 3 meses móviles respecto a hoy (**junio, julio, agosto**).
+
 ## v3.10.110 (2026-08-26)
 - **Dashboard de Resultados (Sincronización Reactiva de Efectivas Esperadas)**:
     * **Corrección de Fuente de Datos**: Corregido el cálculo reactivo de la tarjeta de Volumen Quirúrgico en [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx) para consumir directamente `card1Data.stats` y sincronizar `globalStats`, garantizando que **Efectivas Esperadas** refleje fielmente el valor de cirugías reales + programadas vigentes (restando con precisión las suspendidas, ej. 104 programadas - 9 suspendidas = 95 efectivas esperadas).
