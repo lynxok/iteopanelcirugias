@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v3.10.107 (2026-08-26)
+- **Módulo de Auditoría (Enriquecimiento de Tarjetas y Búsqueda)**:
+    * **Identificación Completa de Paciente y Práctica**: En [Audit.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Audit.tsx), cada tarjeta de auditoría ahora resuelve y muestra en lote una insignia visual destacada con el **Nombre completo del Paciente**, **DNI** y la **Práctica Quirúrgica** asociada al evento.
+    * **Exportación CSV Extendida**: La exportación de reportes CSV incluye ahora las columnas explícitas `Paciente`, `DNI` y `Practica`.
+
 ## v3.10.106 (2026-08-25)
 - **Soporte Anti-Caché y Actualización Automática en iPhone / Web / PWA**:
     * **Cabeceras Anti-Caché en HTML**: Incorporados meta tags `Cache-Control: no-cache, no-store, must-revalidate`, `Pragma: no-cache` y `Expires: 0` en [index.html](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/index.html), impidiendo que Safari / iOS mantenga versiones obsoletas al abrir la app desde la pantalla de inicio.

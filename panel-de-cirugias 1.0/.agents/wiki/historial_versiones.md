@@ -4,6 +4,8 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.107 [2026-08-26]**: Lanzada la versión **v3.10.107**.
+    *   **Enriquecimiento de Tarjetas y Búsqueda en Auditoría**: En [Audit.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Audit.tsx), cada tarjeta de auditoría ahora resuelve y muestra el **Nombre completo del Paciente**, **DNI** y la **Práctica Quirúrgica** asociada al evento auditado. Se actualizó la exportación a CSV para incluir estos datos.
 *   **v3.10.106 [2026-08-25]**: Lanzada la versión **v3.10.106**.
     *   **Blindaje Anti-Caché y Auto-Actualización Web/PWA (iOS/Safari)**: Incorporadas cabeceras anti-caché en [index.html](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/index.html), detector inteligente de nuevas versiones web en segundo plano con banner interactivo en [UpdateNotification.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/UpdateNotification.tsx), y botones accesibles de recarga limpia en la barra móvil de [App.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/App.tsx) y en el perfil de [Sidebar.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/Sidebar.tsx).
 *   **v3.10.105 [2026-08-25]**: Lanzada la versión **v3.10.105**.
