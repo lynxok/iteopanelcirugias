@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v3.10.108 (2026-08-26)
+- **Dashboard de Resultados (Drill-Down de Cirugías Contempladas y Diferencia)**:
+    * **Valores Interactivos de Volumen y Ocupación**: En [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx), los números de *Cirugías Realizadas* y *Cirugías Programadas* (en la tarjeta de Volumen Quirúrgico y en la tarjeta KPI superior) ahora son interactivos con cursor, efectos hover y clic directo.
+    * **Modal de Desglose Completo**: Al hacer clic, se abre un modal con el listado detallado de todas las cirugías contempladas en el período seleccionado, organizadas en tres pestañas: *Todas las Programadas*, *Realizadas* y *Diferencia / No Concretadas*.
+    * **Identificador de Diferencia (Planificadas vs Realizadas)**: Botón y pestaña específica `Δ no realizadas` que aísla de inmediato las cirugías que no se completaron, desglosando cuántas fueron canceladas/suspendidas (con su motivo) y cuántas quedaron programadas sin finalizar en agenda.
+    * **Buscador en Tiempo Real y Exportación a Excel**: Incluye filtro instantáneo por paciente, médico o procedimiento, y un botón para exportar el listado analizado directamente a archivo `.xlsx`.
+- **Seguridad y Robustez (RBAC e IPC)**:
+    * **Protección de Rutas Frontend con RBAC**: Componente [RoleProtectedRoute.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/RoleProtectedRoute.tsx) que valida permisos en tiempo de ejecución para `/settings`, `/admin`, `/billing`, `/audit` y `/alerts-history` con caché en memoria.
+    * **Sanitización de Handlers IPC en Electron**: Protección contra Path Traversal en `main.cjs` para logs y respaldos locales.
+
 ## v3.10.107 (2026-08-26)
 - **Módulo de Auditoría (Enriquecimiento de Tarjetas y Búsqueda)**:
     * **Identificación Completa de Paciente y Práctica**: En [Audit.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Audit.tsx), cada tarjeta de auditoría ahora resuelve y muestra en lote una insignia visual destacada con el **Nombre completo del Paciente**, **DNI** y la **Práctica Quirúrgica** asociada al evento.

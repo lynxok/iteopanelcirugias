@@ -284,6 +284,36 @@ const ResultsDashboard: React.FC = () => {
     const [showAllProceduresModal, setShowAllProceduresModal] = useState(false);
     const [procedureSearchQuery, setProcedureSearchQuery] = useState('');
 
+    // --- Modal de Cirugías Contempladas y Diferencia (Planificadas vs Realizadas) ---
+    const [volumeModalOpen, setVolumeModalOpen] = useState(false);
+    const [volumeModalFilter, setVolumeModalFilter] = useState<'all' | 'completed' | 'difference'>('all');
+    const [volumeModalSearch, setVolumeModalSearch] = useState('');
+
+    const exportVolumeSurgeriesToExcel = (surgeriesList: any[], filterType: string) => {
+        if (!surgeriesList.length) return;
+        const exportData = surgeriesList.map(s => {
+            const or = rawOrs.find(o => o.id === s.operating_room_id);
+            return {
+                "Fecha": s.surgery_date ? format(new Date(s.surgery_date + 'T12:00:00'), 'dd/MM/yyyy') : 'N/A',
+                "Paciente": s.patients?.full_name || 'Desconocido',
+                "Cirujano": s.doctors?.full_name || 'Sin Asignar',
+                "Especialidad": s.doctors?.specialty || 'General',
+                "Procedimiento": s.procedure_name || 'Sin especificar',
+                "Quirófano": or ? or.name : 'Sin asignar',
+                "Estado": s.status === 'completed' ? 'Realizada' : s.status === 'suspended' ? 'Suspendida' : 'Programada',
+                "Motivo Suspensión": s.suspension_reason || '',
+                "Hora Inicio": s.actual_start_time || '',
+                "Hora Fin": s.actual_end_time || '',
+                "Duración Estimada (min)": s.estimated_duration || 0
+            };
+        });
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Cirugías");
+        XLSX.writeFile(wb, `Cirugias_${filterType}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    };
+
     const exportCasuistryToExcel = () => {
         if (!procedureCasuistry.length) return;
         const exportData = procedureCasuistry.map(p => ({
@@ -1279,23 +1309,43 @@ const ResultsDashboard: React.FC = () => {
 
                 {/* KPI Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {kpis.map((kpi, idx) => (
-                        <div key={idx} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between">
-                            <div>
-                                <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">{kpi.title}</p>
-                                <h3 className="text-3xl font-black text-slate-900">{kpi.value}</h3>
-                                <div className={`flex items-center gap-1 mt-2 text-xs font-bold ${kpi.isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    <span className="material-symbols-outlined text-sm">
-                                        {kpi.isPositive ? 'trending_up' : 'trending_down'}
-                                    </span>
-                                    <span>{kpi.trend} vs periodo anterior</span>
+                    {kpis.map((kpi, idx) => {
+                        const isClickable = kpi.title === 'Cirugías Realizadas';
+                        return (
+                            <div 
+                                key={idx} 
+                                onClick={() => {
+                                    if (isClickable) {
+                                        setVolumeModalFilter('completed');
+                                        setVolumeModalOpen(true);
+                                    }
+                                }}
+                                className={`bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between ${
+                                    isClickable ? 'cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group active:scale-[0.99]' : ''
+                                }`}
+                                title={isClickable ? 'Clic para ver las cirugías realizadas contempladas' : undefined}
+                            >
+                                <div>
+                                    <div className="flex items-center gap-1 mb-1">
+                                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{kpi.title}</p>
+                                        {isClickable && (
+                                            <span className="material-symbols-outlined text-[13px] text-slate-400 group-hover:text-blue-600 transition-colors">open_in_new</span>
+                                        )}
+                                    </div>
+                                    <h3 className="text-3xl font-black text-slate-900">{kpi.value}</h3>
+                                    <div className={`flex items-center gap-1 mt-2 text-xs font-bold ${kpi.isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
+                                        <span className="material-symbols-outlined text-sm">
+                                            {kpi.isPositive ? 'trending_up' : 'trending_down'}
+                                        </span>
+                                        <span>{kpi.trend} vs periodo anterior</span>
+                                    </div>
+                                </div>
+                                <div className={`p-3 rounded-lg bg-${kpi.color}-50 text-${kpi.color}-600`}>
+                                    <span className="material-symbols-outlined text-2xl">{kpi.icon}</span>
                                 </div>
                             </div>
-                            <div className={`p-3 rounded-lg bg-${kpi.color}-50 text-${kpi.color}-600`}>
-                                <span className="material-symbols-outlined text-2xl">{kpi.icon}</span>
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1393,24 +1443,67 @@ const ResultsDashboard: React.FC = () => {
                             </p>
                         </div>
 
-                        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center border-t border-slate-100 pt-4">
-                            <div>
-                                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Ocupación Promedio</p>
-                                <p className="font-black text-slate-900 text-lg">{stats.avgOccupancy}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Cirugías Realizadas</p>
-                                <p className="font-black text-emerald-600 text-lg">{stats.totalCompleted}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Cirugías Programadas</p>
-                                <p className="font-black text-indigo-600 text-lg">{stats.totalPeriod}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Quirófanos Activos</p>
-                                <p className="font-black text-slate-900 text-lg">{orOccupancy.length}</p>
-                            </div>
-                        </div>
+                        {(() => {
+                            const diffCount = Math.max(0, Number(stats.totalPeriod) - Number(stats.totalCompleted));
+                            return (
+                                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center border-t border-slate-100 pt-4">
+                                    <div className="p-2">
+                                        <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Ocupación Promedio</p>
+                                        <p className="font-black text-slate-900 text-lg">{stats.avgOccupancy}</p>
+                                    </div>
+                                    <div 
+                                        onClick={() => {
+                                            setVolumeModalFilter('completed');
+                                            setVolumeModalOpen(true);
+                                        }}
+                                        className="p-2 rounded-xl hover:bg-emerald-50 border border-transparent hover:border-emerald-200 cursor-pointer transition-all group active:scale-95 flex flex-col items-center justify-center"
+                                        title="Hacer clic para ver las cirugías realizadas contempladas"
+                                    >
+                                        <p className="text-[10px] text-slate-400 group-hover:text-emerald-700 uppercase font-bold tracking-tight flex items-center justify-center gap-1">
+                                            Cirugías Realizadas
+                                            <span className="material-symbols-outlined text-[13px] opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
+                                        </p>
+                                        <p className="font-black text-emerald-600 text-lg">{stats.totalCompleted}</p>
+                                        <span className="text-[9px] text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity leading-none mt-0.5">Ver listado</span>
+                                    </div>
+                                    <div 
+                                        onClick={() => {
+                                            setVolumeModalFilter('all');
+                                            setVolumeModalOpen(true);
+                                        }}
+                                        className="p-2 rounded-xl hover:bg-indigo-50 border border-transparent hover:border-indigo-200 cursor-pointer transition-all group active:scale-95 flex flex-col items-center justify-center"
+                                        title="Hacer clic para ver todas las cirugías programadas contempladas"
+                                    >
+                                        <p className="text-[10px] text-slate-400 group-hover:text-indigo-700 uppercase font-bold tracking-tight flex items-center justify-center gap-1">
+                                            Cirugías Programadas
+                                            <span className="material-symbols-outlined text-[13px] opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
+                                        </p>
+                                        <p className="font-black text-indigo-600 text-lg">{stats.totalPeriod}</p>
+                                        {diffCount > 0 ? (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setVolumeModalFilter('difference');
+                                                    setVolumeModalOpen(true);
+                                                }}
+                                                className="inline-flex items-center gap-1 text-[9px] font-black text-amber-700 bg-amber-100/90 hover:bg-amber-200 border border-amber-300 px-2 py-0.5 rounded-full cursor-pointer transition-all mt-1 shadow-xs active:scale-95"
+                                                title="Hacer clic para ver las cirugías que marcan la diferencia (pendientes o suspendidas)"
+                                            >
+                                                <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
+                                                Δ {diffCount} sin completar
+                                            </button>
+                                        ) : (
+                                            <span className="text-[9px] text-indigo-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity leading-none mt-0.5">Ver listado</span>
+                                        )}
+                                    </div>
+                                    <div className="p-2">
+                                        <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Quirófanos Activos</p>
+                                        <p className="font-black text-slate-900 text-lg">{orOccupancy.length}</p>
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </div>
 
                     {/* Chart: Suspension Reasons */}
@@ -2238,6 +2331,250 @@ const ResultsDashboard: React.FC = () => {
                     </>
                 )}
             </div>
+
+            {/* Modal: Desglose de Cirugías Contempladas y Diferencia (Planificadas vs Realizadas) */}
+            {volumeModalOpen && (() => {
+                const allSurgeries = card1Data.surgeries || currentPeriodSurgeries || [];
+                const completedSurgeries = allSurgeries.filter((s: any) => s.status === 'completed');
+                const differenceSurgeries = allSurgeries.filter((s: any) => s.status !== 'completed');
+                const suspendedCount = differenceSurgeries.filter((s: any) => s.status === 'suspended').length;
+                const scheduledPendingCount = differenceSurgeries.filter((s: any) => s.status === 'scheduled').length;
+
+                let displayList = volumeModalFilter === 'completed'
+                    ? completedSurgeries
+                    : volumeModalFilter === 'difference'
+                        ? differenceSurgeries
+                        : allSurgeries;
+
+                if (volumeModalSearch.trim()) {
+                    const q = volumeModalSearch.toLowerCase().trim();
+                    displayList = displayList.filter((s: any) =>
+                        (s.patients?.full_name || '').toLowerCase().includes(q) ||
+                        (s.doctors?.full_name || '').toLowerCase().includes(q) ||
+                        (s.procedure_name || '').toLowerCase().includes(q) ||
+                        (s.suspension_reason || '').toLowerCase().includes(q)
+                    );
+                }
+
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+                            {/* Modal Header */}
+                            <div className="px-8 py-5 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                <div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600 border border-indigo-100">
+                                            <CalendarDays className="w-6 h-6" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xl font-black text-slate-900 tracking-tight">Cirugías Contempladas en el Período</h3>
+                                            <p className="text-xs text-slate-500 font-bold mt-0.5">
+                                                {isLocalVolumen ? `Filtro Local (${periodVolumen})` : `Período Global (${period})`} • {allSurgeries.length} programadas en total
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                                    <button
+                                        onClick={() => exportVolumeSurgeriesToExcel(displayList, volumeModalFilter)}
+                                        className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-2 transition-all active:scale-95"
+                                        title="Descargar este listado a Excel"
+                                    >
+                                        <FileSpreadsheet className="w-4 h-4" />
+                                        <span>Exportar Excel</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setVolumeModalOpen(false);
+                                            setVolumeModalSearch('');
+                                        }}
+                                        className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-400 hover:text-slate-900"
+                                    >
+                                        <X className="w-6 h-6" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Subheader: Tabs and Search */}
+                            <div className="px-8 py-3 bg-white border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                                <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                                    <button
+                                        onClick={() => setVolumeModalFilter('all')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                            volumeModalFilter === 'all'
+                                                ? 'bg-white text-indigo-700 shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        <span>Todas las Programadas</span>
+                                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                                            volumeModalFilter === 'all' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'
+                                        }`}>
+                                            {allSurgeries.length}
+                                        </span>
+                                    </button>
+                                    <button
+                                        onClick={() => setVolumeModalFilter('completed')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                            volumeModalFilter === 'completed'
+                                                ? 'bg-white text-emerald-700 shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                        <span>Realizadas</span>
+                                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                                            volumeModalFilter === 'completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                                        }`}>
+                                            {completedSurgeries.length}
+                                        </span>
+                                    </button>
+                                    <button
+                                        onClick={() => setVolumeModalFilter('difference')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                            volumeModalFilter === 'difference'
+                                                ? 'bg-white text-amber-800 shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                        <span>Diferencia / No Concretadas</span>
+                                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                                            volumeModalFilter === 'difference' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'
+                                        }`}>
+                                            {differenceSurgeries.length}
+                                        </span>
+                                    </button>
+                                </div>
+
+                                <div className="relative w-full md:w-72">
+                                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar paciente, médico o procedimiento..."
+                                        value={volumeModalSearch}
+                                        onChange={(e) => setVolumeModalSearch(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                                    />
+                                    {volumeModalSearch && (
+                                        <button
+                                            onClick={() => setVolumeModalSearch('')}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Difference Explanation Banner (if in difference tab) */}
+                            {volumeModalFilter === 'difference' && (
+                                <div className="px-8 py-2.5 bg-amber-50/80 border-b border-amber-100 flex items-center justify-between text-xs text-amber-900 font-medium">
+                                    <div className="flex items-center gap-2">
+                                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                                        <span>
+                                            Estas <strong>{differenceSurgeries.length} cirugías</strong> marcan la brecha entre las {allSurgeries.length} programadas y las {completedSurgeries.length} realizadas.
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-3 text-[11px]">
+                                        <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-md font-bold">
+                                            {suspendedCount} suspendidas
+                                        </span>
+                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md font-bold">
+                                            {scheduledPendingCount} programadas sin completar
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Modal Table Content */}
+                            <div className="overflow-y-auto flex-1 p-0 custom-scrollbar">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="sticky top-0 bg-white border-b border-slate-200 shadow-xs z-10">
+                                        <tr className="text-[10px] uppercase font-black text-slate-400 tracking-widest">
+                                            <th className="px-6 py-3">Fecha</th>
+                                            <th className="px-6 py-3">Paciente</th>
+                                            <th className="px-6 py-3">Cirujano / Especialidad</th>
+                                            <th className="px-6 py-3">Procedimiento</th>
+                                            <th className="px-6 py-3">Quirófano</th>
+                                            <th className="px-6 py-3 text-right">Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {displayList.map((s: any) => {
+                                            const or = rawOrs.find((o: any) => o.id === s.operating_room_id);
+                                            return (
+                                                <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="px-6 py-3.5 text-xs font-mono text-slate-600 whitespace-nowrap">
+                                                        {s.surgery_date ? format(new Date(s.surgery_date + 'T12:00:00'), 'dd/MM/yyyy') : 'N/A'}
+                                                    </td>
+                                                    <td className="px-6 py-3.5">
+                                                        <p className="font-bold text-slate-900 text-sm">{s.patients?.full_name || 'Desconocido'}</p>
+                                                        <p className="text-[10px] text-slate-400 font-mono">#{s.id?.slice(0, 8)}</p>
+                                                    </td>
+                                                    <td className="px-6 py-3.5">
+                                                        <p className="font-bold text-slate-800 text-xs">{s.doctors?.full_name || 'Sin Asignar'}</p>
+                                                        <p className="text-[10px] text-slate-400">{s.doctors?.specialty || 'General'}</p>
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-xs text-slate-700 max-w-xs truncate" title={s.procedure_name}>
+                                                        {s.procedure_name || 'Sin especificar'}
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-xs text-slate-600">
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-medium">
+                                                            {or ? or.name : 'Sin asignar'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-right">
+                                                        <div className="flex flex-col items-end gap-0.5">
+                                                            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                                                s.status === 'completed'
+                                                                    ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200'
+                                                                    : s.status === 'suspended'
+                                                                        ? 'bg-red-100 text-red-700 ring-1 ring-red-200'
+                                                                        : 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
+                                                            }`}>
+                                                                {s.status === 'completed' ? 'Realizada' : s.status === 'suspended' ? 'Suspendida' : 'Programada'}
+                                                            </span>
+                                                            {s.status === 'suspended' && s.suspension_reason && (
+                                                                <span className="text-[10px] text-red-600 font-medium max-w-[200px] truncate" title={s.suspension_reason}>
+                                                                    {s.suspension_reason}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {displayList.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="text-center py-12 text-slate-400 text-xs italic">
+                                                    No se encontraron cirugías con los criterios seleccionados.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="px-8 py-4 bg-white border-t border-slate-100 flex justify-between items-center">
+                                <span className="text-xs text-slate-500 font-bold">
+                                    Mostrando {displayList.length} de {allSurgeries.length} cirugías
+                                </span>
+                                <button
+                                    onClick={() => {
+                                        setVolumeModalOpen(false);
+                                        setVolumeModalSearch('');
+                                    }}
+                                    className="px-6 py-2.5 bg-slate-900 text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-slate-800 transition-all active:scale-95 shadow-md"
+                                >
+                                    Cerrar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Drill-down Modal */}
             {selectedDocDetails && (

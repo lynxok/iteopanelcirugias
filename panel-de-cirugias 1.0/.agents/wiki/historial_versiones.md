@@ -4,6 +4,10 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.108 [2026-08-26]**: Lanzada la versión **v3.10.108**.
+    *   **Drill-Down Interactivo de Cirugías Contempladas en Dashboard de Resultados**: En [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx), los números de *Cirugías Realizadas* y *Cirugías Programadas* ahora abren un modal interactivo con el listado de cirugías contempladas.
+    *   **Desglose de la Diferencia**: Pestaña y pastilla interactiva `Δ no realizadas` que lista las cirugías que marcan la diferencia entre las planificadas y las realizadas (suspendidas con motivo y programadas sin finalizar en agenda), con buscador en vivo y exportación a Excel `.xlsx`.
+    *   **Blindaje RBAC e IPC**: Protección de rutas por roles y sanitización contra path traversal en Electron.
 *   **v3.10.107 [2026-08-26]**: Lanzada la versión **v3.10.107**.
     *   **Enriquecimiento de Tarjetas y Búsqueda en Auditoría**: En [Audit.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Audit.tsx), cada tarjeta de auditoría ahora resuelve y muestra el **Nombre completo del Paciente**, **DNI** y la **Práctica Quirúrgica** asociada al evento auditado. Se actualizó la exportación a CSV para incluir estos datos.
 *   **v3.10.106 [2026-08-25]**: Lanzada la versión **v3.10.106**.
