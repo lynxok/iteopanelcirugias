@@ -286,7 +286,7 @@ const ResultsDashboard: React.FC = () => {
 
     // --- Modal de Cirugías Contempladas y Diferencia (Planificadas vs Realizadas) ---
     const [volumeModalOpen, setVolumeModalOpen] = useState(false);
-    const [volumeModalFilter, setVolumeModalFilter] = useState<'all' | 'completed' | 'difference'>('all');
+    const [volumeModalFilter, setVolumeModalFilter] = useState<'all' | 'completed' | 'effective' | 'difference'>('all');
     const [volumeModalSearch, setVolumeModalSearch] = useState('');
 
     const exportVolumeSurgeriesToExcel = (surgeriesList: any[], filterType: string) => {
@@ -625,6 +625,10 @@ const ResultsDashboard: React.FC = () => {
         const completedList = filteredSurgeries.filter((s: any) => s.status === 'completed');
         const completedCount = completedList.length;
         const suspendedCount = filteredSurgeries.filter((s: any) => s.status === 'suspended').length;
+        const cancelledCount = filteredSurgeries.filter((s: any) => s.status === 'cancelled').length;
+        const activeScheduledList = filteredSurgeries.filter((s: any) => s.status !== 'completed' && s.status !== 'suspended' && s.status !== 'cancelled');
+        const effectiveExpectedList = filteredSurgeries.filter((s: any) => s.status !== 'suspended' && s.status !== 'cancelled');
+        const effectiveExpectedCount = effectiveExpectedList.length;
         const suspRate = total > 0 ? ((suspendedCount / total) * 100).toFixed(1) : '0';
         const succRate = total > 0 ? ((completedCount / total) * 100).toFixed(1) : '0';
 
@@ -707,7 +711,11 @@ const ResultsDashboard: React.FC = () => {
                 successRate: `${succRate}%`,
                 suspensionRate: `${suspRate}%`,
                 avgOccupancy: `${avgOcc}%`,
-                totalPeriod: total
+                totalPeriod: total,
+                effectiveExpected: effectiveExpectedCount,
+                activeScheduledCount: activeScheduledList.length,
+                suspendedCount: suspendedCount,
+                cancelledCount: cancelledCount
             },
             surgeries: filteredSurgeries
         };
@@ -1445,8 +1453,9 @@ const ResultsDashboard: React.FC = () => {
 
                         {(() => {
                             const diffCount = Math.max(0, Number(stats.totalPeriod) - Number(stats.totalCompleted));
+                            const effectiveCount = stats.effectiveExpected ?? (Number(stats.totalPeriod) - (stats.suspendedCount || 0) - (stats.cancelledCount || 0));
                             return (
-                                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center border-t border-slate-100 pt-4">
+                                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 text-center border-t border-slate-100 pt-4">
                                     <div className="p-2">
                                         <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Ocupación Promedio</p>
                                         <p className="font-black text-slate-900 text-lg">{stats.avgOccupancy}</p>
@@ -1496,6 +1505,23 @@ const ResultsDashboard: React.FC = () => {
                                         ) : (
                                             <span className="text-[9px] text-indigo-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity leading-none mt-0.5">Ver listado</span>
                                         )}
+                                    </div>
+                                    <div 
+                                        onClick={() => {
+                                            setVolumeModalFilter('effective');
+                                            setVolumeModalOpen(true);
+                                        }}
+                                        className="p-2 rounded-xl hover:bg-sky-50 border border-transparent hover:border-sky-200 cursor-pointer transition-all group active:scale-95 flex flex-col items-center justify-center"
+                                        title="Hacer clic para ver las cirugías efectivas esperadas (realizadas + programadas en agenda, sin suspendidas)"
+                                    >
+                                        <p className="text-[10px] text-slate-400 group-hover:text-sky-700 uppercase font-bold tracking-tight flex items-center justify-center gap-1">
+                                            Efectivas Esperadas
+                                            <span className="material-symbols-outlined text-[13px] opacity-0 group-hover:opacity-100 transition-opacity">open_in_new</span>
+                                        </p>
+                                        <p className="font-black text-sky-600 text-lg">{effectiveCount}</p>
+                                        <span className="text-[9px] text-sky-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity leading-none mt-0.5 whitespace-nowrap">
+                                            {stats.totalCompleted} real + {stats.activeScheduledCount || 0} agenda
+                                        </span>
                                     </div>
                                     <div className="p-2">
                                         <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Quirófanos Activos</p>
@@ -2336,15 +2362,18 @@ const ResultsDashboard: React.FC = () => {
             {volumeModalOpen && (() => {
                 const allSurgeries = card1Data.surgeries || currentPeriodSurgeries || [];
                 const completedSurgeries = allSurgeries.filter((s: any) => s.status === 'completed');
+                const effectiveSurgeries = allSurgeries.filter((s: any) => s.status !== 'suspended' && s.status !== 'cancelled');
                 const differenceSurgeries = allSurgeries.filter((s: any) => s.status !== 'completed');
                 const suspendedCount = differenceSurgeries.filter((s: any) => s.status === 'suspended').length;
                 const scheduledPendingCount = differenceSurgeries.filter((s: any) => s.status === 'scheduled').length;
 
                 let displayList = volumeModalFilter === 'completed'
                     ? completedSurgeries
-                    : volumeModalFilter === 'difference'
-                        ? differenceSurgeries
-                        : allSurgeries;
+                    : volumeModalFilter === 'effective'
+                        ? effectiveSurgeries
+                        : volumeModalFilter === 'difference'
+                            ? differenceSurgeries
+                            : allSurgeries;
 
                 if (volumeModalSearch.trim()) {
                     const q = volumeModalSearch.toLowerCase().trim();
@@ -2430,6 +2459,22 @@ const ResultsDashboard: React.FC = () => {
                                         </span>
                                     </button>
                                     <button
+                                        onClick={() => setVolumeModalFilter('effective')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                            volumeModalFilter === 'effective'
+                                                ? 'bg-white text-sky-700 shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                                        <span>Efectivas Esperadas</span>
+                                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                                            volumeModalFilter === 'effective' ? 'bg-sky-100 text-sky-700' : 'bg-slate-200 text-slate-600'
+                                        }`}>
+                                            {effectiveSurgeries.length}
+                                        </span>
+                                    </button>
+                                    <button
                                         onClick={() => setVolumeModalFilter('difference')}
                                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                                             volumeModalFilter === 'difference'
@@ -2466,6 +2511,26 @@ const ResultsDashboard: React.FC = () => {
                                     )}
                                 </div>
                             </div>
+
+                            {/* Efectivas Esperadas Explanation Banner (if in effective tab) */}
+                            {volumeModalFilter === 'effective' && (
+                                <div className="px-8 py-2.5 bg-sky-50/80 border-b border-sky-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-2 text-xs text-sky-950 font-medium">
+                                    <div className="flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-sky-600 text-base shrink-0">verified</span>
+                                        <span>
+                                            Proyección de <strong>{effectiveSurgeries.length} cirugías</strong> que deberían completarse en el período (excluye suspendidas y canceladas).
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[11px]">
+                                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-bold">
+                                            {completedSurgeries.length} ya realizadas
+                                        </span>
+                                        <span className="bg-sky-100 text-sky-800 px-2 py-0.5 rounded-md font-bold">
+                                            {effectiveSurgeries.filter((s: any) => s.status !== 'completed').length} programadas activas en agenda
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Difference Explanation Banner (if in difference tab) */}
                             {volumeModalFilter === 'difference' && (
@@ -2531,9 +2596,11 @@ const ResultsDashboard: React.FC = () => {
                                                                     ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200'
                                                                     : s.status === 'suspended'
                                                                         ? 'bg-red-100 text-red-700 ring-1 ring-red-200'
-                                                                        : 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
+                                                                        : s.status === 'cancelled'
+                                                                            ? 'bg-slate-200 text-slate-700 ring-1 ring-slate-300'
+                                                                            : 'bg-blue-100 text-blue-700 ring-1 ring-blue-200'
                                                             }`}>
-                                                                {s.status === 'completed' ? 'Realizada' : s.status === 'suspended' ? 'Suspendida' : 'Programada'}
+                                                                {s.status === 'completed' ? 'Realizada' : s.status === 'suspended' ? 'Suspendida' : s.status === 'cancelled' ? 'Cancelada' : 'Programada'}
                                                             </span>
                                                             {s.status === 'suspended' && s.suspension_reason && (
                                                                 <span className="text-[10px] text-red-600 font-medium max-w-[200px] truncate" title={s.suspension_reason}>

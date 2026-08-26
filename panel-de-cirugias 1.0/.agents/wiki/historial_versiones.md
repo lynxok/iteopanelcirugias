@@ -4,6 +4,8 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.109 [2026-08-26]**: Lanzada la versión **v3.10.109**.
+    *   **Métrica y Desglose de Efectivas Esperadas**: Incorporado en [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx) el indicador "Efectivas Esperadas" (suma de realizadas + programadas vigentes en agenda, excluyendo suspendidas y canceladas), con subtexto de desglose inmediato, apertura interactiva del modal en pestaña dedicada y exportación a Excel.
 *   **v3.10.108 [2026-08-26]**: Lanzada la versión **v3.10.108**.
     *   **Drill-Down Interactivo de Cirugías Contempladas en Dashboard de Resultados**: En [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx), los números de *Cirugías Realizadas* y *Cirugías Programadas* ahora abren un modal interactivo con el listado de cirugías contempladas.
     *   **Desglose de la Diferencia**: Pestaña y pastilla interactiva `Δ no realizadas` que lista las cirugías que marcan la diferencia entre las planificadas y las realizadas (suspendidas con motivo y programadas sin finalizar en agenda), con buscador en vivo y exportación a Excel `.xlsx`.

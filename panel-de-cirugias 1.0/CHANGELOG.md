@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.109 (2026-08-26)
+- **Dashboard de Resultados (Métrica y Drill-Down de Cirugías Efectivas Esperadas)**:
+    * **Indicador "Efectivas Esperadas"**: Incorporada una nueva métrica gerencial en la tarjeta de Volumen Quirúrgico en [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx), que computa con exactitud la suma de cirugías *Realizadas* (`completed`) + cirugías *Programadas activas en agenda* (`scheduled`), excluyendo las suspendidas y canceladas.
+    * **Subtexto Aclaratorio en Tiempo Real**: Debajo del valor numérico se visualiza el desglose exacto (ej. `{X} real + {Y} agenda`).
+    * **Pestaña y Filtro Exclusivo en Modal**: Al hacer clic en "Efectivas Esperadas", el modal interactivo aísla y despliega únicamente estas cirugías con banner explicativo, buscador dinámico y exportación a Excel `.xlsx`.
+
 ## v3.10.108 (2026-08-26)
 - **Dashboard de Resultados (Drill-Down de Cirugías Contempladas y Diferencia)**:
     * **Valores Interactivos de Volumen y Ocupación**: En [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx), los números de *Cirugías Realizadas* y *Cirugías Programadas* (en la tarjeta de Volumen Quirúrgico y en la tarjeta KPI superior) ahora son interactivos con cursor, efectos hover y clic directo.
