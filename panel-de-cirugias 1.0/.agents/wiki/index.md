@@ -18,7 +18,15 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-01]`: **Gestión de Nomencladores (AOTER y OSER) y Alta de Práctica `120305`**:
+    *   Se registró la práctica `120305` (`Fractura de Tabique Nasal`) para ambos nomencladores (`OSER` y `AOTER`) en `quirofano.nomenclador_items` y `src/data/nomenclador_mapping.json`.
+    *   Se desarrolló la nueva sección de Configuración [NomencladorTab.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/NomencladorTab.tsx) y el modal [NomencladorModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/modals/NomencladorModal.tsx) para administrar (crear, buscar, editar, habilitar/inhabilitar y eliminar) prácticas de cualquier nomenclador.
+    *   Se habilitaron las políticas RLS de escritura (`Escritura exclusiva SuperAdmin nomenclador_items`) en Supabase restringiendo la administración exclusivamente al rol `SuperAdmin`.
+*   `[2026-08-31]`: **Normalización y Unificación de Cobertura El Norte Seguros**:
+    *   Se unificó la cobertura como `"EL NORTE SEGUROS"` con tipo `'ART'` en `quirofano.coverages`.
+    *   Se eliminaron registros duplicados con caracteres de espacio no estándar (`\u202f`) y se unificaron 10 cirugías y fichas de pacientes históricas para asegurar compatibilidad total con los filtros de seguridad del rol `Oficina ART`.
 *   `[2026-08-26]`: **Dashboard de Resultados: Drill-Down Interactivo, Métrica de Efectivas Esperadas y Reseteo de Períodos (v3.10.108 - v3.10.111)**:
+
     *   **Drill-Down Interactivo de Cirugías Contempladas (`v3.10.108`)**: Clic directo sobre los valores de Cirugías Realizadas y Cirugías Programadas en [ResultsDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/ResultsDashboard.tsx) para abrir modal con pestañas (*Todas las Programadas*, *Realizadas* y `Δ no realizadas` para aislar la diferencia entre planificadas y concretadas con motivos de suspensión) con buscador en tiempo real y exportación `.xlsx`.
     *   **Métrica de Efectivas Esperadas (`v3.10.109`)**: Incorporación de la 5ta columna en la tarjeta de Volumen Quirúrgico computando cirugías realizadas + programadas en agenda sin canceladas/suspendidas con subtexto `X real + Y agenda` y pestaña dedicada en el modal.
     *   **Sincronización Reactiva de Contadores (`v3.10.110`)**: Se ajustó la tarjeta de Volumen para enlazarse a `card1Data.stats` y se calcularon `effectiveExpected`, `activeScheduledCount` y `suspendedCount` en `globalStats`, garantizando que la resta de suspendidas sea exacta (104 - 9 = 95).

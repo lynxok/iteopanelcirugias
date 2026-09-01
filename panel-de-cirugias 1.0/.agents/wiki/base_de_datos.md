@@ -27,7 +27,8 @@ El RLS está habilitado y es altamente restrictivo en todas las tablas sensibles
 *   `quirofano.surgery_documents`, `quirofano.surgery_forms`, `quirofano.surgery_form_items`, `quirofano.surgery_materials`: Solo usuarios autenticados.
 *   `quirofano.hospital_rooms`, `quirofano.hospital_beds`, `quirofano.hospital_admissions`, `quirofano.hospital_bed_history`: Solo usuarios autenticados.
 *   `quirofano.email_notifications`, `quirofano.tecnico_manual_surgeries`: RLS activado, acceso exclusivo a usuarios autenticados.
-*   `quirofano.operating_rooms`, `quirofano.coverages`, `quirofano.catalog_items`, `quirofano.cie10_catalog`: Lectura (`SELECT`) pública para carga de nombres y catálogos, escritura (`INSERT`/`UPDATE`/`DELETE`) restringida a usuarios autenticados.
+*   `quirofano.operating_rooms`, `quirofano.coverages`, `quirofano.catalog_items`, `quirofano.cie10_catalog`: Lectura (`SELECT`) pública/autenticada para carga de nombres y catálogos, escritura (`INSERT`/`UPDATE`/`DELETE`) con RLS habilitada para usuarios autenticados.
+*   `quirofano.nomenclador_items`: Lectura (`SELECT`) pública/autenticada, escritura (`INSERT`/`UPDATE`/`DELETE`) con RLS exclusiva restringida a `SuperAdmin` (`Escritura exclusiva SuperAdmin nomenclador_items`).
 *   `quirofano.practice_bed_occupancy_stats`: Almacena el recuento y promedios/medianas de días de cama recolectados por procedimiento quirúrgico.
 
 ## Automatización por Triggers de Postgres
@@ -61,4 +62,7 @@ El RLS está habilitado y es altamente restrictivo en todas las tablas sensibles
     *   Tabla `quirofano.tecnico_rates`: Almacena tarifas de horas, guardias, IP de la clínica y tarifas por práctica del nomenclador. Incluye columnas `updated_at`, `updated_by` y `updated_by_name` para trazabilidad y auditoría de ediciones.
     *   Tabla `quirofano.tecnico_attendance`: Almacena registros de fichadas/asistencia (Check-In, Break-Out, Break-In, Check-Out) y la dirección IP.
     *   Tabla `quirofano.tecnico_monthly_consents`: Registra las firmas mensuales de conformidad de los técnicos sobre el período liquidado.
-    *   Tabla `quirofano.tecnico_manual_surgeries`: Almacena cirugías agregadas manualmente o co-asignadas a técnicos. Columnas: `id`, `user_id`, `surgery_id`, `status` ('pending' | 'approved' | 'rejected'), `validated_at`, `validated_by`, `validated_by_name`, `created_by`, `created_by_name`, `created_by_role` y `notes`.
+*   **Normalización y Unificación de Cobertura El Norte Seguros (31/08/2026)**:
+    *   Unificada la cobertura `"EL NORTE SEGUROS"` en `quirofano.coverages` tipificada como `'ART'` (eliminando registro duplicado `"SEGUROS EL NORTE"` y saneando caracteres invisibles).
+    *   Actualizadas masivamente 10 cirugías y pacientes asociados para garantizar la visibilidad inmediata por parte de usuarios con rol `Oficina ART`.
+

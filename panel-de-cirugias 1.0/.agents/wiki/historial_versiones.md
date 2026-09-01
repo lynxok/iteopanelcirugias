@@ -4,6 +4,10 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.113 [2026-09-01]**: Lanzada la versión **v3.10.113**.
+    *   **Alta de Práctica Quirúrgica `120305`**: Registrada la práctica `120305` : `Fractura de Tabique Nasal` en `quirofano.nomenclador_items` de Supabase (tanto en nomenclador `OSER` como `AOTER`) y en `src/data/nomenclador_mapping.json`.
+    *   **Gestión Integral de Nomencladores en Configuración**: Creada la pestaña [NomencladorTab.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/NomencladorTab.tsx) y modal [NomencladorModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/modals/NomencladorModal.tsx) para consultar, filtrar, paginar, dar de alta, editar y habilitar/deshabilitar prácticas de AOTER y OSER.
+    *   **Restricción y Seguridad Exclusiva para SuperAdmin**: Edición, altas, bajas y cambios de estado blindados exclusivamente para el rol `SuperAdmin` en frontend y mediante política RLS en PostgreSQL (`Escritura exclusiva SuperAdmin nomenclador_items`).
 *   **v3.10.112 [2026-08-26]**: Lanzada la versión **v3.10.112**.
     *   **Prioridad a Quirófano 1 en Vista Diaria del Calendario**: En [Calendar.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Calendar.tsx), se preselecciona automáticamente el Quirófano 1 (General) al ingresar a la vista diaria y se ordenan las pestañas priorizando quirófanos centrales antes de salas ambulatorias.
     *   **Solución a Colisiones y Superposición en Tarjetas Simultáneas**: Corregida la condición de asignación de columnas en `DayView` para evitar que cirugías superpuestas en horario se monten directamente una sobre la otra haciéndose invisibles.

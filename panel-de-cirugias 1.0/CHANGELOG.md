@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v3.10.113 (2026-09-01)
+- **Gestión de Nomencladores (AOTER y OSER) y Nueva Práctica**:
+    * **Nueva Práctica Quirúrgica**: Registrada la práctica `120305` : `Fractura de Tabique Nasal` (y variante `12.03.05`) tanto en `quirofano.nomenclador_items` de Supabase como en `src/data/nomenclador_mapping.json` para disponibilidad inmediata en agendamiento, buscadores y reportes.
+    * **Nueva Sección de Nomencladores en Configuración**: Creada la pestaña y panel de administración integral ([NomencladorTab.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/NomencladorTab.tsx)) dentro de Configuración para consultar, dar de alta, buscar, editar, habilitar/inhabilitar y eliminar prácticas de los nomencladores **AOTER** y **OSER**.
+    * **Restricción Exclusiva a SuperAdmin**: El acceso a la creación, edición, cambio de estado y eliminación de prácticas quedó blindado exclusivamente para usuarios con rol **`SuperAdmin`** tanto en la interfaz (UI bloqueada / modo lectura para otros roles) como en validaciones de frontend ([useSettings.ts](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/hooks/useSettings.ts)) y base de datos.
+    * **Políticas RLS en Base de Datos**: Habilitada la política de seguridad `Escritura exclusiva SuperAdmin nomenclador_items` en `quirofano.nomenclador_items` para restringir cualquier mutación estrictamente a cuentas con rol `SuperAdmin`.
+
 ## v3.10.112 (2026-08-26)
 - **Calendario Quirúrgico (Optimizaciones y Correcciones en Vista Diaria)**:
     * **Prioridad y Selección por Defecto de Quirófano 1**: Al acceder a la vista diaria del calendario, el sistema selecciona y despliega automáticamente las cirugías de **Quirófano 1 (General)** en lugar de Ambulatoria. Las pestañas de quirófanos se ordenan priorizando Quirófano 1 y quirófanos centrales, ubicando Ambulatoria al final.
