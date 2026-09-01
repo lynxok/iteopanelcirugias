@@ -4,6 +4,8 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.116 [2026-09-01]**: Lanzada la versión **v3.10.116**.
+    *   **Corrección en Autocompletado de Procedimientos**: Solucionado el problema donde el menú desplegable de sugerencias no se colapsaba. Se agregó cierre por selección, por clic fuera (`click outside`), tecla `Escape` y se acotó la activación a búsquedas de 2 o más caracteres.
 *   **v3.10.115 [2026-09-01]**: Lanzada la versión **v3.10.115**.
     *   **Búsqueda Dinámica y Combinada de Nomenclador por Cobertura**: Al seleccionar OSER, se restringe la búsqueda a OSER. Al seleccionar cualquier otra cobertura, se habilita la búsqueda simultánea de **AOTER y NN**.
     *   **Selector Modal con Pestañas y Badges**: En [NomencladorSelectorModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/NomencladorSelectorModal.tsx), soporte para alternar entre *Todos (AOTER + NN)*, *Solo AOTER* o *Solo NN*, con insignias por categoría en cada práctica.

@@ -522,34 +522,7 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
             const allowedTypes = currentNomencladorType === 'OSER' ? ['OSER'] : ['AOTER', 'NN'];
 
             if (cleanTerm.length < 2) {
-                // Traer ítems iniciales para mostrar al hacer clic en el input vacío
-                let query = supabase
-                    .from('nomenclador_items')
-                    .select('code, description, type')
-                    .eq('active', true);
-
-                if (allowedTypes.length === 1) {
-                    query = query.eq('type', allowedTypes[0]);
-                } else {
-                    query = query.in('type', allowedTypes);
-                }
-
-                let { data } = await query.limit(15);
-
-                if (!data || data.length === 0) {
-                    const { data: fallbackData } = await supabase
-                        .from('nomenclador_items')
-                        .select('code, description, type')
-                        .limit(15);
-                    data = fallbackData;
-                }
-
-                const results = data || [];
-                if (!results.some(i => i.code === '00.00.00')) {
-                    setNomencladorSuggestions([defaultItem, ...results]);
-                } else {
-                    setNomencladorSuggestions(results);
-                }
+                setNomencladorSuggestions([]);
                 return;
             }
 

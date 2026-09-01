@@ -71,6 +71,19 @@ export const ClinicalDetailsSection: React.FC<ClinicalDetailsSectionProps> = ({
     onPreOpNotesChange,
     canEditField
 }) => {
+    const [showSuggestions, setShowSuggestions] = React.useState(false);
+    const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const isDiagnosisReadOnly = isReadOnly || (canEditField && !canEditField('diagnostico')) || currentUserRole === 'Ortopedia';
     return (
         <section className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
@@ -102,13 +115,22 @@ export const ClinicalDetailsSection: React.FC<ClinicalDetailsSectionProps> = ({
                     </label>
                     <div className="flex flex-col gap-3">
                         <div className="flex gap-2 relative">
-                            <div className="flex-1 relative">
+                            <div className="flex-1 relative" ref={dropdownRef}>
                                 <input
                                     type="text"
                                     className="w-full rounded border border-slate-200 bg-white text-slate-900 focus:border-primary focus:ring-1 focus:ring-primary px-3 py-2 text-sm"
                                     placeholder={`Buscar en Nomenclador ${currentNomencladorType}...`}
                                     value={procedureInput}
-                                    onChange={(e) => onProcedureInputChange(e.target.value)}
+                                    onFocus={() => {
+                                        if (procedureInput.trim().length >= 2 && nomencladorSuggestions.length > 0) {
+                                            setShowSuggestions(true);
+                                        }
+                                    }}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        onProcedureInputChange(val);
+                                        setShowSuggestions(val.trim().length >= 2);
+                                    }}
                                     disabled={isReadOnly || currentUserRole === 'Ortopedia'}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
@@ -116,12 +138,15 @@ export const ClinicalDetailsSection: React.FC<ClinicalDetailsSectionProps> = ({
                                             if (procedureInput.trim()) {
                                                 onAddProcedure(procedureInput.trim());
                                                 onProcedureInputChange('');
+                                                setShowSuggestions(false);
                                             }
+                                        } else if (e.key === 'Escape') {
+                                            setShowSuggestions(false);
                                         }
                                     }}
                                 />
-                                {nomencladorSuggestions.length > 0 && (
-                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-[300px] overflow-y-auto">
+                                {showSuggestions && nomencladorSuggestions.length > 0 && (
+                                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-[300px] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
                                         {nomencladorSuggestions.map((item, idx) => (
                                             <button
                                                 key={idx}
@@ -131,6 +156,7 @@ export const ClinicalDetailsSection: React.FC<ClinicalDetailsSectionProps> = ({
                                                     const fullText = `[${item.code}] ${item.description}`;
                                                     onAddProcedure(fullText);
                                                     onProcedureInputChange('');
+                                                    setShowSuggestions(false);
                                                 }}
                                             >
                                                 <div className="flex justify-between items-center gap-2">
@@ -166,6 +192,7 @@ export const ClinicalDetailsSection: React.FC<ClinicalDetailsSectionProps> = ({
                                     if (procedureInput.trim()) {
                                         onAddProcedure(procedureInput.trim());
                                         onProcedureInputChange('');
+                                        setShowSuggestions(false);
                                     }
                                 }}
                                 className={`bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded text-sm font-bold transition-all shadow-sm ${(isReadOnly || currentUserRole === 'Ortopedia') ? 'opacity-50 cursor-not-allowed' : ''}`}

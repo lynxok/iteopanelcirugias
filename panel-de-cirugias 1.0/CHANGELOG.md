@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.116 (2026-09-01)
+- **Corrección en Autocompletado y Colapso de Procedimientos Quirúrgicos**:
+    * **Colapso Inmediato tras Selección**: Subsanado el comportamiento donde el menú flotante de sugerencias de nomenclador quedaba abierto permanentemente tras seleccionar una práctica o vaciar el campo de texto.
+    * **Detección de Clic Fuera (Click Outside) y Escape**: Agregado listener de eventos para cerrar el desplegable al hacer clic fuera del campo de búsqueda o al presionar la tecla `Escape`.
+    * **Apertura Bajo Demanda**: El menú de sugerencias solo se despliega cuando el usuario introduce activamente 2 o más caracteres en el buscador de procedimientos.
+
 ## v3.10.115 (2026-09-01)
 - **Búsqueda Dinámica y Combinada de Nomenclador por Cobertura**:
     * **Lógica Inteligente de Nomenclador por Cobertura**: Al seleccionar la cobertura **OSER** en una cirugía, el sistema filtra y busca exclusivamente en el nomenclador **OSER**. Para cualquier otra cobertura (o sin cobertura especificada), el sistema habilita y busca simultáneamente en **AOTER y NN (Nomenclador Nacional)**.
