@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v3.10.114 (2026-09-01)
+- **Categoría NN (Nomenclador Nacional) y Normalización de Práctica 12.03.05**:
+    * **Nueva Categoría NN en Sistema**: Incorporado soporte nativo para la categoría **NN (Nomenclador Nacional)** junto a **AOTER** y **OSER** en toda la plataforma (Catálogo de Nomencladores, Coberturas/Prestadores, Ficha Quirúrgica y selector modal).
+    * **Normalización de Fractura de Tabique Nasal**: La práctica `12.03.05` : `Fractura de Tabique Nasal` fue asignada exclusivamente a la categoría `NN`, removiendo duplicados sin puntos y referencias cruzadas en AOTER/OSER.
+    * **Filtros y Métricas por Nomenclador**: Añadida la tarjeta estadística y pastilla de filtrado rápido para `NN (Nacional)` en [NomencladorTab.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/NomencladorTab.tsx).
+    * **Soporte en Coberturas y Altas**: Opciones añadidas en [CoverageModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/modals/CoverageModal.tsx) y [NomencladorModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/modals/NomencladorModal.tsx) para crear prácticas o asociar coberturas directamente al Nomenclador Nacional.
+
 ## v3.10.113 (2026-09-01)
 - **Gestión de Nomencladores (AOTER y OSER) y Nueva Práctica**:
     * **Nueva Práctica Quirúrgica**: Registrada la práctica `120305` : `Fractura de Tabique Nasal` (y variante `12.03.05`) tanto en `quirofano.nomenclador_items` de Supabase como en `src/data/nomenclador_mapping.json` para disponibilidad inmediata en agendamiento, buscadores y reportes.

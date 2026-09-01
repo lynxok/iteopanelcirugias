@@ -133,14 +133,14 @@ export interface Coverage {
   name: string;
   type: 'Obra Social' | 'ART' | string;
   vendor_id?: string;
-  nomenclador_type?: 'AOTER' | 'OSER' | string | null;
+  nomenclador_type?: 'AOTER' | 'OSER' | 'NN' | string | null;
 }
 
 export interface NomencladorItem {
   id?: string;
   code: string;
   description: string;
-  type: 'AOTER' | 'OSER' | string;
+  type: 'AOTER' | 'OSER' | 'NN' | string;
   active?: boolean;
   created_at?: string;
 }

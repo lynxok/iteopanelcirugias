@@ -6,9 +6,9 @@ interface NomencladorTabProps {
     nomencladorItems: NomencladorItem[];
     searchNomenclador: string;
     setSearchNomenclador: (val: string) => void;
-    nomencladorFilterType: 'ALL' | 'AOTER' | 'OSER';
-    setNomencladorFilterType: (val: 'ALL' | 'AOTER' | 'OSER') => void;
-    openNewNomencladorModal: (defaultType?: 'AOTER' | 'OSER') => void;
+    nomencladorFilterType: 'ALL' | 'AOTER' | 'OSER' | 'NN';
+    setNomencladorFilterType: (val: 'ALL' | 'AOTER' | 'OSER' | 'NN') => void;
+    openNewNomencladorModal: (defaultType?: 'AOTER' | 'OSER' | 'NN') => void;
     openEditNomencladorModal: (item: NomencladorItem) => void;
     handleDeleteNomenclador: (id: string) => void;
     handleToggleNomencladorActive: (item: NomencladorItem) => void;
@@ -36,6 +36,7 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
     // Contadores
     const countAOTER = useMemo(() => nomencladorItems.filter(i => i.type === 'AOTER').length, [nomencladorItems]);
     const countOSER = useMemo(() => nomencladorItems.filter(i => i.type === 'OSER').length, [nomencladorItems]);
+    const countNN = useMemo(() => nomencladorItems.filter(i => i.type === 'NN').length, [nomencladorItems]);
     const countTotal = nomencladorItems.length;
 
     // Filtrado
@@ -101,7 +102,7 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
                                     )}
                                 </div>
                                 <p className="text-slate-500 text-xs md:text-sm font-medium">
-                                    Catálogo oficial de prácticas y códigos de los nomencladores AOTER y OSER.
+                                    Catálogo oficial de prácticas y códigos de los nomencladores AOTER, OSER y NN (Nomenclador Nacional).
                                 </p>
                             </div>
                         </div>
@@ -135,7 +136,7 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
                 )}
 
                 {/* Quick Stats Pills */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div 
                         onClick={() => setNomencladorFilterType('ALL')}
                         className={`p-4 rounded-2xl border transition-all cursor-pointer ${
@@ -185,11 +186,31 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
                             <div>
                                 <div className="flex items-center gap-1.5">
                                     <span className="size-2 rounded-full bg-purple-500"></span>
-                                    <p className="text-[11px] font-bold uppercase tracking-wider text-purple-700">OSER (Nacional)</p>
+                                    <p className="text-[11px] font-bold uppercase tracking-wider text-purple-700">OSER</p>
                                 </div>
                                 <p className="text-2xl font-black text-slate-800 mt-0.5">{countOSER}</p>
                             </div>
                             <span className="material-symbols-outlined text-purple-300 text-3xl">verified</span>
+                        </div>
+                    </div>
+
+                    <div 
+                        onClick={() => setNomencladorFilterType('NN')}
+                        className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                            nomencladorFilterType === 'NN'
+                                ? 'bg-sky-50/50 border-sky-500 shadow-md ring-2 ring-sky-500/20'
+                                : 'bg-white/80 border-slate-200 hover:bg-white'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="flex items-center gap-1.5">
+                                    <span className="size-2 rounded-full bg-sky-500"></span>
+                                    <p className="text-[11px] font-bold uppercase tracking-wider text-sky-700">NN (Nacional)</p>
+                                </div>
+                                <p className="text-2xl font-black text-slate-800 mt-0.5">{countNN}</p>
+                            </div>
+                            <span className="material-symbols-outlined text-sky-400 text-3xl">local_hospital</span>
                         </div>
                     </div>
                 </div>
@@ -205,7 +226,7 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
                             </span>
                             <input
                                 type="text"
-                                placeholder="Buscar por código (ej. 120305, MS.01) o por nombre de práctica..."
+                                placeholder="Buscar por código (ej. 12.03.05, MS.01) o por nombre de práctica..."
                                 value={searchNomenclador}
                                 onChange={e => setSearchNomenclador(e.target.value)}
                                 className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
@@ -253,6 +274,16 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
                                 >
                                     OSER
                                 </button>
+                                <button
+                                    onClick={() => setNomencladorFilterType('NN')}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                        nomencladorFilterType === 'NN'
+                                            ? 'bg-sky-600 text-white shadow-sm'
+                                            : 'text-slate-600 hover:text-sky-700'
+                                    }`}
+                                >
+                                    NN (Nacional)
+                                </button>
                             </div>
 
                             <select
@@ -284,7 +315,7 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
                         <table className="w-full text-left border-collapse">
                             <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-widest border-b border-slate-200">
                                 <tr>
-                                    <th className="px-6 py-4 w-32">Nomenclador</th>
+                                    <th className="px-6 py-4 w-36">Nomenclador</th>
                                     <th className="px-6 py-4 w-36">Código</th>
                                     <th className="px-6 py-4">Descripción de la Práctica</th>
                                     <th className="px-6 py-4 w-32 text-center">Estado</th>
@@ -296,13 +327,21 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
                                     <tr key={item.id || `${item.type}-${item.code}`} className="hover:bg-slate-50/70 transition-colors group">
                                         {/* Nomenclador Badge */}
                                         <td className="px-6 py-3.5">
-                                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${
                                                 item.type === 'OSER'
                                                     ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                                    : item.type === 'NN'
+                                                    ? 'bg-sky-50 text-sky-700 border-sky-200'
                                                     : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                             }`}>
-                                                <span className={`size-1.5 rounded-full ${item.type === 'OSER' ? 'bg-purple-500' : 'bg-emerald-500'}`}></span>
-                                                {item.type}
+                                                <span className={`size-1.5 rounded-full ${
+                                                    item.type === 'OSER'
+                                                        ? 'bg-purple-500'
+                                                        : item.type === 'NN'
+                                                        ? 'bg-sky-500'
+                                                        : 'bg-emerald-500'
+                                                }`}></span>
+                                                {item.type === 'NN' ? 'NN (Nacional)' : item.type}
                                             </span>
                                         </td>
 

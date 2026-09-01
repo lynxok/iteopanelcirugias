@@ -8,14 +8,14 @@ interface NomencladorModalProps {
         id?: string;
         code: string;
         description: string;
-        type: 'AOTER' | 'OSER';
+        type: 'AOTER' | 'OSER' | 'NN';
         active: boolean;
     };
     setNomencladorForm: React.Dispatch<React.SetStateAction<{
         id?: string;
         code: string;
         description: string;
-        type: 'AOTER' | 'OSER';
+        type: 'AOTER' | 'OSER' | 'NN';
         active: boolean;
     }>>;
     isEditing: boolean;
@@ -54,6 +54,8 @@ const NomencladorModal: React.FC<NomencladorModalProps> = ({
                             <div className={`size-10 rounded-xl flex items-center justify-center shadow-lg ${
                                 nomencladorForm.type === 'OSER'
                                     ? 'bg-purple-600 shadow-purple-200 text-white'
+                                    : nomencladorForm.type === 'NN'
+                                    ? 'bg-sky-600 shadow-sky-200 text-white'
                                     : 'bg-emerald-600 shadow-emerald-200 text-white'
                             }`}>
                                 <span className="material-symbols-outlined text-2xl">clinical_notes</span>
@@ -63,7 +65,7 @@ const NomencladorModal: React.FC<NomencladorModalProps> = ({
                                     {isEditing ? 'Editar Práctica' : 'Nueva Práctica'}
                                 </h3>
                                 <p className="text-xs text-slate-500 font-medium">
-                                    Nomenclador {nomencladorForm.type}
+                                    Nomenclador {nomencladorForm.type === 'NN' ? 'NN (Nacional)' : nomencladorForm.type}
                                 </p>
                             </div>
                         </div>
@@ -83,30 +85,42 @@ const NomencladorModal: React.FC<NomencladorModalProps> = ({
                             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
                                 Nomenclador de Destino
                             </label>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-3 gap-2.5">
                                 <button
                                     type="button"
                                     onClick={() => setNomencladorForm(prev => ({ ...prev, type: 'AOTER' }))}
-                                    className={`py-3 px-4 rounded-xl text-sm font-bold border-2 transition-all flex items-center justify-center gap-2 ${
+                                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border-2 transition-all flex items-center justify-center gap-1.5 ${
                                         nomencladorForm.type === 'AOTER'
                                             ? 'border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm'
                                             : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                                     }`}
                                 >
-                                    <span className="size-2.5 rounded-full bg-emerald-500"></span>
+                                    <span className="size-2 rounded-full bg-emerald-500"></span>
                                     AOTER
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setNomencladorForm(prev => ({ ...prev, type: 'OSER' }))}
-                                    className={`py-3 px-4 rounded-xl text-sm font-bold border-2 transition-all flex items-center justify-center gap-2 ${
+                                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border-2 transition-all flex items-center justify-center gap-1.5 ${
                                         nomencladorForm.type === 'OSER'
                                             ? 'border-purple-600 bg-purple-50 text-purple-800 shadow-sm'
                                             : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                                     }`}
                                 >
-                                    <span className="size-2.5 rounded-full bg-purple-500"></span>
-                                    OSER (Nacional)
+                                    <span className="size-2 rounded-full bg-purple-500"></span>
+                                    OSER
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setNomencladorForm(prev => ({ ...prev, type: 'NN' }))}
+                                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border-2 transition-all flex items-center justify-center gap-1.5 ${
+                                        nomencladorForm.type === 'NN'
+                                            ? 'border-sky-600 bg-sky-50 text-sky-800 shadow-sm'
+                                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <span className="size-2 rounded-full bg-sky-500"></span>
+                                    NN (Nac.)
                                 </button>
                             </div>
                         </div>
@@ -123,14 +137,20 @@ const NomencladorModal: React.FC<NomencladorModalProps> = ({
                                 <input
                                     type="text"
                                     required
-                                    placeholder={nomencladorForm.type === 'OSER' ? 'Ej: 120305 o 121.01.01' : 'Ej: MS.01.01 o 120305'}
+                                    placeholder={
+                                        nomencladorForm.type === 'NN'
+                                            ? 'Ej: 12.03.05'
+                                            : nomencladorForm.type === 'OSER'
+                                            ? 'Ej: 121.01.01'
+                                            : 'Ej: MS.01.01'
+                                    }
                                     value={nomencladorForm.code}
                                     onChange={e => setNomencladorForm(prev => ({ ...prev, code: e.target.value.trim() }))}
                                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm font-mono font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50/50"
                                 />
                             </div>
                             <p className="text-[11px] text-slate-400 mt-1">
-                                Debe ser único dentro del nomenclador {nomencladorForm.type}.
+                                Debe ser único dentro del nomenclador {nomencladorForm.type === 'NN' ? 'NN (Nacional)' : nomencladorForm.type}.
                             </p>
                         </div>
 

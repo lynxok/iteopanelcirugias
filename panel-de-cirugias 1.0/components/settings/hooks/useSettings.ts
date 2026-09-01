@@ -125,7 +125,7 @@ export const useSettings = () => {
     const [isEditingCie10, setIsEditingCie10] = useState(false);
 
     const [showNomencladorModal, setShowNomencladorModal] = useState(false);
-    const [nomencladorForm, setNomencladorForm] = useState<{ id?: string; code: string; description: string; type: 'AOTER' | 'OSER'; active: boolean }>({ code: '', description: '', type: 'AOTER', active: true });
+    const [nomencladorForm, setNomencladorForm] = useState<{ id?: string; code: string; description: string; type: 'AOTER' | 'OSER' | 'NN'; active: boolean }>({ code: '', description: '', type: 'AOTER', active: true });
     const [isEditingNomenclador, setIsEditingNomenclador] = useState(false);
 
     const [showSpecialtiesModal, setShowSpecialtiesModal] = useState(false);
@@ -143,7 +143,7 @@ export const useSettings = () => {
     const [searchCatalog, setSearchCatalog] = useState('');
     const [searchCie10, setSearchCie10] = useState('');
     const [searchNomenclador, setSearchNomenclador] = useState('');
-    const [nomencladorFilterType, setNomencladorFilterType] = useState<'ALL' | 'AOTER' | 'OSER'>('ALL');
+    const [nomencladorFilterType, setNomencladorFilterType] = useState<'ALL' | 'AOTER' | 'OSER' | 'NN'>('ALL');
     const [selectedProcedureId, setSelectedProcedureId] = useState<string | null>(null);
     const [isAddingCategory, setIsAddingCategory] = useState(false);
     const [newCategoryName, setNewCategoryName] = useState('');
@@ -661,7 +661,7 @@ export const useSettings = () => {
         }
     };
 
-    const openNewNomencladorModal = (defaultType?: 'AOTER' | 'OSER') => {
+    const openNewNomencladorModal = (defaultType?: 'AOTER' | 'OSER' | 'NN') => {
         if (user?.role !== 'SuperAdmin') {
             alert('Acceso denegado: Únicamente los usuarios con rol SuperAdmin pueden crear prácticas.');
             return;
@@ -669,7 +669,7 @@ export const useSettings = () => {
         setNomencladorForm({
             code: '',
             description: '',
-            type: defaultType || (nomencladorFilterType === 'OSER' ? 'OSER' : 'AOTER'),
+            type: defaultType || (nomencladorFilterType !== 'ALL' ? nomencladorFilterType : 'AOTER'),
             active: true
         });
         setIsEditingNomenclador(false);
@@ -685,7 +685,7 @@ export const useSettings = () => {
             id: item.id,
             code: item.code,
             description: item.description,
-            type: (item.type as 'AOTER' | 'OSER') || 'AOTER',
+            type: (item.type as 'AOTER' | 'OSER' | 'NN') || 'AOTER',
             active: item.active ?? true
         });
         setIsEditingNomenclador(true);
