@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.115 (2026-09-01)
+- **Búsqueda Dinámica y Combinada de Nomenclador por Cobertura**:
+    * **Lógica Inteligente de Nomenclador por Cobertura**: Al seleccionar la cobertura **OSER** en una cirugía, el sistema filtra y busca exclusivamente en el nomenclador **OSER**. Para cualquier otra cobertura (o sin cobertura especificada), el sistema habilita y busca simultáneamente en **AOTER y NN (Nomenclador Nacional)**.
+    * **Buscador y Selector Modal Mejorado**: En [NomencladorSelectorModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/NomencladorSelectorModal.tsx), se añadieron pestañas de subfiltrado rápido (*Todos [AOTER + NN]*, *Solo AOTER*, *Solo NN*) e insignias visuales por cada código de práctica para identificar inmediatamente a qué nomenclador pertenece cada procedimiento.
+    * **Autocompletado con Distintivos**: El menú desplegable de procedimientos en [ClinicalDetailsSection.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/surgery-detail/ClinicalDetailsSection.tsx) ahora incluye badges identificatorios de color para `AOTER`, `NN` y `OSER`.
+
 ## v3.10.114 (2026-09-01)
 - **Categoría NN (Nomenclador Nacional) y Normalización de Práctica 12.03.05**:
     * **Nueva Categoría NN en Sistema**: Incorporado soporte nativo para la categoría **NN (Nomenclador Nacional)** junto a **AOTER** y **OSER** en toda la plataforma (Catálogo de Nomencladores, Coberturas/Prestadores, Ficha Quirúrgica y selector modal).

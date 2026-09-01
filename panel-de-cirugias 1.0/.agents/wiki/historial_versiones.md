@@ -4,6 +4,9 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.115 [2026-09-01]**: Lanzada la versión **v3.10.115**.
+    *   **Búsqueda Dinámica y Combinada de Nomenclador por Cobertura**: Al seleccionar OSER, se restringe la búsqueda a OSER. Al seleccionar cualquier otra cobertura, se habilita la búsqueda simultánea de **AOTER y NN**.
+    *   **Selector Modal con Pestañas y Badges**: En [NomencladorSelectorModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/NomencladorSelectorModal.tsx), soporte para alternar entre *Todos (AOTER + NN)*, *Solo AOTER* o *Solo NN*, con insignias por categoría en cada práctica.
 *   **v3.10.114 [2026-09-01]**: Lanzada la versión **v3.10.114**.
     *   **Incorporación de Nomenclador Nacional (NN) y Normalización `12.03.05`**: Añadida la categoría **NN (Nomenclador Nacional)** a toda la plataforma junto a AOTER y OSER. La práctica `12.03.05` : `Fractura de Tabique Nasal` quedó registrada exclusivamente bajo la categoría `NN`.
     *   **Filtros, Contadores y Formularios Actualizados**: Se agregaron estadísticas independientes, botones segmentados en [NomencladorTab.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/NomencladorTab.tsx), opciones en [CoverageModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/modals/CoverageModal.tsx) y en [NomencladorModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/modals/NomencladorModal.tsx).

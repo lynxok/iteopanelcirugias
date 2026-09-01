@@ -133,9 +133,22 @@ export const ClinicalDetailsSection: React.FC<ClinicalDetailsSectionProps> = ({
                                                     onProcedureInputChange('');
                                                 }}
                                             >
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-sm font-bold text-slate-900 group-hover:text-primary transition-colors">{item.description}</span>
-                                                    <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 uppercase">{item.code}</span>
+                                                <div className="flex justify-between items-center gap-2">
+                                                    <span className="text-sm font-bold text-slate-900 group-hover:text-primary transition-colors flex-1">{item.description}</span>
+                                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                        {item.type && item.type !== '' && (
+                                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase ${
+                                                                item.type === 'OSER'
+                                                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                                                    : item.type === 'NN'
+                                                                    ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                            }`}>
+                                                                {item.type}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 uppercase">{item.code}</span>
+                                                    </div>
                                                 </div>
                                             </button>
                                         ))}
