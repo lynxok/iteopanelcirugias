@@ -49,6 +49,14 @@ const SUSPENSION_REASONS = [
     'Otro'
 ];
 
+// Cache a nivel módulo para navegación instantánea (TTL 15 segundos)
+let surgeryListCache: {
+    surgeries: any[];
+    coverageMapping: Record<string, string>;
+    roleKey: string;
+    timestamp: number;
+} | null = null;
+
 const SurgeryList: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
@@ -63,6 +71,9 @@ const SurgeryList: React.FC = () => {
     const [showImporter, setShowImporter] = useState(false);
     const [filterDuplicatesOnly, setFilterDuplicatesOnly] = useState(false);
 
+    // Paginación real en cliente
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(25);
 
     // Modal States
     const [suspensionModal, setSuspensionModal] = useState<{ isOpen: boolean, surgeryId: string | null, reason: string, observations: string, isDefinitive: boolean }>({
@@ -94,13 +105,10 @@ const SurgeryList: React.FC = () => {
         row: null
     });
 
-// Cache a nivel módulo para navegación instantánea (TTL 15 segundos)
-let surgeryListCache: {
-    surgeries: any[];
-    coverageMapping: Record<string, string>;
-    roleKey: string;
-    timestamp: number;
-} | null = null;
+    // Resetear a página 1 cuando cambian los filtros
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, filterStatus, filterCoverage, filterVendor, coverageTypeFilter, filterDuplicatesOnly]);
 
     useEffect(() => {
         initSurgeryListData();
@@ -567,7 +575,12 @@ let surgeryListCache: {
         return result;
     }, [surgeries, searchTerm, filterStatus, filterCoverage, filterVendor, coverageTypeFilter, filterDuplicatesOnly, nucFrequencies, coverageMapping]);
 
-
+    // Paginación calculada
+    const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+    const paginatedData = useMemo(() => {
+        const startIndex = (currentPage - 1) * pageSize;
+        return filteredData.slice(startIndex, startIndex + pageSize);
+    }, [filteredData, currentPage, pageSize]);
 
     // Derive unique coverages for dropdown
     const uniqueCoverages = useMemo(() => {
@@ -744,8 +757,8 @@ let surgeryListCache: {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {filteredData.length > 0 ? (
-                                    filteredData.map((row) => (
+                                {paginatedData.length > 0 ? (
+                                    paginatedData.map((row) => (
                                         <tr
                                             key={row.id}
                                             className="hover:bg-blue-50/30 transition-colors group cursor-pointer"
@@ -794,69 +807,94 @@ let surgeryListCache: {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className="text-sm font-medium text-slate-700">{row.procedure}</span>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-slate-600">
-                                                {row.doctor}
+                                                <div className="text-sm font-semibold text-slate-800">{row.procedure}</div>
+                                                <div className="text-xs text-slate-400 max-w-xs truncate">{row.diagnosis}</div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold border transition-colors ${row.medical_coverage === 'Sin Cobertura'
-                                                        ? 'bg-slate-50 text-slate-400 border-slate-200'
-                                                        : 'bg-blue-50 text-blue-700 border-blue-200'
-                                                    }`}>
-                                                    {row.medical_coverage}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold border ${row.vendor_name === 'Pendiente'
-                                                        ? 'bg-amber-50 text-amber-700 border-amber-200 italic'
-                                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                                    }`}>
-                                                    {row.vendor_name}
-                                                </span>
+                                                <div className="text-sm font-medium text-slate-700">{row.doctor}</div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col gap-1 items-start">
-                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(row.status)}`}>
-                                                        {row.status}
-                                                    </span>
-                                                    {row.date !== 'TBD' && row.status === 'Pendiente Autorización' && (
-                                                        <span className="flex items-center gap-1 text-[9px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
-                                                            <span className="material-symbols-outlined text-[12px]">calendar_month</span>
-                                                            FECHA RESERVADA
+                                                    <span className="text-xs font-bold text-slate-700">{row.medical_coverage}</span>
+                                                    {row.medical_coverage && row.medical_coverage !== 'Sin Cobertura' && (
+                                                        <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                                                            {coverageMapping[row.medical_coverage] || 'Obra Social'}
                                                         </span>
                                                     )}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-bold text-slate-700">{row.date} {row.time}</span>
-                                                    {row.or && <span className="text-[10px] text-slate-500 uppercase font-bold">{row.or}</span>}
-                                                </div>
+                                                <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${row.vendor_name === 'Pendiente'
+                                                    ? 'bg-amber-50 text-amber-600 border-amber-200'
+                                                    : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                                                    }`}>
+                                                    {row.vendor_name}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold border inline-flex items-center gap-1.5 ${getStatusColor(row.status)}`}>
+                                                    <span className={`size-1.5 rounded-full ${row.status === 'En Curso' ? 'bg-blue-600 animate-ping' :
+                                                        row.status === 'Programada' ? 'bg-gray-500' :
+                                                            row.status === 'Finalizada' ? 'bg-emerald-500' :
+                                                                row.status === 'Demorada' ? 'bg-amber-500' :
+                                                                    row.status === 'Suspendida' || row.status === 'Cancelada' ? 'bg-red-500' :
+                                                                        'bg-orange-500'
+                                                        }`} />
+                                                    {row.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-sm font-bold text-slate-800">{row.date}</div>
+                                                <div className="text-xs text-slate-500 font-medium">{row.time} • {row.or || 'Sin Quirófano'}</div>
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {row.nuc && nucFrequencies[String(row.nuc).trim()] > 1 && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleOpenCompare(row);
+                                                            }}
+                                                            title={`Hay ${nucFrequencies[String(row.nuc).trim()]} cirugías con este NUC. Clic para comparar.`}
+                                                            className="text-amber-500 hover:text-amber-600 transition-colors p-1.5 hover:bg-amber-50 rounded-lg flex items-center gap-1"
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">compare</span>
+                                                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-1 rounded-full">
+                                                                {nucFrequencies[String(row.nuc).trim()]}
+                                                            </span>
+                                                        </button>
+                                                    )}
                                                     <button
-                                                        title="Suspender"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            setSuspensionModal({ ...suspensionModal, isOpen: true, surgeryId: row.id });
+                                                            setRescheduleModal({
+                                                                isOpen: true,
+                                                                surgeryId: row.id,
+                                                                date: row.date !== 'TBD' ? row.date : '',
+                                                                time: row.time !== '--:--' ? row.time : ''
+                                                            });
                                                         }}
-                                                        className="text-amber-500 hover:bg-amber-50 p-1.5 rounded-lg border border-transparent hover:border-amber-200 transition-all"
-                                                    >
-                                                        <span className="material-symbols-outlined text-lg">block</span>
-                                                    </button>
-                                                    <button
-                                                        title="Reprogramar"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setRescheduleModal({ ...rescheduleModal, isOpen: true, surgeryId: row.id, date: row.date });
-                                                        }}
-                                                        className="text-blue-500 hover:bg-blue-50 p-1.5 rounded-lg border border-transparent hover:border-blue-200 transition-all"
+                                                        title={user?.role === 'Internacion' ? "Solicitar Reprogramación" : "Reprogramar Fecha/Hora"}
+                                                        className="text-slate-400 hover:text-blue-600 transition-colors p-1.5 hover:bg-blue-50 rounded-lg"
                                                     >
                                                         <span className="material-symbols-outlined text-lg">event_repeat</span>
                                                     </button>
                                                     <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSuspensionModal({
+                                                                ...suspensionModal,
+                                                                isOpen: true,
+                                                                surgeryId: row.id
+                                                            });
+                                                        }}
+                                                        title="Suspender Cirugía"
+                                                        className="text-slate-400 hover:text-amber-600 transition-colors p-1.5 hover:bg-amber-50 rounded-lg"
+                                                    >
+                                                        <span className="material-symbols-outlined text-lg">block</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => navigate(`/detail/${row.id}`)}
                                                         title="Ver Detalle"
                                                         className="text-slate-400 hover:text-primary transition-colors p-1.5 hover:bg-slate-100 rounded-lg"
                                                     >
@@ -868,7 +906,7 @@ let surgeryListCache: {
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                                        <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
                                             <span className="material-symbols-outlined text-4xl mb-2">search_off</span>
                                             <p className="text-sm font-medium">No se encontraron cirugías con los filtros actuales.</p>
                                         </td>
@@ -880,8 +918,8 @@ let surgeryListCache: {
 
                     {/* MOBILE VIEW (CARDS) */}
                     <div className="md:hidden flex flex-col divide-y divide-slate-100 bg-slate-50/50">
-                        {filteredData.length > 0 ? (
-                            filteredData.map((row) => (
+                        {paginatedData.length > 0 ? (
+                            paginatedData.map((row) => (
                                 <div
                                     key={row.id}
                                     onClick={() => navigate(`/detail/${row.id}`)}
@@ -960,15 +998,58 @@ let surgeryListCache: {
                         )}
                     </div>
 
-                    {/* Pagination Footer (Mock) */}
-                    <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-                        <p className="text-xs text-slate-500">Mostrando {filteredData.length} resultados</p>
+                    {/* Pagination Footer */}
+                    <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 text-xs text-slate-500">
+                            <span>
+                                Mostrando{' '}
+                                <strong className="font-bold text-slate-700">
+                                    {filteredData.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+                                </strong>
+                                {' '}-{' '}
+                                <strong className="font-bold text-slate-700">
+                                    {Math.min(currentPage * pageSize, filteredData.length)}
+                                </strong>
+                                {' '}de <strong className="font-bold text-slate-700">{filteredData.length}</strong> cirugías
+                            </span>
+                            <span className="text-slate-300">|</span>
+                            <div className="flex items-center gap-1.5">
+                                <span>Por página:</span>
+                                <select
+                                    value={pageSize}
+                                    onChange={(e) => {
+                                        setPageSize(Number(e.target.value));
+                                        setCurrentPage(1);
+                                    }}
+                                    className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs font-bold text-slate-700 outline-none focus:ring-1 focus:ring-primary"
+                                >
+                                    <option value={15}>15</option>
+                                    <option value={25}>25</option>
+                                    <option value={50}>50</option>
+                                    <option value={100}>100</option>
+                                </select>
+                            </div>
+                        </div>
+
                         <div className="flex items-center gap-2">
-                            <button className="p-1 rounded hover:bg-white border border-transparent hover:border-slate-200 text-slate-400 hover:text-slate-600 disabled:opacity-50">
-                                <span className="material-symbols-outlined">chevron_left</span>
+                            <span className="text-xs font-medium text-slate-500 mr-2">
+                                Página {currentPage} de {totalPages}
+                            </span>
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage <= 1}
+                                title="Página Anterior"
+                                className="p-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                            >
+                                <span className="material-symbols-outlined text-lg">chevron_left</span>
                             </button>
-                            <button className="p-1 rounded hover:bg-white border border-transparent hover:border-slate-200 text-slate-400 hover:text-slate-600">
-                                <span className="material-symbols-outlined">chevron_right</span>
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage >= totalPages}
+                                title="Página Siguiente"
+                                className="p-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                            >
+                                <span className="material-symbols-outlined text-lg">chevron_right</span>
                             </button>
                         </div>
                     </div>

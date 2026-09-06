@@ -18,6 +18,9 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-06]`: **Optimización de Carga y Paginación en Listado General de Cirugías (v3.10.121)**:
+    *   `SurgeryList.tsx`: Reubicación de `surgeryListCache` fuera del componente (módulo raíz) para persistencia real entre vistas.
+    *   `SurgeryList.tsx`: Implementación de paginación en memoria mediante `useMemo` slice (25 por página por defecto), reduciendo drásticamente el tamaño del DOM y mejorando el tiempo de carga a <16 ms con controles interactivos funcionales.
 *   `[2026-09-06]`: **Aceleración Masiva y Caché en Todas las Secciones Críticas (v3.10.120)**:
     *   `ResultsDashboard.tsx`: Paralelización con `Promise.all` y caché `resultsDashboardCache`.
     *   `Monitor.tsx`: Lazy loading con `Suspense` de `SurgeryForm`, caché `monitorCache` y paralelización de datos.

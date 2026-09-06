@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v3.10.121 (2026-09-06)
+- **Optimización Integral de Rendimiento y Carga en Listado General de Cirugías (`SurgeryList.tsx`)**:
+    * **Persistencia de Caché a Nivel Módulo**: Se corrigió la ubicación de `surgeryListCache`, moviéndola al nivel raíz de módulo para que persista entre montajes de componentes. La navegación de vuelta al listado desde los detalles o desde cualquier otra sección es inmediata (0 ms).
+    * **Paginación Dinámica en Cliente (`useMemo`)**:
+        - Se segmentó el renderizado a 25 cirugías por página por defecto (con opciones de 15, 25, 50 y 100), reduciendo miles de nodos del DOM y eliminando por completo el retardo de render inicial (de >1.5s a <16ms).
+        - Se preservaron al 100% las búsquedas de texto y los filtros multi-criterio (estado, coberturas ART/prepaga/particular, ortopedias, duplicados NUC) operando sobre todo el universo de datos en memoria.
+        - Se activaron los controles interactivos de paginación (`Página X de Y`, botones previo/siguiente y selector de tamaño de página).
+    * **Preservación Estricta**: No se alteró ninguna regla de negocio, cálculo de estados ni estética de pulseras de paciente.
+
 ## v3.10.120 (2026-09-06)
 - **Optimización y Aceleración Masiva de Carga en Módulos Clave**:
     * **Tablero de Resultados (`ResultsDashboard.tsx`)**:

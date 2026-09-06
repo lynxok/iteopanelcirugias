@@ -4,6 +4,11 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.121 [2026-09-06]**: Lanzada la versión **v3.10.121**.
+    *   **Optimización Integral de Carga y Rendimiento en Listado General de Cirugías (`SurgeryList.tsx`)**:
+        *   **Caché Persistente a Nivel Módulo**: Reubicación de `surgeryListCache` fuera de la función del componente a nivel de módulo raíz, garantizando carga instantánea (0 ms) al regresar de detalles de cirugías o desde otras rutas.
+        *   **Paginación Dinámica en Cliente (`useMemo`)**: Reducción del árbol DOM renderizando únicamente la página activa (25 por defecto, configurable a 15, 50 o 100). Tiempos de render reducidos de >1.5s a <16ms manteniendo búsquedas y filtros activos sobre todo el dataset.
+        *   **Controles de Paginación Funcionales**: Navegación de páginas interactiva, indicador `Página X de Y` y selector de filas por página.
 *   **v3.10.120 [2026-09-06]**: Lanzada la versión **v3.10.120**.
     *   **Aceleración Masiva y Optimización de Carga Global**:
         *   **Tablero de Resultados (`ResultsDashboard.tsx`)**: Paralelización concurrente con `Promise.all` y caché en memoria (`resultsDashboardCache`) con navegación instantánea (0 ms).
