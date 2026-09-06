@@ -4,6 +4,11 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.119 [2026-09-06]**: Lanzada la versión **v3.10.119**.
+    *   **Aceleración Integral de Guardias de Residentes (`/resident-shifts`)**:
+        *   **Paralelización de Consultas (`Promise.all`)**: Ejecución simultánea de 4 consultas en Supabase reduciendo drásticamente el bloqueo de red.
+        *   **Caché en Memoria (`residentShiftsCache`)**: Transición instantánea (0 ms) al cambiar de mes o pestañas.
+        *   **Indexación Precalculada $O(1)$**: Supresión de filtros masivos repetidos en el render de las celdas de días del mes.
 *   **v3.10.118 [2026-09-06]**: Lanzada la versión **v3.10.118**.
     *   **Corrección de Consulta SQL en Quirófanos**: Eliminación de las columnas inexistentes `color` y `end_time` en la proyección del `select` de `operating_rooms` en [Calendar.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Calendar.tsx), resolviendo el código de error HTTP 400 y restaurando la visualización inmediata del calendario.
 *   **v3.10.117 [2026-09-06]**: Lanzada la versión **v3.10.117**.

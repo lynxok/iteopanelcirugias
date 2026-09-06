@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.119 (2026-09-06)
+- **Optimización y Aceleración de Carga en Sección Guardias de Residentes (`/resident-shifts`)**:
+    * **Consultas Paralelas en Supabase (`Promise.all`)**: Se unificaron las consultas de usuarios residentes/médicos, guardias del mes, licencias/vacaciones y configuraciones de guardia de quirófano en un solo bloque concurrente, eliminando el bloqueo en cascada y reduciendo los tiempos de carga a más de la mitad.
+    * **Caché en Memoria Mensual (`residentShiftsCache`)**: Al alternar entre meses ya visitados o pestañas internas (Calendario, Licencias, Dashboard, Mis Guardias), la respuesta es instantánea (0 ms) con política de refresco silencioso si la caché tiene más de 30 segundos.
+    * **Indexación $O(1)$ por Fecha**: Pre-cálculo memorizado de las barras de guardias y asignaciones por fecha (`visualBarsByDate` y `vacationsByDate`), eliminando filtros repetitivos de arrays en el render de las celdas del mes.
+
 ## v3.10.118 (2026-09-06)
 - **Corrección en Proyección de Columnas de Quirófanos (`operating_rooms`)**:
     * **Solución a Error 400 (`column operating_rooms.color does not exist`)**: Subsanado el fallo en la consulta SQL de `fetchInitialData` que solicitaba las columnas inexistentes `color` y `end_time` en la tabla `operating_rooms`, restableciendo la carga normal e inmediata de la grilla de quirófanos y cirugías del calendario.

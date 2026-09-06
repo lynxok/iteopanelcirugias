@@ -18,6 +18,10 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-06]`: **Aceleración y Optimización de Guardias de Residentes (`/resident-shifts`) (v3.10.119)**:
+    *   Se paralelizaron con `Promise.all` las consultas de Supabase (`users`, `resident_shifts`, `resident_vacations`, `admin_settings`).
+    *   Se implementó caché en memoria por mes (`residentShiftsCache`) con refresco silencioso y navegación instantánea.
+    *   Se precalcularon en memoria mapas `O(1)` (`visualBarsByDate` y `vacationsByDate`) evitando recalcular y filtrar en cada celda del mes.
 *   `[2026-09-06]`: **Corrección de Proyección SQL en Quirófanos (`operating_rooms`) (v3.10.118)**:
     *   Se diagnosticó y subsanó el error HTTP 400 (`column operating_rooms.color does not exist`) generado al proyectar campos en la consulta paralela de `Calendar.tsx`. La tabla posee `id, name, active, daily_goal, start_time, is_ambulatory`.
 *   `[2026-09-06]`: **Optimización de Rendimiento y Aceleración de Carga de Calendario (`/calendar`)**:
