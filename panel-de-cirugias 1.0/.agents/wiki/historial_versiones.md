@@ -4,6 +4,8 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.118 [2026-09-06]**: Lanzada la versión **v3.10.118**.
+    *   **Corrección de Consulta SQL en Quirófanos**: Eliminación de las columnas inexistentes `color` y `end_time` en la proyección del `select` de `operating_rooms` en [Calendar.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Calendar.tsx), resolviendo el código de error HTTP 400 y restaurando la visualización inmediata del calendario.
 *   **v3.10.117 [2026-09-06]**: Lanzada la versión **v3.10.117**.
     *   **Aceleración Drástica de Carga en Sección Calendario (`/calendar`)**:
         *   **Carga Diferida (`React.lazy` + `Suspense`) de `SurgeryForm`**: Reducción del bundle inicial en ~1.5 MB de código JavaScript al aislar el modal de edición de cirugías.

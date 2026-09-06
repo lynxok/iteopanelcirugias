@@ -18,6 +18,8 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-06]`: **Corrección de Proyección SQL en Quirófanos (`operating_rooms`) (v3.10.118)**:
+    *   Se diagnosticó y subsanó el error HTTP 400 (`column operating_rooms.color does not exist`) generado al proyectar campos en la consulta paralela de `Calendar.tsx`. La tabla posee `id, name, active, daily_goal, start_time, is_ambulatory`.
 *   `[2026-09-06]`: **Optimización de Rendimiento y Aceleración de Carga de Calendario (`/calendar`)**:
     *   Se implementó Lazy Loading (`React.lazy` + `Suspense`) en `SurgeryForm`, evitando descargar ~1.5 MB de código JS antes de que el usuario abra el formulario de una cirugía.
     *   Se paralelizaron con `Promise.all` las 5 consultas de Supabase (`operating_rooms`, `surgeries`, `system_alerts`, `coverages`, `hospital_admissions`), reduciendo el tiempo de red en más de un 50%.

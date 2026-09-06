@@ -807,7 +807,7 @@ const Calendar: React.FC = () => {
             const [orRes, surRes, alertsRes, artRes, admRes] = await Promise.all([
                 supabase
                     .from('operating_rooms')
-                    .select('id, name, color, active, start_time, end_time, is_ambulatory')
+                    .select('id, name, active, daily_goal, start_time, is_ambulatory')
                     .eq('active', true),
                 supabase
                     .from('surgeries')

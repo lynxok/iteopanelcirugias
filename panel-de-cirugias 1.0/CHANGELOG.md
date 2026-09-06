@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v3.10.118 (2026-09-06)
+- **Corrección en Proyección de Columnas de Quirófanos (`operating_rooms`)**:
+    * **Solución a Error 400 (`column operating_rooms.color does not exist`)**: Subsanado el fallo en la consulta SQL de `fetchInitialData` que solicitaba las columnas inexistentes `color` y `end_time` en la tabla `operating_rooms`, restableciendo la carga normal e inmediata de la grilla de quirófanos y cirugías del calendario.
+
 ## v3.10.117 (2026-09-06)
 - **Optimización y Aceleración de Carga en Sección Calendario (`/calendar`)**:
     * **Carga Diferida (Lazy Loading) de `SurgeryForm`**: Se desacopló la importación estática del modal de cirugía (~1.5 MB de JavaScript y dependencias pesadas de exportación), difiriendo su descarga hasta que el usuario realmente interactúe para crear o editar una cirugía. Esto aligera en más de un 60% la carga inicial de la página.
