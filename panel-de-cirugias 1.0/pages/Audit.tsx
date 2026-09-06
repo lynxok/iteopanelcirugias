@@ -54,12 +54,20 @@ interface ResourceDetails {
     procedureName?: string;
 }
 
+// Cache a nivel de módulo para la primera página por defecto
+let auditFirstPageCache: {
+    logs: AuditLog[];
+    resourceDetailsMap: Record<string, ResourceDetails>;
+    totalCount: number;
+    timestamp: number;
+} | null = null;
+
 const Audit: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
-    const [logs, setLogs] = useState<AuditLog[]>([]);
-    const [resourceDetailsMap, setResourceDetailsMap] = useState<Record<string, ResourceDetails>>({});
-    const [loading, setLoading] = useState(true);
+    const [logs, setLogs] = useState<AuditLog[]>(() => auditFirstPageCache ? auditFirstPageCache.logs : []);
+    const [resourceDetailsMap, setResourceDetailsMap] = useState<Record<string, ResourceDetails>>(() => auditFirstPageCache ? auditFirstPageCache.resourceDetailsMap : {});
+    const [loading, setLoading] = useState(!auditFirstPageCache);
 
     // Pagination & Filter State
     const [page, setPage] = useState(0);
@@ -174,56 +182,67 @@ const Audit: React.FC = () => {
 
                 const detailsMap: Record<string, ResourceDetails> = {};
 
-                if (surgeryIds.length > 0) {
-                    try {
-                        const { data: surgeriesData } = await supabase
-                            .from('surgeries')
-                            .select(`
-                                id,
-                                procedure_name,
-                                patients (
-                                    full_name,
-                                    document_number
-                                )
-                            `)
-                            .in('id', Array.from(new Set(surgeryIds)));
+                const uniqueSurgeryIds = Array.from(new Set(surgeryIds));
+                const uniquePatientIds = Array.from(new Set(patientIds));
 
-                        if (surgeriesData) {
-                            surgeriesData.forEach((s: any) => {
-                                detailsMap[s.id] = {
-                                    patientName: s.patients?.full_name || undefined,
-                                    documentNumber: s.patients?.document_number || undefined,
-                                    procedureName: s.procedure_name || undefined
-                                };
-                            });
-                        }
-                    } catch (e) {
-                        console.error('Error fetching surgery details for audit:', e);
+                const surgeriesPromise = uniqueSurgeryIds.length > 0
+                    ? supabase
+                        .from('surgeries')
+                        .select(`
+                            id,
+                            procedure_name,
+                            patients (
+                                full_name,
+                                document_number
+                            )
+                        `)
+                        .in('id', uniqueSurgeryIds)
+                    : Promise.resolve({ data: [] });
+
+                const patientsPromise = uniquePatientIds.length > 0
+                    ? supabase
+                        .from('patients')
+                        .select('id, full_name, document_number')
+                        .in('id', uniquePatientIds)
+                    : Promise.resolve({ data: [] });
+
+                try {
+                    const [surgeriesRes, patientsRes] = await Promise.all([surgeriesPromise, patientsPromise]);
+
+                    if (surgeriesRes.data) {
+                        surgeriesRes.data.forEach((s: any) => {
+                            detailsMap[s.id] = {
+                                patientName: s.patients?.full_name || undefined,
+                                documentNumber: s.patients?.document_number || undefined,
+                                procedureName: s.procedure_name || undefined
+                            };
+                        });
                     }
-                }
 
-                if (patientIds.length > 0) {
-                    try {
-                        const { data: patientsData } = await supabase
-                            .from('patients')
-                            .select('id, full_name, document_number')
-                            .in('id', Array.from(new Set(patientIds)));
-
-                        if (patientsData) {
-                            patientsData.forEach((p: any) => {
-                                detailsMap[p.id] = {
-                                    ...(detailsMap[p.id] || {}),
-                                    patientName: p.full_name || undefined,
-                                    documentNumber: p.document_number || undefined
-                                };
-                            });
-                        }
-                    } catch (e) {
-                        console.error('Error fetching patient details for audit:', e);
+                    if (patientsRes.data) {
+                        patientsRes.data.forEach((p: any) => {
+                            detailsMap[p.id] = {
+                                ...(detailsMap[p.id] || {}),
+                                patientName: p.full_name || undefined,
+                                documentNumber: p.document_number || undefined
+                            };
+                        });
                     }
+                } catch (e) {
+                    console.error('Error fetching resource details for audit:', e);
                 }
 
                 setResourceDetailsMap(detailsMap);
+
+                // Cache the first page if default filters
+                if (page === 0 && filterType === 'ALL' && !searchTerm) {
+                    auditFirstPageCache = {
+                        logs: data,
+                        resourceDetailsMap: detailsMap,
+                        totalCount: count || 0,
+                        timestamp: Date.now()
+                    };
+                }
             }
             if (count !== null) setTotalCount(count);
 

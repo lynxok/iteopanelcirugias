@@ -4,6 +4,14 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.122 [2026-09-06]**: Lanzada la versión **v3.10.122**.
+    *   **Aceleración Global y Caché Instantáneo (0 ms) en Todas las Secciones**:
+        *   **Dashboard Principal (`Dashboard.tsx`)**: Caché por rol a nivel módulo `dashboardCache`, render de 0 ms y revalidación silenciosa en background.
+        *   **Kanban Quirúrgico (`Kanban.tsx`)**: Caché a nivel módulo `kanbanCache` para render instantáneo de tarjetas quirúrgicas sin pantallas en blanco ni esperas.
+        *   **Tablero de Coordinación y ART (`AdminDashboard.tsx`)**: Caché de módulo `adminDashboardCache` y consultas concurrentes con `Promise.all`.
+        *   **Facturación e Internaciones (`Billing.tsx`)**: Caché de planillas y admisiones (`billingPlanillaCache`, `billingAdmissionsCache`) y paralelización con `Promise.all`.
+        *   **Panel Médico y Residencia (`DoctorPanel.tsx`)**: Caché `doctorPanelCache` y paralelización simultánea con `Promise.all` de admisiones, cirugías asignadas y catálogo de fármacos.
+        *   **Auditoría del Sistema (`Audit.tsx`)**: Caché de primera página `auditFirstPageCache` y resolución paralela de pacientes y cirugías.
 *   **v3.10.121 [2026-09-06]**: Lanzada la versión **v3.10.121**.
     *   **Optimización Integral de Carga y Rendimiento en Listado General de Cirugías (`SurgeryList.tsx`)**:
         *   **Caché Persistente a Nivel Módulo**: Reubicación de `surgeryListCache` fuera de la función del componente a nivel de módulo raíz, garantizando carga instantánea (0 ms) al regresar de detalles de cirugías o desde otras rutas.

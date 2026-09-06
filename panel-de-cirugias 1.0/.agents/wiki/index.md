@@ -18,6 +18,13 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-06]`: **Aceleración Global y Caché Instantáneo (0 ms) en Todas las Secciones Restantes (v3.10.122)**:
+    *   `Dashboard.tsx`: Caché a nivel módulo indexado por rol (`dashboardCache`), arranque instantáneo a 0 ms.
+    *   `Kanban.tsx`: Caché a nivel módulo (`kanbanCache`) para navegación inmediata a la mesa de control quirúrgico.
+    *   `AdminDashboard.tsx`: Caché `adminDashboardCache` y ejecución concurrente con `Promise.all` de ART y cirugías.
+    *   `Billing.tsx`: Cachés `billingPlanillaCache` y `billingAdmissionsCache`, paralelización de admisiones y cirugías con `Promise.all`.
+    *   `DoctorPanel.tsx`: Caché `doctorPanelCache` y paralelización de admisiones, cirugías y catálogo de medicamentos.
+    *   `Audit.tsx`: Caché `auditFirstPageCache` y paralelización con `Promise.all` de resolución de pacientes y cirugías.
 *   `[2026-09-06]`: **Optimización de Carga y Paginación en Listado General de Cirugías (v3.10.121)**:
     *   `SurgeryList.tsx`: Reubicación de `surgeryListCache` fuera del componente (módulo raíz) para persistencia real entre vistas.
     *   `SurgeryList.tsx`: Implementación de paginación en memoria mediante `useMemo` slice (25 por página por defecto), reduciendo drásticamente el tamaño del DOM y mejorando el tiempo de carga a <16 ms con controles interactivos funcionales.

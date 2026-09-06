@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## v3.10.122 (2026-09-06)
+- **Aceleración Global y Caché Instantáneo (0 ms) en Todas las Secciones Restantes del Panel**:
+    * **Dashboard Principal (`Dashboard.tsx`)**:
+        - Implementación de caché a nivel de módulo (`dashboardCache`) con clave por rol de usuario.
+        - Inicialización síncrona del estado local: la pantalla abre instantáneamente sin pantalla en blanco ni spinners al cambiar de pestaña.
+        - Revalidación en segundo plano (*stale-while-revalidate*) preservando tiempo real.
+    * **Kanban Quirúrgico (`Kanban.tsx`)**:
+        - Caché a nivel módulo (`kanbanCache`) indexado por rol de usuario. Carga visual inmediata de las columnas Kanban de preparación y programación.
+    * **Tablero de Coordinación y ART (`AdminDashboard.tsx`)**:
+        - Caché a nivel módulo (`adminDashboardCache`) para estadísticas, alertas y seguimiento de ART.
+        - Paralelización concurrente con `Promise.all` de coberturas ART y cirugías, eliminando ejecuciones redundantes.
+    * **Facturación e Internaciones (`Billing.tsx`)**:
+        - Cachés dedicados en memoria (`billingPlanillaCache`, `billingAdmissionsCache`).
+        - Paralelización con `Promise.all` para descarga concurrente de admisiones y cirugías en la generación de planillas.
+    * **Panel Médico y Residencia (`DoctorPanel.tsx`)**:
+        - Caché a nivel módulo (`doctorPanelCache`) que retiene admisiones, cirugías futuras, historial y catálogo farmacológico.
+        - Paralelización simultánea de admisiones hospitalarias, cirugías asignadas y catálogo de medicamentos con `Promise.all`.
+    * **Auditoría del Sistema (`Audit.tsx`)**:
+        - Caché de primera página (`auditFirstPageCache`) para acceso inmediato al historial de cambios.
+        - Paralelización concurrente de resolución de detalles de cirugías y pacientes mediante `Promise.all`.
+    * **Preservación Estricta**:
+        - Ninguna regla de negocio, filtros o estética alterada.
+        - Intocabilidad total de etiquetas/pulseras térmicas (`PatientPrintLabel.tsx`).
+
 ## v3.10.121 (2026-09-06)
 - **Optimización Integral de Rendimiento y Carga en Listado General de Cirugías (`SurgeryList.tsx`)**:
     * **Persistencia de Caché a Nivel Módulo**: Se corrigió la ubicación de `surgeryListCache`, moviéndola al nivel raíz de módulo para que persista entre montajes de componentes. La navegación de vuelta al listado desde los detalles o desde cualquier otra sección es inmediata (0 ms).
