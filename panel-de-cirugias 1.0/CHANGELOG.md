@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## v3.10.120 (2026-09-06)
+- **Optimización y Aceleración Masiva de Carga en Módulos Clave**:
+    * **Tablero de Resultados (`ResultsDashboard.tsx`)**:
+        - Paralelización concurrente con `Promise.all` de quirófanos, cirugías e internaciones.
+        - Implementación de caché en memoria a nivel módulo (`resultsDashboardCache`) con navegación instantánea (0 ms) y revalidación en segundo plano.
+    * **Monitor de Quirófanos (`Monitor.tsx`)**:
+        - Carga diferida (*Lazy Loading* con `React.lazy` + `Suspense`) de `SurgeryForm` para reducir drásticamente el bundle inicial.
+        - Caché en memoria (`monitorCache`) para respuesta inmediata al acceder a la pantalla sin re-esperar la red.
+        - Paralelización con `Promise.all` en `fetchMonitorData` y selección limpia de columnas de quirófanos.
+    * **Mapa de Internación (`HospitalizationMap.tsx`)**:
+        - Paralelización concurrente (`Promise.all`) de habitaciones, camas (con admisiones y cirugías), estadísticas de ocupación, catálogo de medicamentos, planes activos y médicos cirujanos.
+        - Caché en memoria (`hospitalizationCache`) de 20s para alternar entre camas y salas a 0 ms.
+    * **Listado de Cirugías (`SurgeryList.tsx`)**:
+        - Ejecución concurrente del mapeo de coberturas y cirugías.
+        - Caché en memoria contextual por rol de usuario (`surgeryListCache`) para retorno instantáneo al salir de detalles de cirugías.
+    * **Preservación Estricta**: Cero alteraciones de lógica funcional, reglas de negocio o estética visual (incluidas pulseras de paciente).
+
 ## v3.10.119 (2026-09-06)
 - **Optimización y Aceleración de Carga en Sección Guardias de Residentes (`/resident-shifts`)**:
     * **Consultas Paralelas en Supabase (`Promise.all`)**: Se unificaron las consultas de usuarios residentes/médicos, guardias del mes, licencias/vacaciones y configuraciones de guardia de quirófano en un solo bloque concurrente, eliminando el bloqueo en cascada y reduciendo los tiempos de carga a más de la mitad.

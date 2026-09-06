@@ -18,6 +18,11 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-06]`: **Aceleración Masiva y Caché en Todas las Secciones Críticas (v3.10.120)**:
+    *   `ResultsDashboard.tsx`: Paralelización con `Promise.all` y caché `resultsDashboardCache`.
+    *   `Monitor.tsx`: Lazy loading con `Suspense` de `SurgeryForm`, caché `monitorCache` y paralelización de datos.
+    *   `HospitalizationMap.tsx`: Paralelización de 6 consultas y caché `hospitalizationCache`.
+    *   `SurgeryList.tsx`: Paralelización y caché contextual por rol `surgeryListCache`.
 *   `[2026-09-06]`: **Aceleración y Optimización de Guardias de Residentes (`/resident-shifts`) (v3.10.119)**:
     *   Se paralelizaron con `Promise.all` las consultas de Supabase (`users`, `resident_shifts`, `resident_vacations`, `admin_settings`).
     *   Se implementó caché en memoria por mes (`residentShiftsCache`) con refresco silencioso y navegación instantánea.

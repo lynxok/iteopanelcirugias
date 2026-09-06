@@ -4,6 +4,12 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.120 [2026-09-06]**: Lanzada la versión **v3.10.120**.
+    *   **Aceleración Masiva y Optimización de Carga Global**:
+        *   **Tablero de Resultados (`ResultsDashboard.tsx`)**: Paralelización concurrente con `Promise.all` y caché en memoria (`resultsDashboardCache`) con navegación instantánea (0 ms).
+        *   **Monitor de Quirófanos (`Monitor.tsx`)**: Carga diferida (`React.lazy` + `Suspense`) de `SurgeryForm`, caché `monitorCache` y paralelización de consultas.
+        *   **Mapa de Internación (`HospitalizationMap.tsx`)**: Paralelización de 6 consultas de Supabase y caché `hospitalizationCache` (TTL 20s).
+        *   **Listado de Cirugías (`SurgeryList.tsx`)**: Ejecución concurrente y caché por rol (`surgeryListCache`).
 *   **v3.10.119 [2026-09-06]**: Lanzada la versión **v3.10.119**.
     *   **Aceleración Integral de Guardias de Residentes (`/resident-shifts`)**:
         *   **Paralelización de Consultas (`Promise.all`)**: Ejecución simultánea de 4 consultas en Supabase reduciendo drásticamente el bloqueo de red.

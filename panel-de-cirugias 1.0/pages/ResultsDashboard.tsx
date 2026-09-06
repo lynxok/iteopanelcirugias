@@ -143,6 +143,14 @@ const extractProcedureCodeAndName = (procedureName: string) => {
     };
 };
 
+// Global in-memory cache for instant dashboard transitions
+let resultsDashboardCache: {
+    rawOrs: any[];
+    rawSurgeries: any[];
+    rawAdmissions: any[];
+    timestamp: number;
+} | null = null;
+
 const ResultsDashboard: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
@@ -448,53 +456,79 @@ const ResultsDashboard: React.FC = () => {
     };
 
     // --- Fetch Raw Data once (or when user changes) ---
-    const fetchRawData = async () => {
-        setLoading(true);
+    const fetchRawData = async (forceRefresh = false) => {
+        if (!forceRefresh && resultsDashboardCache) {
+            setRawOrs(resultsDashboardCache.rawOrs);
+            setRawSurgeries(resultsDashboardCache.rawSurgeries);
+            setRawAdmissions(resultsDashboardCache.rawAdmissions);
+            setLoading(false);
+            if (Date.now() - resultsDashboardCache.timestamp < 30000) {
+                return;
+            }
+        } else {
+            setLoading(true);
+        }
+
         try {
-            const { data: ors, error: orError } = await supabase
-                .from('operating_rooms')
-                .select('id, name, daily_goal')
-                .eq('active', true);
-            if (orError) throw orError;
-            setRawOrs(ors || []);
-
-            const { data: surgeries, error: surError } = await supabase
-                .from('surgeries')
-                .select(`
-                    id,
-                    status, 
-                    suspension_reason, 
-                    operating_room_id,
-                    estimated_duration,
-                    surgery_date,
-                    procedure_name,
-                    doctor_id,
-                    patient_id,
-                    actual_start_time,
-                    actual_end_time,
-                    doctors!doctor_id (
-                        full_name,
-                        specialty
-                    ),
-                    patients!patient_id (
-                        full_name
-                    ),
-                    referring_doctor_id,
-                    referring_doctor:doctors!referring_doctor_id (
-                        full_name
-                    )
-                `);
-            if (surError) throw surError;
-            setRawSurgeries(surgeries || []);
-
             const twoYearsAgoStr = format(subYears(new Date(), 2), 'yyyy-MM-dd');
-            const { data: admissionsData, error: admError } = await supabase
-                .from('hospital_admissions')
-                .select('patient_id, check_in, check_out')
-                .not('check_out', 'is', null)
-                .gte('check_in', twoYearsAgoStr);
-            if (admError) throw admError;
-            setRawAdmissions(admissionsData || []);
+
+            // Parallel execution of all 3 queries
+            const [orRes, surRes, admRes] = await Promise.all([
+                supabase
+                    .from('operating_rooms')
+                    .select('id, name, daily_goal')
+                    .eq('active', true),
+                supabase
+                    .from('surgeries')
+                    .select(`
+                        id,
+                        status, 
+                        suspension_reason, 
+                        operating_room_id,
+                        estimated_duration,
+                        surgery_date,
+                        procedure_name,
+                        doctor_id,
+                        patient_id,
+                        actual_start_time,
+                        actual_end_time,
+                        doctors!doctor_id (
+                            full_name,
+                            specialty
+                        ),
+                        patients!patient_id (
+                            full_name
+                        ),
+                        referring_doctor_id,
+                        referring_doctor:doctors!referring_doctor_id (
+                            full_name
+                        )
+                    `),
+                supabase
+                    .from('hospital_admissions')
+                    .select('patient_id, check_in, check_out')
+                    .not('check_out', 'is', null)
+                    .gte('check_in', twoYearsAgoStr)
+            ]);
+
+            if (orRes.error) throw orRes.error;
+            if (surRes.error) throw surRes.error;
+            if (admRes.error) throw admRes.error;
+
+            const orsData = orRes.data || [];
+            const surgeriesData = surRes.data || [];
+            const admissionsData = admRes.data || [];
+
+            setRawOrs(orsData);
+            setRawSurgeries(surgeriesData);
+            setRawAdmissions(admissionsData);
+
+            resultsDashboardCache = {
+                rawOrs: orsData,
+                rawSurgeries: surgeriesData,
+                rawAdmissions: admissionsData,
+                timestamp: Date.now()
+            };
 
         } catch (err) {
             console.error('Error fetching raw results:', err);
