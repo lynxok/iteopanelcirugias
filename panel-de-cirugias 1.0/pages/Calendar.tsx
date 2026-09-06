@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../src/lib/supabase';
 import { useAuth } from '../src/lib/AuthContext';
@@ -6,7 +6,18 @@ import { createOrUpdateDoctorAlert } from '../src/lib/alertService';
 import { OperatingRoom } from '../types';
 import ProgressBar from '../components/ProgressBar';
 import { captureError } from '../src/lib/errorLogger';
-import SurgeryForm from '../components/SurgeryForm';
+
+const SurgeryForm = lazy(() => import('../components/SurgeryForm'));
+
+// In-memory cache to make calendar navigation instant
+const calendarCache: Record<string, {
+    scheduled: CalendarEvent[];
+    pending: PendingSurgery[];
+    cancelled: any[];
+    ors: OperatingRoom[];
+    timestamp: number;
+}> = {};
+const holidayCache: Record<number, Record<string, string>> = {};
 
 // --- Types & Helpers ---
 type ViewMode = 'month' | 'week' | 'day';
@@ -195,49 +206,49 @@ const Calendar: React.FC = () => {
     useEffect(() => {
         const fetchDoctorsAndOnDuty = async () => {
             try {
-                // 1. Fetch active doctors that do guard duties (includes both surgeons and anesthesiologists)
-                const { data: doctorsData } = await supabase
-                    .from('doctors')
-                    .select('id, full_name, specialty')
-                    .eq('active', true)
-                    .eq('does_guardias', true)
-                    .order('full_name');
-                if (doctorsData) {
-                    const surgeons = doctorsData.filter(d => d.specialty === 'Cirugía General' || d.specialty === 'Cirujano');
-                    const anestesistas = doctorsData.filter(d => d.specialty === 'Anestesiología' || d.specialty === 'Anestesista');
+                // Fetch doctors, tecnicos, and admin_settings in parallel
+                const [doctorsRes, tecnicosRes, onDutyRes] = await Promise.all([
+                    supabase
+                        .from('doctors')
+                        .select('id, full_name, specialty')
+                        .eq('active', true)
+                        .eq('does_guardias', true)
+                        .order('full_name'),
+                    supabase
+                        .from('users')
+                        .select('id, name')
+                        .eq('active', true)
+                        .eq('role', 'Tecnico')
+                        .eq('does_guardias', true)
+                        .order('name'),
+                    supabase
+                        .from('admin_settings')
+                        .select('key, value')
+                        .in('key', ['on_duty_doctors', 'on_duty_tecnicos', 'on_duty_anestesistas', 'role_permissions'])
+                ]);
+
+                if (doctorsRes.data) {
+                    const surgeons = doctorsRes.data.filter(d => d.specialty === 'Cirugía General' || d.specialty === 'Cirujano');
+                    const anestesistas = doctorsRes.data.filter(d => d.specialty === 'Anestesiología' || d.specialty === 'Anestesista');
                     setAllDoctors(surgeons);
                     setAllAnestesistas(anestesistas);
                 }
 
-                // 2. Fetch active tecnicos that do guard duties from users table
-                const { data: tecnicosData } = await supabase
-                    .from('users')
-                    .select('id, name')
-                    .eq('active', true)
-                    .eq('role', 'Tecnico')
-                    .eq('does_guardias', true)
-                    .order('name');
-                if (tecnicosData) {
-                    setAllTecnicos(tecnicosData.map(t => ({ id: t.id, full_name: t.name })));
+                if (tecnicosRes.data) {
+                    setAllTecnicos(tecnicosRes.data.map(t => ({ id: t.id, full_name: t.name })));
                 }
 
-                // 3. Fetch on-duty configuration for doctors, tecnicos, and anestesistas
-                const { data: onDutyData } = await supabase
-                    .from('admin_settings')
-                    .select('key, value')
-                    .in('key', ['on_duty_doctors', 'on_duty_tecnicos', 'on_duty_anestesistas', 'role_permissions']);
-                
-                if (onDutyData) {
-                    const doctorsConf = onDutyData.find(d => d.key === 'on_duty_doctors');
+                if (onDutyRes.data) {
+                    const doctorsConf = onDutyRes.data.find(d => d.key === 'on_duty_doctors');
                     if (doctorsConf?.value) setOnDutyDoctors(JSON.parse(doctorsConf.value));
                     
-                    const tecnicosConf = onDutyData.find(d => d.key === 'on_duty_tecnicos');
+                    const tecnicosConf = onDutyRes.data.find(d => d.key === 'on_duty_tecnicos');
                     if (tecnicosConf?.value) setOnDutyTecnicos(JSON.parse(tecnicosConf.value));
                     
-                    const anestesistasConf = onDutyData.find(d => d.key === 'on_duty_anestesistas');
+                    const anestesistasConf = onDutyRes.data.find(d => d.key === 'on_duty_anestesistas');
                     if (anestesistasConf?.value) setOnDutyAnestesistas(JSON.parse(anestesistasConf.value));
 
-                    const permsConf = onDutyData.find(d => d.key === 'role_permissions');
+                    const permsConf = onDutyRes.data.find(d => d.key === 'role_permissions');
                     if (permsConf?.value) setRolePermissions(JSON.parse(permsConf.value));
                 }
             } catch (err) {
@@ -422,6 +433,10 @@ const Calendar: React.FC = () => {
         const fetchHolidays = async () => {
             try {
                 const year = currentDate.getFullYear();
+                if (holidayCache[year]) {
+                    setHolidays(holidayCache[year]);
+                    return;
+                }
                 const response = await fetch(`https://api.argentinadatos.com/v1/feriados/${year}`);
                 const data = await response.json();
 
@@ -429,6 +444,7 @@ const Calendar: React.FC = () => {
                 data.forEach((h: any) => {
                     holidayMap[h.fecha] = h.nombre;
                 });
+                holidayCache[year] = holidayMap;
                 setHolidays(holidayMap);
             } catch (err) {
                 console.error('Error fetching holidays for calendar:', err);
@@ -749,27 +765,79 @@ const Calendar: React.FC = () => {
     };
 
 
-    const fetchInitialData = async (targetYear?: number, targetMonth?: number) => {
-        setLoading(true);
-        try {
-            // Calculate date range for optimization
-            const now = new Date();
-            const year = targetYear ?? currentDate.getFullYear();
-            const month = targetMonth ?? currentDate.getMonth();
+    const fetchInitialData = async (targetYear?: number, targetMonth?: number, forceRefresh = false) => {
+        const year = targetYear ?? currentDate.getFullYear();
+        const month = targetMonth ?? currentDate.getMonth();
+        const cacheKey = `${year}-${month}`;
 
+        // Instant load from cache if available and not forced
+        if (!forceRefresh && calendarCache[cacheKey]) {
+            const cached = calendarCache[cacheKey];
+            setEvents(cached.scheduled);
+            setPendingSurgeries(cached.pending);
+            setCancelledSurgeries(cached.cancelled);
+            if (cached.ors && cached.ors.length > 0) {
+                setOrs(cached.ors);
+                const q1 = cached.ors.find(o => {
+                    const n = (o.name || '').toLowerCase();
+                    return n.includes('quirófano 1') || n.includes('quirofano 1');
+                });
+                setSelectedOrId(q1 ? q1.id : cached.ors[0].id);
+                if (!selectedDayOrId) {
+                    setSelectedDayOrId(q1 ? q1.id : cached.ors[0].id);
+                }
+            }
+            setLoading(false);
+            // If cache is fresh (< 30 seconds), avoid network query
+            if (Date.now() - cached.timestamp < 30000) {
+                return;
+            }
+        } else {
+            setLoading(true);
+        }
+
+        try {
             // Fetch +/- 1 month to allow smooth navigation and drag/drop across borders
             const startDate = new Date(year, month - 1, 1);
             const endDate = new Date(year, month + 2, 0);
             const startStr = startDate.toISOString().split('T')[0];
             const endStr = endDate.toISOString().split('T')[0];
 
-            // 1. Fetch Operating Rooms
-            const { data: orData, error: orError } = await supabase
-                .from('operating_rooms')
-                .select('*')
-                .eq('active', true);
+            // Run independent queries in parallel with targeted projection
+            const [orRes, surRes, alertsRes, artRes, admRes] = await Promise.all([
+                supabase
+                    .from('operating_rooms')
+                    .select('id, name, color, active, start_time, end_time, is_ambulatory')
+                    .eq('active', true),
+                supabase
+                    .from('surgeries')
+                    .select('id, surgery_date, start_time, estimated_duration, procedure_name, status, operating_room_id, doctor_id, patient_id, anesthesiologist_id, vendor_id, authorization_date, patient_available_from, requires_prosthesis, ortho_validated, pre_op_date, consent_signed, priority, is_ambulatory, actual_start_time, actual_end_time, internacion_notified, original_surgery_date, original_start_time, is_guardia, suggested_date, patient_unable_to_attend, medical_coverage, created_at, doctor_priority_validated, patients(full_name), doctors!doctor_id(full_name), surgery_materials(id)')
+                    .or(`surgery_date.gte.${startStr},surgery_date.is.null`)
+                    .or(`surgery_date.lte.${endStr},surgery_date.is.null`)
+                    .order('surgery_date', { ascending: true })
+                    .order('start_time', { ascending: true }),
+                supabase
+                    .from('system_alerts')
+                    .select('surgery_id')
+                    .eq('type', 'Solicitud Reprogramación')
+                    .eq('status', 'Active'),
+                supabase
+                    .from('coverages')
+                    .select('name')
+                    .eq('type', 'ART'),
+                supabase
+                    .from('hospital_admissions')
+                    .select('patient_id, check_in, check_out')
+                    .not('check_out', 'is', null)
+                    .gte('check_in', startStr)
+                    .lte('check_in', endStr)
+            ]);
 
-            // Sort manually: prioritize Quirófano 1, then other main ORs, then Ambulatoria
+            const orData = orRes.data;
+            if (orRes.error) throw orRes.error;
+            if (surRes.error) throw surRes.error;
+
+            // Sort operating rooms manually
             if (orData) {
                 (orData as any[]).sort((a, b) => {
                     const aName = (a.name || '').toLowerCase();
@@ -788,7 +856,6 @@ const Calendar: React.FC = () => {
                 });
             }
 
-            if (orError) throw orError;
             setOrs(orData || []);
             if (orData && orData.length > 0) {
                 const q1 = (orData as any[]).find(o => {
@@ -801,34 +868,9 @@ const Calendar: React.FC = () => {
                 }
             }
 
-            // 2. Fetch Surgeries in range
-            let query = supabase
-                .from('surgeries')
-                .select('*, patients(full_name), doctors!doctor_id(full_name), surgery_materials(id), patient_unable_to_attend, is_guardia')
-                .or(`surgery_date.gte.${startStr},surgery_date.is.null`) // Include unscheduled
-                .or(`surgery_date.lte.${endStr},surgery_date.is.null`);
-
-            if (user?.role === 'Medico' && user.doctorId) {
-                // query = query.eq('doctor_id', user.doctorId); // REMOVED: Now we fetch all to show 'Busy' slots
-            }
-            if (user?.role === 'Ortopedia' && user.vendorId) {
-                // query = query.eq('vendor_id', user.vendorId); // REMOVED: Now we fetch all to show 'Busy' slots
-            }
-
-            const { data: surgeryData, error: surError } = await query
-                .select('*, patients(full_name), doctors!doctor_id(full_name), surgery_materials(id), patient_unable_to_attend, is_guardia, suggested_date')
-                .order('surgery_date', { ascending: true })
-                .order('start_time', { ascending: true });
-            if (surError) throw surError;
-
-            // 3. Fetch active reschedule alerts
-            const { data: alerts } = await supabase
-                .from('system_alerts')
-                .select('surgery_id')
-                .eq('type', 'Solicitud Reprogramación')
-                .eq('status', 'Active');
-
-            const alertIds = new Set((alerts || []).map(a => a.surgery_id));
+            const surgeryData = surRes.data || [];
+            const alertIds = new Set((alertsRes.data || []).map(a => a.surgery_id));
+            const artNames = (artRes.data || []).map(c => c.name);
 
             // --- Robust Join Support (Helper) ---
             const getFullName = (obj: any) => {
@@ -837,25 +879,18 @@ const Calendar: React.FC = () => {
                 return obj.full_name;
             };
 
-            // --- AUTO-TRANSITION LOGIC REMOVED (Manual Control Only) ---
-
             // Map and Sanitize Data
-            const processedSurgeryData = (surgeryData || []).map((s: any) => {
-                // Sanitize Relations
+            const processedSurgeryData = surgeryData.map((s: any) => {
                 const patientName = getFullName(s.patients);
                 const doctorName = getFullName(s.doctors);
-
-                const normalizedS = {
+                return {
                     ...s,
                     patients: { full_name: patientName },
                     doctors: { full_name: doctorName }
                 };
-
-                return normalizedS;
             });
-            // ----------------------------------------
 
-            // 3. Fetch Document categories only for these surgeries
+            // Fetch document categories only for retrieved surgeries
             const surgeryIds = processedSurgeryData.map(s => s.id);
             let docData: any[] = [];
             if (surgeryIds.length > 0) {
@@ -867,31 +902,14 @@ const Calendar: React.FC = () => {
                 docData = data || [];
             }
 
-            // Map documents to surgery IDs
             const surgeryDocsMap: Record<string, string[]> = {};
             (docData || []).forEach(doc => {
                 if (!surgeryDocsMap[doc.surgery_id]) surgeryDocsMap[doc.surgery_id] = [];
                 surgeryDocsMap[doc.surgery_id].push(doc.category);
             });
 
-            // Get ART names for blocking and prioritization
-            let artNames: string[] = [];
-            const { data: artCoverages } = await supabase
-                .from('coverages')
-                .select('name')
-                .eq('type', 'ART');
-            artNames = artCoverages?.map(c => c.name) || [];
-
-            // Fetch completed hospital admissions for this range to use as a fallback check for completion
-            const { data: admissionsData } = await supabase
-                .from('hospital_admissions')
-                .select('patient_id, check_in, check_out')
-                .not('check_out', 'is', null)
-                .gte('check_in', startStr)
-                .lte('check_in', endStr);
-
             const admissionsMap: Record<string, any[]> = {};
-            (admissionsData || []).forEach(adm => {
+            (admRes.data || []).forEach(adm => {
                 if (adm.patient_id) {
                     if (!admissionsMap[adm.patient_id]) {
                         admissionsMap[adm.patient_id] = [];
@@ -1101,12 +1119,54 @@ const Calendar: React.FC = () => {
             setEvents(scheduled);
             setPendingSurgeries(pending);
             setCancelledSurgeries(cancelledList);
+
+            // Populate cache
+            calendarCache[cacheKey] = {
+                scheduled,
+                pending,
+                cancelled: cancelledList,
+                ors: orData || [],
+                timestamp: Date.now()
+            };
         } catch (err) {
             console.error('Error loading calendar data:', err);
         } finally {
             setLoading(false);
         }
     };
+
+    // Fast O(1) indexed maps for instant calendar date rendering
+    const eventsByDateMap = useMemo(() => {
+        const map = new Map<string, CalendarEvent[]>();
+        for (const e of events) {
+            const y = e.start.getFullYear();
+            const m = String(e.start.getMonth() + 1).padStart(2, '0');
+            const d = String(e.start.getDate()).padStart(2, '0');
+            const k = `${y}-${m}-${d}`;
+            const list = map.get(k);
+            if (list) {
+                list.push(e);
+            } else {
+                map.set(k, [e]);
+            }
+        }
+        return map;
+    }, [events]);
+
+    const cancelledByDateMap = useMemo(() => {
+        const map = new Map<string, any[]>();
+        for (const s of cancelledSurgeries) {
+            if (!s.surgery_date) continue;
+            const k = s.surgery_date;
+            const list = map.get(k);
+            if (list) {
+                list.push(s);
+            } else {
+                map.set(k, [s]);
+            }
+        }
+        return map;
+    }, [cancelledSurgeries]);
 
     // -- Helpers --
     const selectedSurgery = useMemo(() =>
@@ -1119,11 +1179,12 @@ const Calendar: React.FC = () => {
         const startHour = selectedOR?.start_time ? parseInt(selectedOR.start_time.split(':')[0]) : 7;
         const endHour = 21; // Extended to allow later surgeries if start is later
 
-        const dayEvents = events.filter(e =>
-            e.start.getDate() === date.getDate() &&
-            e.start.getMonth() === date.getMonth() &&
-            e.orId === orId
-        );
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const dayKey = `${y}-${m}-${d}`;
+        const allDayEvents = eventsByDateMap.get(dayKey) || [];
+        const dayEvents = allDayEvents.filter(e => e.orId === orId);
 
         for (let h = startHour; h < endHour; h++) {
             for (let m = 0; m < 60; m += 30) {
@@ -1397,9 +1458,7 @@ const Calendar: React.FC = () => {
                                     const isToday = isSameDate(dayDate, new Date());
                                     const isSelected = isSameDate(dayDate, currentDate);
                                     const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
-                                    const dayEvents = events
-                                        .filter(e => isSameDate(e.start, dayDate))
-                                        .sort((a, b) => a.start.getTime() - b.start.getTime());
+                                    const dayEvents = eventsByDateMap.get(dateStr) || [];
                                     const canAdd = isFutureOrToday(dayDate);
                                     const holidayTitle = holidays[dateStr];
 
@@ -1436,7 +1495,7 @@ const Calendar: React.FC = () => {
                                                             {d}
                                                         </span>
                                                         {(() => {
-                                                            const dayCancelled = cancelledSurgeries.filter(s => s.surgery_date === dateStr);
+                                                            const dayCancelled = cancelledByDateMap.get(dateStr) || [];
                                                             if (dayCancelled.length === 0) return null;
                                                             return (
                                                                 <span 
@@ -1744,11 +1803,14 @@ const Calendar: React.FC = () => {
 
                                 {weekDates.map((date, i) => {
                                      const canAdd = isFutureOrToday(date) && (user?.role === 'Tecnico' || user?.role === 'SuperAdmin' || user?.role === 'Internacion');
-                                     const dayEvents = events.filter(e => isSameDate(e.start, date));
+                                     const y = date.getFullYear();
+                                     const m = String(date.getMonth() + 1).padStart(2, '0');
+                                     const d = String(date.getDate()).padStart(2, '0');
+                                     const dayEvents = eventsByDateMap.get(`${y}-${m}-${d}`) || [];
 
                                      // -- Side-by-Side Overlap Calculation --
                                      const groups: CalendarEvent[][] = [];
-                                     const sortedEvents = [...dayEvents].sort((a, b) => a.start.getTime() - b.start.getTime());
+                                     const sortedEvents = dayEvents;
 
                                      sortedEvents.forEach(event => {
                                          let placed = false;
@@ -1901,15 +1963,17 @@ const Calendar: React.FC = () => {
 
     const DayView = () => {
         const canAdd = isFutureOrToday(currentDate) && (user?.role === 'Tecnico' || user?.role === 'SuperAdmin' || user?.role === 'Internacion');
-
-        const dayEvents = events.filter(e => isSameDate(e.start, currentDate));
+        const y = currentDate.getFullYear();
+        const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const d = String(currentDate.getDate()).padStart(2, '0');
+        const dayEvents = eventsByDateMap.get(`${y}-${m}-${d}`) || [];
         const roomEvents = dayEvents.filter(e => {
             if (selectedDayOrId === 'unassigned') {
                 return !e.orId;
             }
             return e.orId === selectedDayOrId;
-        }).sort((a, b) => a.start.getTime() - b.start.getTime());
-        const dateStr = `${currentDate.getFullYear()}-${(currentDate.getMonth() + 1).toString().padStart(2, '0')}-${currentDate.getDate().toString().padStart(2, '0')}`;
+        });
+        const dateStr = `${y}-${m}-${d}`;
 
         // Calculate dynamic bounds to prevent clipping early (< 7am) or late (> 7pm) surgeries
         let minHour = 7;
@@ -2342,7 +2406,7 @@ const Calendar: React.FC = () => {
                         </button>
                     )}
                     <button
-                        onClick={() => fetchInitialData(currentDate.getFullYear(), currentDate.getMonth())}
+                        onClick={() => fetchInitialData(currentDate.getFullYear(), currentDate.getMonth(), true)}
                         disabled={loading}
                         className="px-3 py-1.5 md:px-4 md:py-2 rounded-xl border border-slate-200 bg-white text-slate-600 hover:text-primary hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
                         title="Actualizar datos"
@@ -2481,84 +2545,85 @@ const Calendar: React.FC = () => {
 
                                 {/* Surgeries List */}
                                 <div>
-                                    <div className="flex justify-between items-center mb-3">
-                                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">
-                                            Cirugías del Día
-                                        </h3>
-                                        <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[10px] font-black uppercase tracking-wider">
-                                            {events.filter(e => isSameDate(e.start, currentDate)).length} asignadas
-                                        </span>
-                                    </div>
-                                    
                                     {(() => {
-                                        const daySurgeries = events
-                                            .filter(e => isSameDate(e.start, currentDate))
-                                            .sort((a, b) => a.start.getTime() - b.start.getTime());
-
-                                        if (daySurgeries.length === 0) {
-                                            return (
-                                                <div className="text-center py-8 text-slate-400 text-[11px] font-black uppercase tracking-widest border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
-                                                    Sin cirugías programadas
-                                                </div>
-                                            );
-                                        }
+                                        const y = currentDate.getFullYear();
+                                        const m = String(currentDate.getMonth() + 1).padStart(2, '0');
+                                        const d = String(currentDate.getDate()).padStart(2, '0');
+                                        const daySurgeries = eventsByDateMap.get(`${y}-${m}-${d}`) || [];
 
                                         return (
-                                            <div className="space-y-2.5">
-                                                {daySurgeries.map(ev => {
-                                                    const styles = getEventStyles(ev.color);
-                                                    return (
-                                                        <div 
-                                                            key={ev.id}
-                                                            onClick={() => {
-                                                                if (!ev.isBlocked) {
-                                                                    setSelectedMobileEvent(ev);
-                                                                }
-                                                            }}
-                                                            className={`relative bg-white rounded-xl border border-slate-200 p-3.5 flex gap-3 transition-all active:scale-[0.98] ${ev.isBlocked ? 'opacity-85' : 'cursor-pointer hover:border-slate-300'} ${ev.isMySurgery ? 'ring-2 ring-yellow-400 shadow-xs' : ''}`}
-                                                        >
-                                                            {/* Accent border left */}
-                                                            <div className={`w-1 h-auto rounded-full shrink-0 ${styles.border} bg-current`} style={{ backgroundColor: 'currentColor' }}></div>
-                                                            
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="flex justify-between items-start">
-                                                                    <span className="font-mono text-[10px] font-black text-slate-400">
-                                                                        {ev.isTimeTBD ? 'Hora Pendiente' : `${ev.start.getHours().toString().padStart(2, '0')}:${ev.start.getMinutes().toString().padStart(2, '0')}`}
-                                                                    </span>
-                                                                    <div className="flex gap-1">
-                                                                        {ev.isGuardia && (
-                                                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-cyan-600 text-white tracking-tighter animate-pulse">
-                                                                                🚨 GUARDIA
+                                            <>
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">
+                                                        Cirugías del Día
+                                                    </h3>
+                                                    <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[10px] font-black uppercase tracking-wider">
+                                                        {daySurgeries.length} asignadas
+                                                    </span>
+                                                </div>
+
+                                                {daySurgeries.length === 0 ? (
+                                                    <div className="text-center py-8 text-slate-400 text-[11px] font-black uppercase tracking-widest border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
+                                                        Sin cirugías programadas
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-2.5">
+                                                        {daySurgeries.map(ev => {
+                                                            const styles = getEventStyles(ev.color);
+                                                            return (
+                                                                <div 
+                                                                    key={ev.id}
+                                                                    onClick={() => {
+                                                                        if (!ev.isBlocked) {
+                                                                            setSelectedMobileEvent(ev);
+                                                                        }
+                                                                    }}
+                                                                    className={`relative bg-white rounded-xl border border-slate-200 p-3.5 flex gap-3 transition-all active:scale-[0.98] ${ev.isBlocked ? 'opacity-85' : 'cursor-pointer hover:border-slate-300'} ${ev.isMySurgery ? 'ring-2 ring-yellow-400 shadow-xs' : ''}`}
+                                                                >
+                                                                    {/* Accent border left */}
+                                                                    <div className={`w-1 h-auto rounded-full shrink-0 ${styles.border} bg-current`} style={{ backgroundColor: 'currentColor' }}></div>
+                                                                    
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex justify-between items-start">
+                                                                            <span className="font-mono text-[10px] font-black text-slate-400">
+                                                                                {ev.isTimeTBD ? 'Hora Pendiente' : `${ev.start.getHours().toString().padStart(2, '0')}:${ev.start.getMinutes().toString().padStart(2, '0')}`}
                                                                             </span>
-                                                                        )}
-                                                                        {ev.isArt && (
-                                                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-orange-600 text-white tracking-tighter animate-pulse">
-                                                                                ART
-                                                                            </span>
-                                                                        )}
+                                                                            <div className="flex gap-1">
+                                                                                {ev.isGuardia && (
+                                                                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-cyan-600 text-white tracking-tighter animate-pulse">
+                                                                                        🚨 GUARDIA
+                                                                                    </span>
+                                                                                )}
+                                                                                {ev.isArt && (
+                                                                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-orange-600 text-white tracking-tighter animate-pulse">
+                                                                                        ART
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        
+                                                                        <h4 className="font-black text-slate-900 text-sm mt-1 uppercase truncate leading-tight">
+                                                                            {ev.isMySurgery && <span className="text-[12px] mr-1">⭐</span>}
+                                                                            {(ev.patientName || 'PACIENTE TBD').toUpperCase()}
+                                                                        </h4>
+                                                                        
+                                                                        <div className="flex items-center gap-4 mt-2 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                                                <span className="material-symbols-outlined text-xs shrink-0">person</span>
+                                                                                <span className="truncate max-w-[120px]">{ev.originalDoctor?.split(' ').slice(0,2).join(' ')}</span>
+                                                                            </div>
+                                                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                                                <span className="material-symbols-outlined text-xs shrink-0">meeting_room</span>
+                                                                                <span className="truncate">{ors.find(o => o.id === ev.orId)?.name || 'Q. TBD'}</span>
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                                
-                                                                <h4 className="font-black text-slate-900 text-sm mt-1 uppercase truncate leading-tight">
-                                                                    {ev.isMySurgery && <span className="text-[12px] mr-1">⭐</span>}
-                                                                    {(ev.patientName || 'PACIENTE TBD').toUpperCase()}
-                                                                </h4>
-                                                                
-                                                                <div className="flex items-center gap-4 mt-2 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                                                                    <div className="flex items-center gap-1.5 min-w-0">
-                                                                        <span className="material-symbols-outlined text-xs shrink-0">person</span>
-                                                                        <span className="truncate max-w-[120px]">{ev.originalDoctor?.split(' ').slice(0,2).join(' ')}</span>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-1.5 min-w-0">
-                                                                        <span className="material-symbols-outlined text-xs shrink-0">meeting_room</span>
-                                                                        <span className="truncate">{ors.find(o => o.id === ev.orId)?.name || 'Q. TBD'}</span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </>
                                         );
                                     })()}
                                 </div>
@@ -3621,22 +3686,29 @@ const Calendar: React.FC = () => {
                 <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 overflow-hidden">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col border border-slate-200">
                         <div className="flex-1 overflow-y-auto">
-                            <SurgeryForm
-                                surgery={{
-                                    id: showSurgeryFormId,
-                                    patient: selectedMobileEvent?.patientName || '',
-                                    procedure: selectedMobileEvent?.title || '',
-                                    date: selectedMobileEvent?.start ? getLocalStr(selectedMobileEvent.start) : '',
-                                    status: selectedMobileEvent?.completed ? 'previous' : 'scheduled',
-                                    doctor: selectedMobileEvent?.originalDoctor || ''
-                                } as any}
-                                readOnly={user?.role !== 'Tecnico' && user?.role !== 'SuperAdmin'}
-                                onClose={() => setShowSurgeryFormId(null)}
-                                onSave={() => {
-                                    setShowSurgeryFormId(null);
-                                    fetchInitialData(currentDate.getFullYear(), currentDate.getMonth());
-                                }}
-                            />
+                            <Suspense fallback={
+                                <div className="p-12 flex flex-col items-center justify-center gap-3">
+                                    <div className="size-8 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
+                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Cargando formulario...</span>
+                                </div>
+                            }>
+                                <SurgeryForm
+                                    surgery={{
+                                        id: showSurgeryFormId,
+                                        patient: selectedMobileEvent?.patientName || '',
+                                        procedure: selectedMobileEvent?.title || '',
+                                        date: selectedMobileEvent?.start ? getLocalStr(selectedMobileEvent.start) : '',
+                                        status: selectedMobileEvent?.completed ? 'previous' : 'scheduled',
+                                        doctor: selectedMobileEvent?.originalDoctor || ''
+                                    } as any}
+                                    readOnly={user?.role !== 'Tecnico' && user?.role !== 'SuperAdmin'}
+                                    onClose={() => setShowSurgeryFormId(null)}
+                                    onSave={() => {
+                                        setShowSurgeryFormId(null);
+                                        fetchInitialData(currentDate.getFullYear(), currentDate.getMonth(), true);
+                                    }}
+                                />
+                            </Suspense>
                         </div>
                     </div>
                 </div>

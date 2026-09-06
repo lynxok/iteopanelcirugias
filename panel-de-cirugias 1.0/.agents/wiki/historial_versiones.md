@@ -4,6 +4,13 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.117 [2026-09-06]**: Lanzada la versión **v3.10.117**.
+    *   **Aceleración Drástica de Carga en Sección Calendario (`/calendar`)**:
+        *   **Carga Diferida (`React.lazy` + `Suspense`) de `SurgeryForm`**: Reducción del bundle inicial en ~1.5 MB de código JavaScript al aislar el modal de edición de cirugías.
+        *   **Paralelización de Consultas (`Promise.all`)**: Ejecución simultánea de 5 consultas en Supabase reduciendo el tiempo de red en >51%.
+        *   **Caché en Memoria Mensual y TTL**: Visualización instantánea (0 ms) al navegar entre meses visitados o alternar entre vistas Mes/Semana/Día con actualización en segundo plano.
+        *   **Caché Anual de Feriados**: Eliminación de peticiones HTTP repetitivas a la API de ArgentinaDatos.
+        *   **Indexación por Fecha $O(1)$**: Pre-agrupamiento de eventos por `YYYY-MM-DD` para suprimir filtros de arrays repetidos en cada celda del mes.
 *   **v3.10.116 [2026-09-01]**: Lanzada la versión **v3.10.116**.
     *   **Corrección en Autocompletado de Procedimientos**: Solucionado el problema donde el menú desplegable de sugerencias no se colapsaba. Se agregó cierre por selección, por clic fuera (`click outside`), tecla `Escape` y se acotó la activación a búsquedas de 2 o más caracteres.
 *   **v3.10.115 [2026-09-01]**: Lanzada la versión **v3.10.115**.

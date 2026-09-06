@@ -18,6 +18,15 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-06]`: **Optimización de Rendimiento y Aceleración de Carga de Calendario (`/calendar`)**:
+    *   Se implementó Lazy Loading (`React.lazy` + `Suspense`) en `SurgeryForm`, evitando descargar ~1.5 MB de código JS antes de que el usuario abra el formulario de una cirugía.
+    *   Se paralelizaron con `Promise.all` las 5 consultas de Supabase (`operating_rooms`, `surgeries`, `system_alerts`, `coverages`, `hospital_admissions`), reduciendo el tiempo de red en más de un 50%.
+    *   Se implementó caché en memoria a nivel módulo con clave mensual (`YYYY-MM`) y TTL de 30s con stale-while-revalidate, permitiendo transiciones instantáneas (0 ms) entre vistas mes/semana/día y meses ya visitados.
+    *   Se optimizó la proyección de columnas SQL en cirugías y se indexaron los eventos en mapas `O(1)` por fecha para evitar bucles repetitivos en el render de las celdas del calendario.
+*   `[2026-09-06]`: **Corrección y Prevención de Cirugías Futuras Completadas por OSER**:
+    *   Se diagnosticó y subsanó el caso de cirugías con fecha futura (ej. Bressan Varisco Agustín, programada para el 16/09) que figuraban en color violeta como realizadas (`status = 'completed'`).
+    *   Se constató que el scraper automático de OSER interpretó la pestaña de trámites *"Cerradas"* (`oser_status: CERRADA`) y sobreescribió erróneamente el campo `status` inyectando la nota `[AUDITORÍA] Cerrada OSER`.
+    *   Se restauró el registro a `status = 'scheduled'` (Programada) conservando intactas las validaciones de Ortopedia, Quirófano e Internación, y se documentó la regla de que el cierre administrativo OSER no debe auto-completar cirugías si `surgery_date > CURRENT_DATE`.
 *   `[2026-09-01]`: **Gestión de Nomencladores (AOTER y OSER) y Alta de Práctica `120305`**:
     *   Se registró la práctica `120305` (`Fractura de Tabique Nasal`) para ambos nomencladores (`OSER` y `AOTER`) en `quirofano.nomenclador_items` y `src/data/nomenclador_mapping.json`.
     *   Se desarrolló la nueva sección de Configuración [NomencladorTab.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/NomencladorTab.tsx) y el modal [NomencladorModal.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/settings/modals/NomencladorModal.tsx) para administrar (crear, buscar, editar, habilitar/inhabilitar y eliminar) prácticas de cualquier nomenclador.

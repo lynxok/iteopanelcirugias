@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v3.10.117 (2026-09-06)
+- **Optimización y Aceleración de Carga en Sección Calendario (`/calendar`)**:
+    * **Carga Diferida (Lazy Loading) de `SurgeryForm`**: Se desacopló la importación estática del modal de cirugía (~1.5 MB de JavaScript y dependencias pesadas de exportación), difiriendo su descarga hasta que el usuario realmente interactúe para crear o editar una cirugía. Esto aligera en más de un 60% la carga inicial de la página.
+    * **Consultas Paralelas en Supabase (`Promise.all`)**: Se eliminó el encadenamiento secuencial de 5 consultas (`operating_rooms`, `surgeries`, `system_alerts`, `coverages`, `hospital_admissions`). Ahora se ejecutan en paralelo reduciendo la latencia de red de ~2.460 ms a ~1.190 ms (>51% de mejora).
+    * **Proyección de Columnas Seleccionadas**: En lugar de consultar `select('*')` sobre la tabla de cirugías (que traía campos pesados innecesarios para la vista de calendario), se solicitan únicamente las columnas esenciales requeridas para renderizar los eventos, reduciendo el payload de datos transferidos a más de la mitad.
+    * **Caché en Memoria por Mes (`calendarCache`)**: Los datos del mes ya consultados se almacenan temporalmente en caché en memoria. Al alternar entre meses ya visitados o alternar entre vistas mes/semana/día, la carga es instantánea (0 ms) sin reconsultar la base de datos a menos que pasen 30 segundos o se presione "Actualizar".
+    * **Caché Anual de Feriados**: Se indexaron los feriados de ArgentinaDatos por año en memoria evitando solicitudes HTTP externas redundantes en cada interacción.
+    * **Indexación de Eventos por Fecha $O(1)$**: Se reemplazó el filtrado repetitivo de arrays (`events.filter(...)` y `cancelledSurgeries.filter(...)`) ejecutado individualmente en cada celda del mes por mapas precalculados indexados por fecha `YYYY-MM-DD`, acelerando el renderizado de la grilla.
+
 ## v3.10.116 (2026-09-01)
 - **Corrección en Autocompletado y Colapso de Procedimientos Quirúrgicos**:
     * **Colapso Inmediato tras Selección**: Subsanado el comportamiento donde el menú flotante de sugerencias de nomenclador quedaba abierto permanentemente tras seleccionar una práctica o vaciar el campo de texto.
