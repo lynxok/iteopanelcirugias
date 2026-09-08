@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## v3.10.123 (2026-09-08)
+- **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
+    * **Invalidación Inteligente y Re-conformidad Obligatoria**:
+        - Detección automática de discrepancias entre el cálculo de liquidación en tiempo real y lo firmado por el profesional (`consentStatusInfo`).
+        - Si luego de otorgar la conformidad cambian cirugías, guardias, horas de asistencia o el total a liquidar, el badge verde de "Conformidad Brindada" se invalida automáticamente.
+        - Se presenta una alerta visual destacada en color ámbar informando que la liquidación fue modificada y el monto de la diferencia respecto a lo firmado.
+        - Se reactiva el botón "Firmar Nueva Conformidad", el cual registra la nueva firma con fecha/hora actualizada y asienta el historial en `audit_logs`.
+    * **Resumen Formal Imprimible con Membrete Oficial ITEO**:
+        - Botón accesible para técnicos y administradores: **"Imprimir Resumen"** / **"Resumen Detallado"**.
+        - Vista previa y modo de impresión profesional optimizado para A4 y exportación a PDF.
+        - Incluye logotipo institucional de ITEO (`/logo-iteo-azul.png`), datos del profesional y período, tabla detallada de cirugías computadas (fechas, pacientes, códigos, duraciones, honorarios), desglose de guardias y horas de asistencia, total consolidado destacado y constancia fehaciente de conformidad digital.
+    * **Notificación por Correo a Ambas Partes**:
+        - Al brindar conformidad o re-firmar, el sistema genera y despacha automáticamente un correo con el desglose exhaustivo tanto al correo institucional de ITEO configurado en Tarifas (`notification_email`) como al correo personal del instrumentador (`email_notifications`).
+
 ## v3.10.122 (2026-09-06)
 - **Aceleración Global y Caché Instantáneo (0 ms) en Todas las Secciones Restantes del Panel**:
     * **Dashboard Principal (`Dashboard.tsx`)**:

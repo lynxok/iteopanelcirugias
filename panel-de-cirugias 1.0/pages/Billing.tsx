@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { supabase } from '../src/lib/supabase';
 import { useAuth } from '../src/lib/AuthContext';
 import { HospitalAdmission, Patient, HospitalMedicationLog, UserRole } from '../types';
-import { format, differenceInHours, parseISO, startOfDay } from 'date-fns';
+import { format, differenceInHours, parseISO, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar, Tooltip, ComposedChart, Line } from 'recharts';
 
@@ -65,6 +65,7 @@ const Billing = () => {
         direction: 'desc'
     });
     const [planillaFilterType, setPlanillaFilterType] = useState<'todos' | 'sin_factur' | 'con_factur' | 'sin_aoter' | 'con_aoter' | 'completas' | 'solo_ambulatorias' | 'solo_internacion'>('todos');
+    const [periodPreset, setPeriodPreset] = useState<'todos' | 'dia' | 'mes' | 'trimestre' | 'anio' | 'custom'>('todos');
     const [planillaStartDate, setPlanillaStartDate] = useState('');
     const [planillaEndDate, setPlanillaEndDate] = useState('');
     const [planillaBillingStartDate, setPlanillaBillingStartDate] = useState('');
@@ -73,6 +74,29 @@ const Billing = () => {
     const [planillaAoterEndDate, setPlanillaAoterEndDate] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(100);
+
+    // Selector rápido de período predefinido (Día / Mes / Trimestre / Año)
+    const handleApplyPeriodPreset = (preset: 'todos' | 'dia' | 'mes' | 'trimestre' | 'anio') => {
+        setPeriodPreset(preset);
+        const now = new Date();
+        if (preset === 'todos') {
+            setPlanillaStartDate('');
+            setPlanillaEndDate('');
+        } else if (preset === 'dia') {
+            const todayStr = format(now, 'yyyy-MM-dd');
+            setPlanillaStartDate(todayStr);
+            setPlanillaEndDate(todayStr);
+        } else if (preset === 'mes') {
+            setPlanillaStartDate(format(startOfMonth(now), 'yyyy-MM-dd'));
+            setPlanillaEndDate(format(endOfMonth(now), 'yyyy-MM-dd'));
+        } else if (preset === 'trimestre') {
+            setPlanillaStartDate(format(startOfQuarter(now), 'yyyy-MM-dd'));
+            setPlanillaEndDate(format(endOfQuarter(now), 'yyyy-MM-dd'));
+        } else if (preset === 'anio') {
+            setPlanillaStartDate(format(startOfYear(now), 'yyyy-MM-dd'));
+            setPlanillaEndDate(format(endOfYear(now), 'yyyy-MM-dd'));
+        }
+    };
 
     // Modal de estadísticas
     const [statModalData, setStatModalData] = useState<{
@@ -856,20 +880,53 @@ const Billing = () => {
                                     />
                                 </div>
                                 <div className="flex flex-wrap items-center gap-3">
+                                    {/* Selector rápido de Período (Día / Mes / Trimestre / Año) */}
+                                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                                        <span className="text-[10px] font-black uppercase text-slate-400 px-2 flex items-center gap-1">
+                                            <span className="material-symbols-outlined text-xs">date_range</span> Período:
+                                        </span>
+                                        {[
+                                            { id: 'todos', label: 'Todos' },
+                                            { id: 'dia', label: 'Hoy (Día)' },
+                                            { id: 'mes', label: 'Este Mes' },
+                                            { id: 'trimestre', label: 'Este Trimestre' },
+                                            { id: 'anio', label: 'Este Año' }
+                                        ].map(btn => (
+                                            <button
+                                                key={btn.id}
+                                                type="button"
+                                                onClick={() => handleApplyPeriodPreset(btn.id as any)}
+                                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                                                    periodPreset === btn.id
+                                                        ? 'bg-primary text-white shadow-sm'
+                                                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                                                }`}
+                                            >
+                                                {btn.label}
+                                            </button>
+                                        ))}
+                                    </div>
+
                                     <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
                                         <span className="material-symbols-outlined text-xs text-slate-400">calendar_today</span>
                                         <span className="text-[11px] font-bold text-slate-600">Fecha Práctica:</span>
                                         <input
                                             type="date"
                                             value={planillaStartDate}
-                                            onChange={e => setPlanillaStartDate(e.target.value)}
+                                            onChange={e => {
+                                                setPlanillaStartDate(e.target.value);
+                                                setPeriodPreset('custom');
+                                            }}
                                             className="px-2 py-1 rounded-lg border border-slate-200 text-xs font-semibold bg-white cursor-pointer"
                                         />
                                         <span className="text-slate-400 font-bold text-xs">a</span>
                                         <input
                                             type="date"
                                             value={planillaEndDate}
-                                            onChange={e => setPlanillaEndDate(e.target.value)}
+                                            onChange={e => {
+                                                setPlanillaEndDate(e.target.value);
+                                                setPeriodPreset('custom');
+                                            }}
                                             className="px-2 py-1 rounded-lg border border-slate-200 text-xs font-semibold bg-white cursor-pointer"
                                         />
                                     </div>
@@ -892,7 +949,7 @@ const Billing = () => {
                                         />
                                     </div>
 
-                                    {(planillaStartDate || planillaEndDate || planillaBillingStartDate || planillaBillingEndDate || planillaSearch) && (
+                                    {(planillaStartDate || planillaEndDate || planillaBillingStartDate || planillaBillingEndDate || planillaSearch || periodPreset !== 'todos') && (
                                         <button
                                             onClick={() => {
                                                 setPlanillaStartDate('');
@@ -900,8 +957,9 @@ const Billing = () => {
                                                 setPlanillaBillingStartDate('');
                                                 setPlanillaBillingEndDate('');
                                                 setPlanillaSearch('');
+                                                setPeriodPreset('todos');
                                             }}
-                                            className="text-primary hover:underline flex items-center gap-1 font-black uppercase text-[10px] ml-1"
+                                            className="text-primary hover:underline flex items-center gap-1 font-black uppercase text-[10px] ml-1 cursor-pointer"
                                         >
                                             <span className="material-symbols-outlined text-xs">close</span>
                                             Limpiar Filtros
@@ -1216,20 +1274,53 @@ const Billing = () => {
 
                         {/* Rango de fechas de ingreso / cirugía, fecha de facturación y fecha AOTER */}
                         <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-100 text-xs text-slate-500 font-bold">
+                            {/* Selector rápido de Período (Día / Mes / Trimestre / Año) */}
+                            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                                <span className="text-[10px] font-black uppercase text-slate-400 px-2 flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-xs">date_range</span> Período:
+                                </span>
+                                {[
+                                    { id: 'todos', label: 'Todos' },
+                                    { id: 'dia', label: 'Hoy (Día)' },
+                                    { id: 'mes', label: 'Este Mes' },
+                                    { id: 'trimestre', label: 'Este Trimestre' },
+                                    { id: 'anio', label: 'Este Año' }
+                                ].map(btn => (
+                                    <button
+                                        key={btn.id}
+                                        type="button"
+                                        onClick={() => handleApplyPeriodPreset(btn.id as any)}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                                            periodPreset === btn.id
+                                                ? 'bg-primary text-white shadow-sm'
+                                                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                                        }`}
+                                    >
+                                        {btn.label}
+                                    </button>
+                                ))}
+                            </div>
+
                             <div className="flex items-center gap-2 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200">
                                 <span className="material-symbols-outlined text-sm text-slate-400">calendar_today</span>
                                 <span>Práctica:</span>
                                 <input
                                     type="date"
                                     value={planillaStartDate}
-                                    onChange={e => setPlanillaStartDate(e.target.value)}
+                                    onChange={e => {
+                                        setPlanillaStartDate(e.target.value);
+                                        setPeriodPreset('custom');
+                                    }}
                                     className="px-2 py-1 rounded-lg border border-slate-200 focus:ring-2 focus:ring-primary focus:border-primary outline-none text-xs font-semibold bg-white cursor-pointer"
                                 />
                                 <span>a</span>
                                 <input
                                     type="date"
                                     value={planillaEndDate}
-                                    onChange={e => setPlanillaEndDate(e.target.value)}
+                                    onChange={e => {
+                                        setPlanillaEndDate(e.target.value);
+                                        setPeriodPreset('custom');
+                                    }}
                                     className="px-2 py-1 rounded-lg border border-slate-200 focus:ring-2 focus:ring-primary focus:border-primary outline-none text-xs font-semibold bg-white cursor-pointer"
                                 />
                             </div>
@@ -1270,7 +1361,7 @@ const Billing = () => {
                                 />
                             </div>
 
-                            {(planillaStartDate || planillaEndDate || planillaBillingStartDate || planillaBillingEndDate || planillaAoterStartDate || planillaAoterEndDate || planillaFilterType !== 'todos' || planillaSearch) && (
+                            {(planillaStartDate || planillaEndDate || planillaBillingStartDate || planillaBillingEndDate || planillaAoterStartDate || planillaAoterEndDate || planillaFilterType !== 'todos' || planillaSearch || periodPreset !== 'todos') && (
                                 <button
                                     onClick={() => {
                                         setPlanillaStartDate('');
@@ -1281,8 +1372,9 @@ const Billing = () => {
                                         setPlanillaAoterEndDate('');
                                         setPlanillaFilterType('todos');
                                         setPlanillaSearch('');
+                                        setPeriodPreset('todos');
                                     }}
-                                    className="text-primary hover:underline flex items-center gap-1 font-black uppercase text-[10px]"
+                                    className="text-primary hover:underline flex items-center gap-1 font-black uppercase text-[10px] cursor-pointer"
                                 >
                                     <span className="material-symbols-outlined text-xs">close</span>
                                     Limpiar Filtros

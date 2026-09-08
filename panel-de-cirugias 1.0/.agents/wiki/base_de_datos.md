@@ -22,7 +22,7 @@ Las tablas principales en el esquema `quirofano` son:
 
 ## Row Level Security (RLS)
 El RLS está habilitado y es altamente restrictivo en todas las tablas sensibles del esquema `quirofano`:
-*   `quirofano.admin_settings`: Lectura a usuarios autenticados, escritura exclusiva restringida a `SuperAdmin`, `Direccion` y `Administrador`.
+*   `quirofano.admin_settings`: Lectura a usuarios autenticados, escritura exclusiva restringida a `SuperAdmin`, `Direccion` y `Administrador` (con excepción de `on_duty_doctors`, `on_duty_tecnicos` y `on_duty_anestesistas` habilitados también para `Administrativo de Guardias`).
 *   `quirofano.patients`, `quirofano.surgeries`, `quirofano.users`: Solo usuarios autenticados (`authenticated`). Se eliminaron todas las políticas públicas anónimas (`Public Access`).
 *   `quirofano.surgery_documents`, `quirofano.surgery_forms`, `quirofano.surgery_form_items`, `quirofano.surgery_materials`: Solo usuarios autenticados.
 *   `quirofano.hospital_rooms`, `quirofano.hospital_beds`, `quirofano.hospital_admissions`, `quirofano.hospital_bed_history`: Solo usuarios autenticados.

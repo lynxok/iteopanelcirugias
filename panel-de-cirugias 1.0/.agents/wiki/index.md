@@ -18,6 +18,16 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-08]`: **Re-conformidad Dinámica e Impresión Formal con Membrete ITEO en Liquidación de Técnicos (v3.10.123)**:
+    *   `TecnicoPanel.tsx`: Implementación del detector `consentStatusInfo` que invalida reactivamente el consentimiento previo si el cálculo actual difiere de lo firmado por cambios en cirugías, guardias o tarifas. Se muestra alerta ámbar y se habilita la re-firma con registro en auditoría.
+    *   `TecnicoPanel.tsx`: Incorporación de botón "Imprimir Resumen" / "Resumen Detallado" con modal optimizado para impresión A4 y exportación a PDF, portando logotipo de ITEO, tablas pormenorizadas de cirugías, guardias, horas y bloque de firma.
+    *   `TecnicoPanel.tsx`: Despacho automático de correo electrónico detallado con el resumen mensual tanto a ITEO como al instrumentador al otorgar o actualizar conformidad.
+*   `[2026-09-07]`: **Permiso RLS de Configuración de Guardias para Rol `Administrativo de Guardias`**:
+    *   Se diagnosticó y subsanó el error `403 Forbidden` (`Error saving on duty tecnicos / doctors / anestesistas`) al guardar médicos, instrumentadores o anestesistas de guardia desde el Calendario.
+    *   Se actualizó la política de Row Level Security (RLS) en la tabla `quirofano.admin_settings` (`Escritura admin_settings administradores y guardias`), habilitando al rol `Administrativo de Guardias` a modificar específicamente las claves `on_duty_doctors`, `on_duty_tecnicos` y `on_duty_anestesistas`, preservando el blindaje estricto de las credenciales de administración general (SMTP, tokens, permisos globales).
+*   `[2026-09-07]`: **Filtro Rápido de Períodos en Facturación (`/billing`) (Día, Mes, Trimestre, Año)**:
+    *   `Billing.tsx`: Se agregaron botones de selección rápida de período (*Todos*, *Hoy (Día)*, *Este Mes*, *Este Trimestre*, *Este Año*) tanto en la pestaña **Estadísticas** como en la **Planilla de Internaciones**.
+    *   Al hacer clic en cualquier preset, se calculan automáticamente las fechas límites mediante `date-fns` (`startOfDay`/`endOfDay`, `startOfMonth`/`endOfMonth`, `startOfQuarter`/`endOfQuarter`, `startOfYear`/`endOfYear`), actualizando en tiempo real la tabla filtrada, las métricas KPI y los gráficos sin perder los filtros manuales ni el rango de fecha de facturación o FE AOTER.
 *   `[2026-09-06]`: **Aceleración Global y Caché Instantáneo (0 ms) en Todas las Secciones Restantes (v3.10.122)**:
     *   `Dashboard.tsx`: Caché a nivel módulo indexado por rol (`dashboardCache`), arranque instantáneo a 0 ms.
     *   `Kanban.tsx`: Caché a nivel módulo (`kanbanCache`) para navegación inmediata a la mesa de control quirúrgico.

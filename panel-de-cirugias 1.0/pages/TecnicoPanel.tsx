@@ -62,8 +62,8 @@ interface Consent {
     id: string;
     user_id: string;
     period: string;
-    consented_at: string;
-    amount_calculated: number;
+    consented_at?: string | null;
+    amount_calculated?: number | null;
     status: string;
 }
 
@@ -145,6 +145,7 @@ export default function TecnicoPanel() {
         currentValue: 0
     });
     const [rateModalInputValue, setRateModalInputValue] = useState<number>(0);
+    const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
 
     // Rate Form State
     const [hourRate, setHourRate] = useState<number>(0);
@@ -878,6 +879,43 @@ export default function TecnicoPanel() {
         return totalSurgeriesAmount + guardsReport.totalAmount + attendanceHoursReport.amount;
     }, [totalSurgeriesAmount, guardsReport, attendanceHoursReport]);
 
+    // Evaluación inteligente de conformidad:
+    // Si ya existe conformidad previa pero el importe actual difiere del firmado, se invalida y exige re-conformidad.
+    const consentStatusInfo = useMemo(() => {
+        if (!currentConsent || !currentConsent.consented_at) {
+            return {
+                status: 'pending' as const,
+                hasSigned: false,
+                isOutdated: false,
+                diffAmount: 0
+            };
+        }
+
+        const signedAmount = Number(currentConsent.amount_calculated) || 0;
+        const diff = Math.abs(grandTotalAmount - signedAmount);
+
+        // Si la diferencia supera 0.05 centavos, se considera modificado
+        if (diff > 0.05) {
+            return {
+                status: 'outdated' as const,
+                hasSigned: true,
+                isOutdated: true,
+                signedAmount,
+                signedAt: currentConsent.consented_at,
+                diffAmount: grandTotalAmount - signedAmount
+            };
+        }
+
+        return {
+            status: 'valid' as const,
+            hasSigned: true,
+            isOutdated: false,
+            signedAmount,
+            signedAt: currentConsent.consented_at,
+            diffAmount: 0
+        };
+    }, [currentConsent, grandTotalAmount]);
+
     // Helper para registrar en audit_logs de forma segura
     const logAudit = async (action: 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE', resource: string, resourceId: string, description: string, meta?: any) => {
         try {
@@ -1175,67 +1213,123 @@ export default function TecnicoPanel() {
         return 'Fuera de Turno';
     }, [todayUserLogs]);
 
-    // Registrar Consentimiento Mensual
+    // Registrar o Re-firmar Consentimiento Mensual
     const handleGiveConsent = async () => {
         if (!selectedTecnicoId) return;
         const periodStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
         const targetTecnico = tecnicos.find(t => t.id === selectedTecnicoId);
+        const isReConsent = consentStatusInfo.isOutdated;
         
-        if (currentConsent) {
-            alert('Ya has brindado conformidad para este período.');
+        if (consentStatusInfo.status === 'valid') {
+            alert('Ya has brindado conformidad para este período y la liquidación no ha sufrido modificaciones.');
             return;
         }
 
-        if (!confirm(`¿Confirmas conformidad con la planilla de ${periodStr} por un total de $${formatCurrency(grandTotalAmount)}?`)) {
+        const confirmMsg = isReConsent
+            ? `La liquidación ha cambiado. ¿Confirmas tu NUEVA CONFORMIDAD para el período ${periodStr} por el monto actualizado de $${formatCurrency(grandTotalAmount)}?`
+            : `¿Confirmas conformidad con la planilla de ${periodStr} por un total de $${formatCurrency(grandTotalAmount)}?`;
+
+        if (!confirm(confirmMsg)) {
             return;
         }
 
         try {
+            const nowIso = new Date().toISOString();
             const { error } = await supabase
                 .from('tecnico_monthly_consents')
-                .insert({
-                    user_id: selectedTecnicoId,
-                    period: periodStr,
-                    amount_calculated: grandTotalAmount,
-                    status: 'consented'
-                });
+                .upsert(
+                    {
+                        user_id: selectedTecnicoId,
+                        period: periodStr,
+                        amount_calculated: grandTotalAmount,
+                        consented_at: nowIso,
+                        status: 'consented'
+                    },
+                    { onConflict: 'user_id,period' }
+                );
             if (error) throw error;
 
             await logAudit(
                 'STATUS_CHANGE',
                 'Técnicos - Conformidad Mensual',
                 `${selectedTecnicoId}-${periodStr}`,
-                `Conformidad digital de liquidación otorgada para el período ${periodStr} (${targetTecnico?.name || 'Técnico'}) por un monto de $${formatCurrency(grandTotalAmount)}.`,
+                isReConsent
+                    ? `Nueva conformidad digital otorgada tras modificación de liquidación para el período ${periodStr} (${targetTecnico?.name || 'Técnico'}). Monto actualizado: $${formatCurrency(grandTotalAmount)} (Monto previo firmado: $${formatCurrency(consentStatusInfo.signedAmount)}).`
+                    : `Conformidad digital de liquidación otorgada para el período ${periodStr} (${targetTecnico?.name || 'Técnico'}) por un monto de $${formatCurrency(grandTotalAmount)}.`,
                 {
                     period: periodStr,
                     amount: grandTotalAmount,
+                    previous_amount: isReConsent ? consentStatusInfo.signedAmount : null,
+                    is_reconsent: isReConsent,
                     tecnico_id: selectedTecnicoId,
                     tecnico_name: targetTecnico?.name,
+                    surgeries_count: surgeriesReport.length,
                     surgeries_amount: totalSurgeriesAmount,
+                    guards_days: guardsReport.daysCount,
                     guards_amount: guardsReport.totalAmount,
-                    attendance_amount: attendanceHoursReport.amount
+                    attendance_amount: attendanceHoursReport.amount,
+                    attendance_hours: attendanceHoursReport.totalHours
                 }
             );
 
-            // Encolar Notificaciones por Correo si hay emails configurados
-            const nowFormatted = new Date().toLocaleString('es-ES');
-            const emailSubject = `Conformidad Liquidación Técnicos - ${targetTecnico?.name || 'Técnico'} (${periodStr})`;
+            // Armar Resumen Detallado para el Correo Electrónico
+            const nowFormatted = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const emailSubject = `[Conformidad ${isReConsent ? 'Actualizada' : 'Brindada'}] Liquidación Técnicos - ${targetTecnico?.name || 'Técnico'} (${periodStr})`;
+            
+            // Listado de cirugías computadas para el cuerpo del mensaje
+            let surgeriesDetailText = '';
+            if (surgeriesReport.length > 0) {
+                surgeriesDetailText = surgeriesReport.map((s, idx) => {
+                    const dateFormatted = new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+                    return `  ${idx + 1}. [${dateFormatted}] ${s.patient} | ${s.procedure} | ${s.notes} -> $${formatCurrency(s.share)}`;
+                }).join('\n');
+            } else {
+                surgeriesDetailText = '  (No se registraron cirugías computadas en el período)';
+            }
+
+            // Listado de semanas / guardias
+            let guardsDetailText = `  * Días hábiles equivalentes: ${guardsReport.weeksDetail.reduce((a, b) => a + b.equiv, 0).toFixed(2)} días\n  * Fines de semana: ${guardsReport.weekendDaysCount} días\n  * Feriados: ${guardsReport.holidaysCount} días\n  * Total días computados: ${guardsReport.daysCount.toFixed(2)} días (Tarifa día: $${formatCurrency(guardRate)})`;
+
             const emailBody = `
-Hola,
+Estimados/as,
 
-Se ha registrado la conformidad de liquidación mensual de Técnicos de Quirófano:
+Se ha registrado la CONFORMIDAD DIGITAL de liquidación mensual de Técnicos de Quirófano:
 
-- Técnico: ${targetTecnico?.name || 'No especificado'} (${targetTecnico?.email || 'Sin correo registrado'})
-- Período: ${periodStr}
-- Monto Total Liquidado: $${formatCurrency(grandTotalAmount)}
-  * Cirugías: $${formatCurrency(totalSurgeriesAmount)}
-  * Guardias: $${formatCurrency(guardsReport.totalAmount)} (${guardsReport.daysCount} días)
-  * Asistencia Horas Fichadas: $${formatCurrency(attendanceHoursReport.amount)} (${attendanceHoursReport.totalHours.toFixed(1)} hs)
-- Fecha y Hora de Conformidad: ${nowFormatted}
+══════════════════════════════════════════════════════════════════
+DATOS DEL PROFESIONAL Y PERÍODO
+══════════════════════════════════════════════════════════════════
+• Técnico / Instrumentador: ${targetTecnico?.name || 'No especificado'}
+• Correo del Técnico: ${targetTecnico?.email || 'Sin correo registrado'}
+• Modalidad: ${targetTecnico?.is_turno_tarde ? 'Turno Tarde Fijo' : 'Guardias'}
+• Período Liquidado: ${periodStr}
+• Estado: ${isReConsent ? 'RE-CONFORMIDAD TRAS MODIFICACIONES' : 'CONFORMIDAD BRINDADA'}
+• Fecha y Hora de la Firma: ${nowFormatted} hs
 
-Atentamente,
-Sistema de Coordinación de Quirófano ITEO
-`.trim();
+══════════════════════════════════════════════════════════════════
+RESUMEN ECONÓMICO CONSOLIDADO
+══════════════════════════════════════════════════════════════════
+1. CIRUGÍAS REALIZADAS (${surgeriesReport.length} intervenciones): $${formatCurrency(totalSurgeriesAmount)}
+2. GUARDIAS CUBIERTAS (${guardsReport.daysCount.toFixed(2)} días): $${formatCurrency(guardsReport.totalAmount)}
+3. ASISTENCIA / HORAS FICHADAS (${attendanceHoursReport.totalHours.toFixed(2)} hs): $${formatCurrency(attendanceHoursReport.amount)}
+──────────────────────────────────────────────────────────────────
+TOTAL GENERAL A LIQUIDAR: $${formatCurrency(grandTotalAmount)}
+──────────────────────────────────────────────────────────────────
+
+══════════════════════════════════════════════════════════════════
+DETALLE DE CIRUGÍAS COMPUTADAS:
+══════════════════════════════════════════════════════════════════
+${surgeriesDetailText}
+
+══════════════════════════════════════════════════════════════════
+DETALLE DE GUARDIAS:
+══════════════════════════════════════════════════════════════════
+${guardsDetailText}
+
+══════════════════════════════════════════════════════════════════
+Este correo constituye constancia fehaciente de conformidad digital 
+emitida a través del Sistema de Coordinación de Quirófano ITEO.
+══════════════════════════════════════════════════════════════════
+            `.trim();
 
             const recipients = new Set<string>();
             if (notificationEmail.trim()) recipients.add(notificationEmail.trim());
@@ -1250,7 +1344,10 @@ Sistema de Coordinación de Quirófano ITEO
                 });
             }
             
-            alert('Conformidad registrada exitosamente y notificaciones de correo encoladas.');
+            alert(isReConsent 
+                ? 'Nueva conformidad registrada con éxito tras los cambios. Las notificaciones por correo fueron encoladas a ambas partes.' 
+                : 'Conformidad registrada exitosamente. Notificaciones por correo encoladas a ambas partes.'
+            );
             fetchData();
         } catch (e: any) {
             alert('Error al registrar conformidad: ' + e.message);
@@ -1458,6 +1555,20 @@ Sistema de Coordinación de Quirófano ITEO
                             ))}
                         </select>
                     </div>
+
+                    {selectedTecnicoId && (
+                        <>
+                            <div className="h-8 w-px bg-slate-200 hidden md:block"></div>
+                            <button
+                                onClick={() => setIsPrintModalOpen(true)}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-lg text-xs font-bold transition-all active:scale-95 shadow-2xs"
+                                title="Imprimir o exportar resumen mensual a PDF"
+                            >
+                                <span className="material-symbols-outlined text-base text-indigo-600">print</span>
+                                <span>Imprimir Resumen</span>
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -2566,27 +2677,63 @@ Sistema de Coordinación de Quirófano ITEO
                             <p className="text-2xl md:text-3xl font-black text-indigo-700 mt-0.5 font-mono tracking-tight">
                                 ${formatCurrency(grandTotalAmount)}
                             </p>
+                            {consentStatusInfo.isOutdated && (
+                                <p className="text-[10px] font-bold text-amber-700 mt-0.5">
+                                    Firmado prev.: ${formatCurrency(consentStatusInfo.signedAmount)}
+                                </p>
+                            )}
                         </div>
                         
-                        {/* Action button or signed status */}
-                        {currentConsent ? (
-                            <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-2xl px-5 py-3.5 flex flex-col justify-center items-center gap-1 w-full sm:w-auto min-w-[200px] shadow-sm">
-                                <span className="px-2.5 py-0.5 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider rounded-md">
-                                    ✓ Conformidad Brindada
-                                </span>
-                                <p className="text-[11px] font-semibold text-emerald-900 mt-0.5 text-center">
-                                    Firmado el {new Date(currentConsent.consented_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })} a las {new Date(currentConsent.consented_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} hs
-                                </p>
-                            </div>
-                        ) : (
+                        {/* Action buttons and signed status */}
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            {/* Botón Imprimir Resumen */}
                             <button
-                                onClick={handleGiveConsent}
-                                className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-indigo-300 flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 text-sm w-full sm:w-auto whitespace-nowrap"
+                                onClick={() => setIsPrintModalOpen(true)}
+                                className="px-4 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 font-bold rounded-2xl border border-slate-200 flex items-center justify-center gap-2 transition-all active:scale-95 text-xs whitespace-nowrap shadow-2xs"
+                                title="Ver resumen e imprimir con membrete ITEO"
                             >
-                                <span className="material-symbols-outlined text-xl">edit_document</span>
-                                Dar Consentimiento / Conformidad
+                                <span className="material-symbols-outlined text-lg text-indigo-600">print</span>
+                                Resumen Detallado
                             </button>
-                        )}
+
+                            {/* Estado de Conformidad / Re-firma */}
+                            {consentStatusInfo.status === 'valid' ? (
+                                <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-2xl px-5 py-3 flex flex-col justify-center items-center gap-0.5 w-full sm:w-auto min-w-[210px] shadow-sm">
+                                    <span className="px-2.5 py-0.5 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider rounded-md flex items-center gap-1">
+                                        <span className="material-symbols-outlined text-xs">verified</span>
+                                        Conformidad Brindada
+                                    </span>
+                                    <p className="text-[11px] font-semibold text-emerald-900 mt-0.5 text-center">
+                                        Firmado el {new Date(consentStatusInfo.signedAt!).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })} a las {new Date(consentStatusInfo.signedAt!).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} hs
+                                    </p>
+                                </div>
+                            ) : consentStatusInfo.isOutdated ? (
+                                <div className="flex flex-col gap-1.5 w-full sm:w-auto">
+                                    <div className="bg-amber-50 text-amber-900 border border-amber-300 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-2xs">
+                                        <span className="material-symbols-outlined text-amber-600 text-base shrink-0 animate-pulse">warning</span>
+                                        <div className="text-[10px] leading-tight">
+                                            <p className="font-black uppercase tracking-tight text-amber-800">Liquidación Modificada</p>
+                                            <p className="text-amber-700">Difiere de la firma anterior ({consentStatusInfo.diffAmount > 0 ? `+$${formatCurrency(consentStatusInfo.diffAmount)}` : `-$${formatCurrency(Math.abs(consentStatusInfo.diffAmount))}`})</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleGiveConsent}
+                                        className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black rounded-xl shadow-md shadow-amber-200 flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 text-xs w-full whitespace-nowrap"
+                                    >
+                                        <span className="material-symbols-outlined text-base">edit_document</span>
+                                        Firmar Nueva Conformidad
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={handleGiveConsent}
+                                    className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-indigo-300 flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 text-sm w-full sm:w-auto whitespace-nowrap"
+                                >
+                                    <span className="material-symbols-outlined text-xl">edit_document</span>
+                                    Dar Consentimiento / Conformidad
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -2846,6 +2993,284 @@ Sistema de Coordinación de Quirófano ITEO
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Impresión de Resumen Mensual (A4 / PDF) */}
+            {isPrintModalOpen && (
+                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-fadeIn overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden print:max-w-none print:max-h-none print:border-none print:shadow-none print:rounded-none">
+                        {/* Modal Toolbar (Oculto al imprimir) */}
+                        <div className="flex justify-between items-center px-6 py-4 bg-slate-900 text-white shrink-0 print:hidden">
+                            <div className="flex items-center gap-2.5">
+                                <span className="material-symbols-outlined text-indigo-400">print</span>
+                                <h3 className="text-sm font-bold tracking-tight">Vista Previa para Impresión / Exportación PDF</h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => window.print()}
+                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95"
+                                >
+                                    <span className="material-symbols-outlined text-base">print</span>
+                                    Imprimir / Guardar PDF
+                                </button>
+                                <button
+                                    onClick={() => setIsPrintModalOpen(false)}
+                                    className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                                    title="Cerrar vista previa"
+                                >
+                                    <span className="material-symbols-outlined text-xl">close</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Printable Document Body */}
+                        <div className="p-6 sm:p-10 overflow-y-auto flex-1 space-y-6 text-slate-800 bg-white font-sans print:p-0 print:overflow-visible">
+                            {/* Document Header with ITEO Logo */}
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b-2 border-slate-800 gap-4">
+                                <div className="flex items-center gap-4">
+                                    <img 
+                                        src="/logo-iteo-azul.png" 
+                                        alt="Logo ITEO" 
+                                        className="h-14 sm:h-16 w-auto object-contain"
+                                        onError={(e) => {
+                                            // Fallback al logo general si la ruta relativa no carga
+                                            (e.currentTarget as HTMLImageElement).src = '/logo-iteo.png';
+                                        }}
+                                    />
+                                    <div>
+                                        <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                                            INSTITUTO DE TRAUMATOLOGÍA
+                                        </h1>
+                                        <p className="text-xs uppercase font-extrabold tracking-widest text-indigo-700">
+                                            Coordinación de Quirófano • Liquidación Mensual
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="text-left sm:text-right">
+                                    <p className="text-xs font-bold text-slate-500 uppercase">Período de Liquidación</p>
+                                    <p className="text-lg font-black text-slate-900">
+                                        {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][selectedMonth]} {selectedYear}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 mt-0.5">
+                                        Emisión: {new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Professional Info Box */}
+                            {(() => {
+                                const tec = tecnicos.find(t => t.id === selectedTecnicoId);
+                                return (
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                                        <div>
+                                            <span className="font-bold text-slate-400 uppercase text-[10px] block">Instrumentador / Técnico</span>
+                                            <strong className="text-sm text-slate-900">{tec?.name || 'No especificado'}</strong>
+                                            <p className="text-slate-500 text-[11px]">{tec?.email || 'Sin email registrado'}</p>
+                                        </div>
+                                        <div>
+                                            <span className="font-bold text-slate-400 uppercase text-[10px] block">Modalidad Asignada</span>
+                                            <strong className="text-slate-800">
+                                                {tec?.is_turno_tarde ? 'Turno Tarde (Fijo)' : tec?.does_guardias ? 'Régimen de Guardias' : 'Personal Técnico'}
+                                            </strong>
+                                            <p className="text-slate-500 text-[11px]">Tarifa Hora: ${formatCurrency(hourRate)} | Guardia: ${formatCurrency(guardRate)}</p>
+                                        </div>
+                                        <div>
+                                            <span className="font-bold text-slate-400 uppercase text-[10px] block">Estado de Conformidad</span>
+                                            {consentStatusInfo.status === 'valid' ? (
+                                                <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px] mt-0.5">
+                                                    ✓ Firmado ({new Date(consentStatusInfo.signedAt!).toLocaleDateString('es-ES')})
+                                                </span>
+                                            ) : consentStatusInfo.isOutdated ? (
+                                                <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-300 text-[11px] mt-0.5">
+                                                    ⚠️ Modificado (Requiere re-firma)
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 font-bold text-slate-600 bg-slate-200 px-2 py-0.5 rounded text-[11px] mt-0.5">
+                                                    Pendiente de Conformidad
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* Section 1: Detailed Surgeries */}
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                        <span className="size-2 rounded-full bg-indigo-600"></span>
+                                        1. Detalle de Cirugías Computadas ({surgeriesReport.length} intervenciones)
+                                    </h3>
+                                    <span className="text-xs font-bold text-indigo-700">
+                                        Subtotal: ${formatCurrency(totalSurgeriesAmount)}
+                                    </span>
+                                </div>
+
+                                {surgeriesReport.length === 0 ? (
+                                    <div className="p-4 border border-dashed border-slate-300 rounded-xl text-center text-xs text-slate-400 font-semibold italic">
+                                        No se computan cirugías en el período seleccionado.
+                                    </div>
+                                ) : (
+                                    <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+                                        <thead className="bg-slate-100 text-slate-600 font-black uppercase text-[10px] tracking-wider border-b border-slate-200">
+                                            <tr>
+                                                <th className="p-2.5">Fecha</th>
+                                                <th className="p-2.5">Paciente</th>
+                                                <th className="p-2.5">Procedimiento / Cód.</th>
+                                                <th className="p-2.5 text-center">Duración</th>
+                                                <th className="p-2.5 text-left">Regla / Cómputo</th>
+                                                <th className="p-2.5 text-right">Monto Liquidado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {surgeriesReport.map((s, idx) => (
+                                                <tr key={s.id || idx} className="hover:bg-slate-50">
+                                                    <td className="p-2.5 font-bold text-slate-700 whitespace-nowrap">
+                                                        {new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                                                    </td>
+                                                    <td className="p-2.5 font-bold text-slate-900 uppercase">
+                                                        {s.patient}
+                                                    </td>
+                                                    <td className="p-2.5 text-slate-700 max-w-xs truncate" title={s.procedure}>
+                                                        <span className="font-semibold text-indigo-900">{s.practiceCode ? `[${s.practiceCode}] ` : ''}</span>
+                                                        {s.procedureText || s.procedure}
+                                                    </td>
+                                                    <td className="p-2.5 text-center text-slate-600 whitespace-nowrap">
+                                                        {s.realMin}m ({s.roundedMin}m)
+                                                    </td>
+                                                    <td className="p-2.5 text-slate-500 font-medium">
+                                                        {s.notes}
+                                                    </td>
+                                                    <td className="p-2.5 text-right font-black text-slate-900 whitespace-nowrap">
+                                                        ${formatCurrency(s.share)}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
+                                            <tr>
+                                                <td colSpan={5} className="p-2.5 text-right text-slate-600 uppercase text-[10px]">
+                                                    Total Cirugías:
+                                                </td>
+                                                <td className="p-2.5 text-right font-black text-indigo-700 text-sm">
+                                                    ${formatCurrency(totalSurgeriesAmount)}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                )}
+                            </div>
+
+                            {/* Section 2: Guards and Attendance */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {/* Guardias */}
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                            <span className="size-2 rounded-full bg-emerald-600"></span>
+                                            2. Resumen de Guardias
+                                        </h3>
+                                        <span className="text-xs font-bold text-emerald-700">
+                                            ${formatCurrency(guardsReport.totalAmount)}
+                                        </span>
+                                    </div>
+                                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">Días hábiles proporcionales:</span>
+                                            <strong className="text-slate-800">
+                                                {guardsReport.weeksDetail.reduce((a, b) => a + b.equiv, 0).toFixed(2)} días
+                                            </strong>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">Fines de semana computados:</span>
+                                            <strong className="text-slate-800">{guardsReport.weekendDaysCount} días</strong>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">Feriados nacionales trabajados:</span>
+                                            <strong className="text-slate-800">{guardsReport.holidaysCount} días</strong>
+                                        </div>
+                                        <div className="pt-1.5 border-t border-slate-200 flex justify-between font-bold">
+                                            <span className="text-slate-700">Total días liquidados:</span>
+                                            <span className="text-emerald-800">{guardsReport.daysCount.toFixed(2)} días (${formatCurrency(guardRate)} c/u)</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Asistencia / Fichadas */}
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                            <span className="size-2 rounded-full bg-blue-600"></span>
+                                            3. Asistencia / Horas Fichadas
+                                        </h3>
+                                        <span className="text-xs font-bold text-blue-700">
+                                            ${formatCurrency(attendanceHoursReport.amount)}
+                                        </span>
+                                    </div>
+                                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">Total de horas registradas:</span>
+                                            <strong className="text-slate-800">{attendanceHoursReport.totalHours.toFixed(2)} hs</strong>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">Tarifa horaria aplicada:</span>
+                                            <strong className="text-slate-800">${formatCurrency(hourRate)} / hora</strong>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">Marcaciones en el período:</span>
+                                            <strong className="text-slate-800">{attendanceLogs.length} registros</strong>
+                                        </div>
+                                        <div className="pt-1.5 border-t border-slate-200 flex justify-between font-bold">
+                                            <span className="text-slate-700">Monto total asistencia:</span>
+                                            <span className="text-blue-800">${formatCurrency(attendanceHoursReport.amount)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Consolidated Total Box */}
+                            <div className="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:bg-none print:text-black print:border-2 print:border-slate-800">
+                                <div>
+                                    <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest print:text-slate-600">
+                                        Liquidación Total Consolidada del Mes
+                                    </p>
+                                    <p className="text-xs text-slate-300 mt-0.5 print:text-slate-500">
+                                        Incluye cirugías realizadas, guardias cubiertas y horas de asistencia del período.
+                                    </p>
+                                </div>
+                                <div className="text-left sm:text-right">
+                                    <span className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-white print:text-slate-900">
+                                        ${formatCurrency(grandTotalAmount)}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Signature / Digital Certificate Footer */}
+                            <div className="pt-6 border-t border-slate-300 grid grid-cols-1 sm:grid-cols-2 gap-8 text-xs">
+                                <div className="space-y-2">
+                                    <p className="font-bold text-slate-700 uppercase text-[10px] tracking-wider">
+                                        Certificación Digital de Conformidad
+                                    </p>
+                                    <p className="text-slate-500 text-[11px] leading-relaxed">
+                                        {consentStatusInfo.status === 'valid'
+                                            ? `Conformidad otorgada en el sistema el ${new Date(consentStatusInfo.signedAt!).toLocaleDateString('es-ES')} a las ${new Date(consentStatusInfo.signedAt!).toLocaleTimeString('es-ES')} hs por el monto total de $${formatCurrency(consentStatusInfo.signedAmount)}.`
+                                            : consentStatusInfo.isOutdated
+                                            ? `Liquidación modificada con posterioridad a la última firma ($${formatCurrency(consentStatusInfo.signedAmount)} el ${new Date(consentStatusInfo.signedAt!).toLocaleDateString('es-ES')}). Requiere nueva firma.`
+                                            : 'Pendiente de emisión y registro de conformidad digital por parte del profesional.'}
+                                    </p>
+                                    <p className="text-[10px] font-mono text-slate-400">
+                                        ID Registro: {currentConsent?.id || 'PENDIENTE'}
+                                    </p>
+                                </div>
+                                <div className="flex flex-col items-center justify-end">
+                                    <div className="w-48 border-b border-slate-400 mb-1"></div>
+                                    <p className="font-bold text-slate-800 text-[11px]">Firma / Conformidad Técnico</p>
+                                    <p className="text-[10px] text-slate-500">ITEO Quirófano</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

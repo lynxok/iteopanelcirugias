@@ -4,6 +4,11 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.123 [2026-09-08]**: Lanzada la versión **v3.10.123**.
+    *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
+        *   **Invalidación Inteligente de Conformidad**: Detección reactiva de discrepancias entre el cálculo en tiempo real y el importe firmado (`consentStatusInfo`). Si luego de dar conformidad se modifican cirugías, guardias u horas, el badge verde se invalida automáticamente, mostrando alerta ámbar de "Liquidación Modificada" y reactivando el botón para firmar una nueva conformidad con registro en `audit_logs`.
+        *   **Resumen Formal Imprimible con Membrete Oficial ITEO**: Incorporación del botón "Imprimir Resumen" / "Resumen Detallado" con vista previa optimizada para impresión en A4 y exportación a PDF (incluye logo ITEO, desglose de cirugías, guardias, horas y certificado digital).
+        *   **Notificación por Correo a Ambas Partes**: Envío del resumen exhaustivo al correo configurado de ITEO (`notification_email`) y al correo personal del técnico (`email_notifications`).
 *   **v3.10.122 [2026-09-06]**: Lanzada la versión **v3.10.122**.
     *   **Aceleración Global y Caché Instantáneo (0 ms) en Todas las Secciones**:
         *   **Dashboard Principal (`Dashboard.tsx`)**: Caché por rol a nivel módulo `dashboardCache`, render de 0 ms y revalidación silenciosa en background.
