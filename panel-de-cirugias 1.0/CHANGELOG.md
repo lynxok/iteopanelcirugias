@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v3.10.124 (2026-09-08)
+- **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
+    * **Autor visible en Última Edición de Valores Globales**:
+        - En la sección "Tarifas y Ajustes" → "Valores Globales" (Valor hora cirugía, Valor día guardia, IP Pública WiFi y Correo notificación), el campo "Última edición" muestra ahora siempre el nombre del responsable con un badge visual destacado en índigo: `Última edición: DD/MM/AAAA HH:mm hs por [Nombre]`.
+        - El helper `formatLastUpdated` tiene fallback garantizado a `"Administración"` si el campo `updated_by_name` está vacío en la base de datos.
+        - Se corrigió retroactivamente en la base de datos Supabase (`quirofano.tecnico_rates`) el campo `updated_by_name` de los 4 registros globales históricos que tenían `NULL`, asignándoles `"Ignacio Valente"`.
+
 ## v3.10.123 (2026-09-08)
 - **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
     * **Invalidación Inteligente y Re-conformidad Obligatoria**:

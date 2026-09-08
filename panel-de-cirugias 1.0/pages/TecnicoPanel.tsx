@@ -182,12 +182,15 @@ export default function TecnicoPanel() {
             relativeStr = `hace ${years} ${years === 1 ? 'año' : 'años'}`;
         }
 
+        const author = updated_by_name?.trim() || 'Administración';
+
         return {
-            fullText: `${dateStr} a las ${timeStr} hs (${relativeStr})`,
+            fullText: `${dateStr} a las ${timeStr} hs (${relativeStr}) por ${author}`,
             dateStr,
             timeStr,
             relativeStr,
-            byText: updated_by_name ? `por ${updated_by_name}` : ''
+            author,
+            byText: `por ${author}`
         };
     };
 
@@ -2222,10 +2225,12 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                 value={hourRate}
                                                 onChange={e => setHourRate(Number(e.target.value))}
                                             />
-                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 flex-wrap">
                                                 <span className="material-symbols-outlined text-xs text-slate-400">history</span>
                                                 {hourRateObj?.updated_at ? (
-                                                    <span>Última edición: <strong className="text-slate-700">{formatLastUpdated(hourRateObj.updated_at)?.dateStr} {formatLastUpdated(hourRateObj.updated_at)?.timeStr} hs</strong> {hourRateObj.updated_by_name ? `por ${hourRateObj.updated_by_name}` : ''}</span>
+                                                    <span>
+                                                        Última edición: <strong className="text-slate-700">{formatLastUpdated(hourRateObj.updated_at, hourRateObj.updated_by_name)?.dateStr} {formatLastUpdated(hourRateObj.updated_at, hourRateObj.updated_by_name)?.timeStr} hs</strong> por <strong className="text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 font-semibold">{formatLastUpdated(hourRateObj.updated_at, hourRateObj.updated_by_name)?.author}</strong>
+                                                    </span>
                                                 ) : (
                                                     <span className="text-slate-400 italic">Sin registro de edición previa</span>
                                                 )}
@@ -2247,10 +2252,12 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                 value={guardRate}
                                                 onChange={e => setGuardRate(Number(e.target.value))}
                                             />
-                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 flex-wrap">
                                                 <span className="material-symbols-outlined text-xs text-slate-400">history</span>
                                                 {guardRateObj?.updated_at ? (
-                                                    <span>Última edición: <strong className="text-slate-700">{formatLastUpdated(guardRateObj.updated_at)?.dateStr} {formatLastUpdated(guardRateObj.updated_at)?.timeStr} hs</strong> {guardRateObj.updated_by_name ? `por ${guardRateObj.updated_by_name}` : ''}</span>
+                                                    <span>
+                                                        Última edición: <strong className="text-slate-700">{formatLastUpdated(guardRateObj.updated_at, guardRateObj.updated_by_name)?.dateStr} {formatLastUpdated(guardRateObj.updated_at, guardRateObj.updated_by_name)?.timeStr} hs</strong> por <strong className="text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 font-semibold">{formatLastUpdated(guardRateObj.updated_at, guardRateObj.updated_by_name)?.author}</strong>
+                                                    </span>
                                                 ) : (
                                                     <span className="text-slate-400 italic">Sin registro de edición previa</span>
                                                 )}
@@ -2273,10 +2280,12 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                 value={inputClinicIp}
                                                 onChange={e => setInputClinicIp(e.target.value)}
                                             />
-                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 flex-wrap">
                                                 <span className="material-symbols-outlined text-xs text-slate-400">history</span>
                                                 {clinicIpObj?.updated_at ? (
-                                                    <span>Última edición: <strong className="text-slate-700">{formatLastUpdated(clinicIpObj.updated_at)?.dateStr} {formatLastUpdated(clinicIpObj.updated_at)?.timeStr} hs</strong> {clinicIpObj.updated_by_name ? `por ${clinicIpObj.updated_by_name}` : ''}</span>
+                                                    <span>
+                                                        Última edición: <strong className="text-slate-700">{formatLastUpdated(clinicIpObj.updated_at, clinicIpObj.updated_by_name)?.dateStr} {formatLastUpdated(clinicIpObj.updated_at, clinicIpObj.updated_by_name)?.timeStr} hs</strong> por <strong className="text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 font-semibold">{formatLastUpdated(clinicIpObj.updated_at, clinicIpObj.updated_by_name)?.author}</strong>
+                                                    </span>
                                                 ) : (
                                                     <span className="text-slate-400 italic">Sin registro de edición previa</span>
                                                 )}
@@ -2302,10 +2311,12 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                 value={inputNotificationEmail}
                                                 onChange={e => setInputNotificationEmail(e.target.value)}
                                             />
-                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
+                                            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 flex-wrap">
                                                 <span className="material-symbols-outlined text-xs text-slate-400">history</span>
                                                 {notifEmailObj?.updated_at ? (
-                                                    <span>Última edición: <strong className="text-slate-700">{formatLastUpdated(notifEmailObj.updated_at)?.dateStr} {formatLastUpdated(notifEmailObj.updated_at)?.timeStr} hs</strong> {notifEmailObj.updated_by_name ? `por ${notifEmailObj.updated_by_name}` : ''}</span>
+                                                    <span>
+                                                        Última edición: <strong className="text-slate-700">{formatLastUpdated(notifEmailObj.updated_at, notifEmailObj.updated_by_name)?.dateStr} {formatLastUpdated(notifEmailObj.updated_at, notifEmailObj.updated_by_name)?.timeStr} hs</strong> por <strong className="text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 font-semibold">{formatLastUpdated(notifEmailObj.updated_at, notifEmailObj.updated_by_name)?.author}</strong>
+                                                    </span>
                                                 ) : (
                                                     <span className="text-slate-400 italic">Sin registro de edición previa</span>
                                                 )}

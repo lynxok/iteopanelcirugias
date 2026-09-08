@@ -4,6 +4,9 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.124 [2026-09-08]**: Lanzada la versión **v3.10.124**.
+    *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
+        *   **Autor visible en Última Edición de Valores Globales**: En "Valores Globales" (Valor hora cirugía, Valor día guardia, IP WiFi y Correo notificación), el campo "Última edición" muestra siempre el nombre del responsable en un badge destacado (`por [Nombre]`). Fallback automático a "Administración" si el dato no está en base de datos. Se corrigió retroactivamente `updated_by_name = NULL` en Supabase para los 4 registros históricos globales.
 *   **v3.10.123 [2026-09-08]**: Lanzada la versión **v3.10.123**.
     *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
         *   **Invalidación Inteligente de Conformidad**: Detección reactiva de discrepancias entre el cálculo en tiempo real y el importe firmado (`consentStatusInfo`). Si luego de dar conformidad se modifican cirugías, guardias u horas, el badge verde se invalida automáticamente, mostrando alerta ámbar de "Liquidación Modificada" y reactivando el botón para firmar una nueva conformidad con registro en `audit_logs`.
