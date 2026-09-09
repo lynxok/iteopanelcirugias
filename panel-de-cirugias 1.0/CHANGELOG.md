@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v3.10.127 (2026-09-09)
+- **Impresión Limpia y Aislada del Informe de Liquidación (`TecnicoPanel.tsx`, `index.css`)**:
+    * **Aislamiento Total del Documento Formal A4 / PDF**:
+        - Se corrigió el comportamiento de impresión: al hacer clic en *"Imprimir / Guardar PDF"* o presionar `Ctrl + P`, ya no se imprime una captura de la interfaz web (sidebar, barras de navegación, botones, fondos oscuros ni modal), sino pura y exclusivamente el **informe formal de liquidación con membrete institucional ITEO**.
+        - Reglas CSS estrictas `@page { size: A4 portrait; margin: 10mm; }` y aislamiento con visibilidad exclusiva en `#tecnico-printable-report`, garantizando paginado limpio de tablas, saltos de página naturales y tipografía nítida para entrega administrativa o exportación directa a PDF.
+    * **Integración Nativa Multiplataforma**:
+        - Conexión del botón con el puente de impresión nativo de Electron y fallback a `window.print()` en navegador web estándar.
+
 ## v3.10.126 (2026-09-09)
 - **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
     * **Cómputo Automático por Extensión a Turno Tarde**:

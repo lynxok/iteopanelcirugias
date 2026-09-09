@@ -1429,6 +1429,16 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
         }
     };
 
+    // Impresión aislada del Reporte de Liquidación (sin barras, menús ni capturas del sitio)
+    const handlePrintModalReport = () => {
+        const isElectron = !!(window as any).electronAPI;
+        if (isElectron && (window as any).electronAPI.print) {
+            (window as any).electronAPI.print();
+        } else {
+            window.print();
+        }
+    };
+
     // Configuración de Tarifas (Administrativos)
     const handleSaveGlobalRates = async () => {
         setIsSavingRate(true);
@@ -3442,8 +3452,8 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
 
             {/* Modal de Impresión de Resumen Mensual (A4 / PDF) */}
             {isPrintModalOpen && (
-                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-fadeIn overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
-                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden print:max-w-none print:max-h-none print:border-none print:shadow-none print:rounded-none">
+                <div id="tecnico-print-modal-overlay" className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-fadeIn overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
+                    <div id="tecnico-print-modal-container" className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden print:max-w-none print:max-h-none print:border-none print:shadow-none print:rounded-none">
                         {/* Modal Toolbar (Oculto al imprimir) */}
                         <div className="flex justify-between items-center px-6 py-4 bg-slate-900 text-white shrink-0 print:hidden">
                             <div className="flex items-center gap-2.5">
@@ -3452,7 +3462,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
-                                    onClick={() => window.print()}
+                                    onClick={handlePrintModalReport}
                                     className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95"
                                 >
                                     <span className="material-symbols-outlined text-base">print</span>
@@ -3469,7 +3479,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                         </div>
 
                         {/* Printable Document Body */}
-                        <div className="p-6 sm:p-10 overflow-y-auto flex-1 space-y-6 text-slate-800 bg-white font-sans print:p-0 print:overflow-visible">
+                        <div id="tecnico-printable-report" className="p-6 sm:p-10 overflow-y-auto flex-1 space-y-6 text-slate-800 bg-white font-sans print:p-0 print:overflow-visible">
                             {/* Document Header with ITEO Logo */}
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b-2 border-slate-800 gap-4">
                                 <div className="flex items-center gap-4">
