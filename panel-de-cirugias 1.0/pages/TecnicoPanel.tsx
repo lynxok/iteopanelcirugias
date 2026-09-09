@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { supabase } from '../src/lib/supabase';
 import { useAuth } from '../src/lib/AuthContext';
@@ -1431,12 +1432,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
 
     // Impresión aislada del Reporte de Liquidación (sin barras, menús ni capturas del sitio)
     const handlePrintModalReport = () => {
-        const isElectron = !!(window as any).electronAPI;
-        if (isElectron && (window as any).electronAPI.print) {
-            (window as any).electronAPI.print();
-        } else {
-            window.print();
-        }
+        window.print();
     };
 
     // Configuración de Tarifas (Administrativos)
@@ -3451,49 +3447,307 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
             )}
 
             {/* Modal de Impresión de Resumen Mensual (A4 / PDF) */}
+            {/* Modal de Vista Previa de Resumen Mensual */}
             {isPrintModalOpen && (
-                <div id="tecnico-print-modal-overlay" className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-fadeIn overflow-y-auto print:p-0 print:bg-white print:static print:inset-auto">
-                    <div id="tecnico-print-modal-container" className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden print:max-w-none print:max-h-none print:border-none print:shadow-none print:rounded-none">
-                        {/* Modal Toolbar (Oculto al imprimir) */}
-                        <div className="flex justify-between items-center px-6 py-4 bg-slate-900 text-white shrink-0 print:hidden">
-                            <div className="flex items-center gap-2.5">
-                                <span className="material-symbols-outlined text-indigo-400">print</span>
-                                <h3 className="text-sm font-bold tracking-tight">Vista Previa para Impresión / Exportación PDF</h3>
+                <>
+                    {/* Contenedor en pantalla (solo visible en pantalla, no en impresión) */}
+                    <div id="tecnico-print-modal-overlay" className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-fadeIn overflow-y-auto print:hidden">
+                        <div id="tecnico-print-modal-container" className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+                            {/* Modal Toolbar */}
+                            <div className="flex justify-between items-center px-6 py-4 bg-slate-900 text-white shrink-0">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="material-symbols-outlined text-indigo-400">print</span>
+                                    <h3 className="text-sm font-bold tracking-tight">Vista Previa para Impresión / Exportación PDF</h3>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={handlePrintModalReport}
+                                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95"
+                                    >
+                                        <span className="material-symbols-outlined text-base">print</span>
+                                        Imprimir / Guardar PDF
+                                    </button>
+                                    <button
+                                        onClick={() => setIsPrintModalOpen(false)}
+                                        className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                                        title="Cerrar vista previa"
+                                    >
+                                        <span className="material-symbols-outlined text-xl">close</span>
+                                    </button>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={handlePrintModalReport}
-                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95"
-                                >
-                                    <span className="material-symbols-outlined text-base">print</span>
-                                    Imprimir / Guardar PDF
-                                </button>
-                                <button
-                                    onClick={() => setIsPrintModalOpen(false)}
-                                    className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-                                    title="Cerrar vista previa"
-                                >
-                                    <span className="material-symbols-outlined text-xl">close</span>
-                                </button>
+
+                            {/* Document Preview Body (En pantalla) */}
+                            <div className="p-6 sm:p-10 overflow-y-auto flex-1 space-y-6 text-slate-800 bg-white font-sans">
+                                {/* Document Header with ITEO Logo */}
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b-2 border-slate-800 gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <img 
+                                            src="/logo-iteo-azul.png" 
+                                            alt="Logo ITEO" 
+                                            className="h-14 sm:h-16 w-auto object-contain"
+                                            onError={(e) => {
+                                                (e.currentTarget as HTMLImageElement).src = '/logo-iteo.png';
+                                            }}
+                                        />
+                                        <div>
+                                            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                                                INSTITUTO DE TRAUMATOLOGÍA
+                                            </h1>
+                                            <p className="text-xs uppercase font-extrabold tracking-widest text-indigo-700">
+                                                Coordinación de Quirófano • Liquidación Mensual
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="text-left sm:text-right">
+                                        <p className="text-xs font-bold text-slate-500 uppercase">Período de Liquidación</p>
+                                        <p className="text-lg font-black text-slate-900">
+                                            {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][selectedMonth]} {selectedYear}
+                                        </p>
+                                        <p className="text-[10px] text-slate-400 mt-0.5">
+                                            Emisión: {new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Professional Info Box */}
+                                {(() => {
+                                    const tec = tecnicos.find(t => t.id === selectedTecnicoId);
+                                    return (
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                                            <div>
+                                                <span className="font-bold text-slate-400 uppercase text-[10px] block">Instrumentador / Técnico</span>
+                                                <strong className="text-sm text-slate-900">{tec?.name || 'No especificado'}</strong>
+                                                <p className="text-slate-500 text-[11px]">{tec?.email || 'Sin email registrado'}</p>
+                                            </div>
+                                            <div>
+                                                <span className="font-bold text-slate-400 uppercase text-[10px] block">Modalidad Asignada</span>
+                                                <strong className="text-slate-800">
+                                                    {tec?.is_turno_tarde ? 'Turno Tarde (Fijo)' : tec?.does_guardias ? 'Régimen de Guardias' : 'Personal Técnico'}
+                                                </strong>
+                                                <p className="text-slate-500 text-[11px]">Tarifa Hora: ${formatCurrency(hourRate)} | Guardia: ${formatCurrency(guardRate)}</p>
+                                            </div>
+                                            <div>
+                                                <span className="font-bold text-slate-400 uppercase text-[10px] block">Estado de Conformidad</span>
+                                                {consentStatusInfo.status === 'valid' ? (
+                                                    <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px] mt-0.5">
+                                                        ✓ Firmado ({new Date(consentStatusInfo.signedAt!).toLocaleDateString('es-ES')})
+                                                    </span>
+                                                ) : consentStatusInfo.isOutdated ? (
+                                                    <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-300 text-[11px] mt-0.5">
+                                                        ⚠️ Modificado (Requiere re-firma)
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 font-bold text-slate-600 bg-slate-200 px-2 py-0.5 rounded text-[11px] mt-0.5">
+                                                        Pendiente de Conformidad
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Section 1: Detailed Surgeries */}
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                            <span className="size-2 rounded-full bg-indigo-600"></span>
+                                            1. Detalle de Cirugías Computadas ({surgeriesReport.length} intervenciones)
+                                        </h3>
+                                        <span className="text-xs font-bold text-indigo-700">
+                                            Subtotal: ${formatCurrency(totalSurgeriesAmount)}
+                                        </span>
+                                    </div>
+
+                                    {surgeriesReport.length === 0 ? (
+                                        <div className="p-4 border border-dashed border-slate-300 rounded-xl text-center text-xs text-slate-400 font-semibold italic">
+                                            No se computan cirugías en el período seleccionado.
+                                        </div>
+                                    ) : (
+                                        <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+                                            <thead className="bg-slate-100 text-slate-600 font-black uppercase text-[10px] tracking-wider border-b border-slate-200">
+                                                <tr>
+                                                    <th className="p-2.5">Fecha</th>
+                                                    <th className="p-2.5">Paciente</th>
+                                                    <th className="p-2.5">Procedimiento / Cód.</th>
+                                                    <th className="p-2.5 text-center">Duración</th>
+                                                    <th className="p-2.5 text-left">Regla / Cómputo</th>
+                                                    <th className="p-2.5 text-right">Monto Liquidado</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {surgeriesReport.map((s, idx) => (
+                                                    <tr key={s.id || idx} className="hover:bg-slate-50">
+                                                        <td className="p-2.5 font-bold text-slate-700 whitespace-nowrap">
+                                                            {new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                                                        </td>
+                                                        <td className="p-2.5 font-bold text-slate-900 uppercase">
+                                                            {s.patient}
+                                                        </td>
+                                                        <td className="p-2.5 text-slate-700 max-w-xs truncate" title={s.procedure}>
+                                                            <span className="font-semibold text-indigo-900">{s.practiceCode ? `[${s.practiceCode}] ` : ''}</span>
+                                                            {s.procedureText || s.procedure}
+                                                        </td>
+                                                        <td className="p-2.5 text-center text-slate-600 whitespace-nowrap">
+                                                            {s.realMin}m ({s.roundedMin}m)
+                                                        </td>
+                                                        <td className="p-2.5 text-slate-500 font-medium">
+                                                            {s.notes}
+                                                        </td>
+                                                        <td className="p-2.5 text-right font-black text-slate-900 whitespace-nowrap">
+                                                            ${formatCurrency(s.share)}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
+                                                <tr>
+                                                    <td colSpan={5} className="p-2.5 text-right text-slate-600 uppercase text-[10px]">
+                                                        Total Cirugías:
+                                                    </td>
+                                                    <td className="p-2.5 text-right font-black text-indigo-700 text-sm">
+                                                        ${formatCurrency(totalSurgeriesAmount)}
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    )}
+                                </div>
+
+                                {/* Section 2: Guards and Attendance */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {/* Guardias */}
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                                <span className="size-2 rounded-full bg-emerald-600"></span>
+                                                2. Resumen de Guardias
+                                            </h3>
+                                            <span className="text-xs font-bold text-emerald-700">
+                                                ${formatCurrency(guardsReport.totalAmount)}
+                                            </span>
+                                        </div>
+                                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">Días hábiles proporcionales:</span>
+                                                <strong className="text-slate-800">
+                                                    {guardsReport.weeksDetail.reduce((a, b) => a + b.equiv, 0).toFixed(2)} días
+                                                </strong>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">Fines de semana computados:</span>
+                                                <strong className="text-slate-800">{guardsReport.weekendDaysCount} días</strong>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">Feriados nacionales trabajados:</span>
+                                                <strong className="text-slate-800">{guardsReport.holidaysCount} días</strong>
+                                            </div>
+                                            <div className="pt-1.5 border-t border-slate-200 flex justify-between font-bold">
+                                                <span className="text-slate-700">Total días liquidados:</span>
+                                                <span className="text-emerald-800">{guardsReport.daysCount.toFixed(2)} días (${formatCurrency(guardRate)} c/u)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Asistencia / Fichadas */}
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center">
+                                            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                                <span className="size-2 rounded-full bg-blue-600"></span>
+                                                3. Asistencia / Horas Fichadas
+                                            </h3>
+                                            <span className="text-xs font-bold text-blue-700">
+                                                ${formatCurrency(attendanceHoursReport.amount)}
+                                            </span>
+                                        </div>
+                                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">Total de horas registradas:</span>
+                                                <strong className="text-slate-800">{attendanceHoursReport.totalHours.toFixed(2)} hs</strong>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">Tarifa horaria aplicada:</span>
+                                                <strong className="text-slate-800">${formatCurrency(hourRate)} / hora</strong>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">Marcaciones en el período:</span>
+                                                <strong className="text-slate-800">{attendanceLogs.length} registros</strong>
+                                            </div>
+                                            <div className="pt-1.5 border-t border-slate-200 flex justify-between font-bold">
+                                                <span className="text-slate-700">Monto total asistencia:</span>
+                                                <span className="text-blue-800">${formatCurrency(attendanceHoursReport.amount)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Consolidated Total Box */}
+                                <div className="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                    <div>
+                                        <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest">
+                                            Liquidación Total Consolidada del Mes
+                                        </p>
+                                        <p className="text-xs text-slate-300 mt-0.5">
+                                            Incluye cirugías realizadas, guardias cubiertas y horas de asistencia del período.
+                                        </p>
+                                    </div>
+                                    <div className="text-left sm:text-right">
+                                        <span className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-white">
+                                            ${formatCurrency(grandTotalAmount)}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Signature / Digital Certificate Footer */}
+                                <div className="pt-6 border-t border-slate-300 grid grid-cols-1 sm:grid-cols-2 gap-8 text-xs">
+                                    <div className="space-y-2">
+                                        <p className="font-bold text-slate-700 uppercase text-[10px] tracking-wider">
+                                            Certificación Digital de Conformidad
+                                        </p>
+                                        <p className="text-slate-500 text-[11px] leading-relaxed">
+                                            {consentStatusInfo.status === 'valid'
+                                                ? `Conformidad otorgada en el sistema el ${new Date(consentStatusInfo.signedAt!).toLocaleDateString('es-ES')} a las ${new Date(consentStatusInfo.signedAt!).toLocaleTimeString('es-ES')} hs por el monto total de $${formatCurrency(consentStatusInfo.signedAmount)}.`
+                                                : consentStatusInfo.isOutdated
+                                                ? `Liquidación modificada con posterioridad a la última firma ($${formatCurrency(consentStatusInfo.signedAmount)} el ${new Date(consentStatusInfo.signedAt!).toLocaleDateString('es-ES')}). Requiere nueva firma.`
+                                                : 'Pendiente de emisión y registro de conformidad digital por parte del profesional.'}
+                                        </p>
+                                        <p className="text-[10px] font-mono text-slate-400">
+                                            ID Registro: {currentConsent?.id || 'PENDIENTE'}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-col items-center justify-end">
+                                        <div className="w-48 border-b border-slate-400 mb-1"></div>
+                                        <p className="font-bold text-slate-800 text-[11px]">Firma / Conformidad Técnico</p>
+                                        <p className="text-[10px] text-slate-500">ITEO Quirófano</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
+                    </div>
 
-                        {/* Printable Document Body */}
-                        <div id="tecnico-printable-report" className="p-6 sm:p-10 overflow-y-auto flex-1 space-y-6 text-slate-800 bg-white font-sans print:p-0 print:overflow-visible">
+                    {/* Portal de Impresión Directo a document.body (Se monta fuera de #root para evitar colapsos y garantizar paginación limpia) */}
+                    {createPortal(
+                        <div id="tecnico-print-portal" className="hidden print:block bg-white text-slate-900 font-sans p-6 sm:p-10 space-y-6 w-full">
+                            <style dangerouslySetInnerHTML={{
+                                __html: `
+                                @media print {
+                                    @page { size: A4 portrait; margin: 10mm; }
+                                }
+                            `}} />
+
                             {/* Document Header with ITEO Logo */}
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b-2 border-slate-800 gap-4">
+                            <div className="flex justify-between items-center pb-6 border-b-2 border-slate-800 gap-4">
                                 <div className="flex items-center gap-4">
                                     <img 
                                         src="/logo-iteo-azul.png" 
                                         alt="Logo ITEO" 
-                                        className="h-14 sm:h-16 w-auto object-contain"
+                                        className="h-16 w-auto object-contain"
                                         onError={(e) => {
-                                            // Fallback al logo general si la ruta relativa no carga
                                             (e.currentTarget as HTMLImageElement).src = '/logo-iteo.png';
                                         }}
                                     />
                                     <div>
-                                        <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                                        <h1 className="text-2xl font-black tracking-tight text-slate-900">
                                             INSTITUTO DE TRAUMATOLOGÍA
                                         </h1>
                                         <p className="text-xs uppercase font-extrabold tracking-widest text-indigo-700">
@@ -3501,7 +3755,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                         </p>
                                     </div>
                                 </div>
-                                <div className="text-left sm:text-right">
+                                <div className="text-right">
                                     <p className="text-xs font-bold text-slate-500 uppercase">Período de Liquidación</p>
                                     <p className="text-lg font-black text-slate-900">
                                         {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][selectedMonth]} {selectedYear}
@@ -3516,31 +3770,31 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                             {(() => {
                                 const tec = tecnicos.find(t => t.id === selectedTecnicoId);
                                 return (
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                                    <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-300 text-xs">
                                         <div>
-                                            <span className="font-bold text-slate-400 uppercase text-[10px] block">Instrumentador / Técnico</span>
+                                            <span className="font-bold text-slate-500 uppercase text-[10px] block">Instrumentador / Técnico</span>
                                             <strong className="text-sm text-slate-900">{tec?.name || 'No especificado'}</strong>
-                                            <p className="text-slate-500 text-[11px]">{tec?.email || 'Sin email registrado'}</p>
+                                            <p className="text-slate-600 text-[11px]">{tec?.email || 'Sin email registrado'}</p>
                                         </div>
                                         <div>
-                                            <span className="font-bold text-slate-400 uppercase text-[10px] block">Modalidad Asignada</span>
+                                            <span className="font-bold text-slate-500 uppercase text-[10px] block">Modalidad Asignada</span>
                                             <strong className="text-slate-800">
                                                 {tec?.is_turno_tarde ? 'Turno Tarde (Fijo)' : tec?.does_guardias ? 'Régimen de Guardias' : 'Personal Técnico'}
                                             </strong>
-                                            <p className="text-slate-500 text-[11px]">Tarifa Hora: ${formatCurrency(hourRate)} | Guardia: ${formatCurrency(guardRate)}</p>
+                                            <p className="text-slate-600 text-[11px]">Tarifa Hora: ${formatCurrency(hourRate)} | Guardia: ${formatCurrency(guardRate)}</p>
                                         </div>
                                         <div>
-                                            <span className="font-bold text-slate-400 uppercase text-[10px] block">Estado de Conformidad</span>
+                                            <span className="font-bold text-slate-500 uppercase text-[10px] block">Estado de Conformidad</span>
                                             {consentStatusInfo.status === 'valid' ? (
-                                                <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px] mt-0.5">
+                                                <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 text-[11px] mt-0.5">
                                                     ✓ Firmado ({new Date(consentStatusInfo.signedAt!).toLocaleDateString('es-ES')})
                                                 </span>
                                             ) : consentStatusInfo.isOutdated ? (
-                                                <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-300 text-[11px] mt-0.5">
+                                                <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-400 text-[11px] mt-0.5">
                                                     ⚠️ Modificado (Requiere re-firma)
                                                 </span>
                                             ) : (
-                                                <span className="inline-flex items-center gap-1 font-bold text-slate-600 bg-slate-200 px-2 py-0.5 rounded text-[11px] mt-0.5">
+                                                <span className="inline-flex items-center gap-1 font-bold text-slate-700 bg-slate-200 px-2 py-0.5 rounded text-[11px] mt-0.5">
                                                     Pendiente de Conformidad
                                                 </span>
                                             )}
@@ -3552,11 +3806,11 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                             {/* Section 1: Detailed Surgeries */}
                             <div className="space-y-2">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                                         <span className="size-2 rounded-full bg-indigo-600"></span>
                                         1. Detalle de Cirugías Computadas ({surgeriesReport.length} intervenciones)
                                     </h3>
-                                    <span className="text-xs font-bold text-indigo-700">
+                                    <span className="text-xs font-bold text-indigo-900">
                                         Subtotal: ${formatCurrency(totalSurgeriesAmount)}
                                     </span>
                                 </div>
@@ -3566,8 +3820,8 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                         No se computan cirugías en el período seleccionado.
                                     </div>
                                 ) : (
-                                    <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
-                                        <thead className="bg-slate-100 text-slate-600 font-black uppercase text-[10px] tracking-wider border-b border-slate-200">
+                                    <table className="w-full text-left text-xs border border-slate-300 rounded-xl overflow-hidden">
+                                        <thead className="bg-slate-100 text-slate-700 font-black uppercase text-[10px] tracking-wider border-b border-slate-300">
                                             <tr>
                                                 <th className="p-2.5">Fecha</th>
                                                 <th className="p-2.5">Paciente</th>
@@ -3577,23 +3831,23 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                 <th className="p-2.5 text-right">Monto Liquidado</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-100">
+                                        <tbody className="divide-y divide-slate-200">
                                             {surgeriesReport.map((s, idx) => (
-                                                <tr key={s.id || idx} className="hover:bg-slate-50">
+                                                <tr key={s.id || idx} className="border-b border-slate-100">
                                                     <td className="p-2.5 font-bold text-slate-700 whitespace-nowrap">
                                                         {new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
                                                     </td>
                                                     <td className="p-2.5 font-bold text-slate-900 uppercase">
                                                         {s.patient}
                                                     </td>
-                                                    <td className="p-2.5 text-slate-700 max-w-xs truncate" title={s.procedure}>
+                                                    <td className="p-2.5 text-slate-800 max-w-xs truncate" title={s.procedure}>
                                                         <span className="font-semibold text-indigo-900">{s.practiceCode ? `[${s.practiceCode}] ` : ''}</span>
                                                         {s.procedureText || s.procedure}
                                                     </td>
-                                                    <td className="p-2.5 text-center text-slate-600 whitespace-nowrap">
+                                                    <td className="p-2.5 text-center text-slate-700 whitespace-nowrap">
                                                         {s.realMin}m ({s.roundedMin}m)
                                                     </td>
-                                                    <td className="p-2.5 text-slate-500 font-medium">
+                                                    <td className="p-2.5 text-slate-600 font-medium">
                                                         {s.notes}
                                                     </td>
                                                     <td className="p-2.5 text-right font-black text-slate-900 whitespace-nowrap">
@@ -3602,12 +3856,12 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                 </tr>
                                             ))}
                                         </tbody>
-                                        <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
+                                        <tfoot className="bg-slate-100 font-bold border-t border-slate-300">
                                             <tr>
-                                                <td colSpan={5} className="p-2.5 text-right text-slate-600 uppercase text-[10px]">
+                                                <td colSpan={5} className="p-2.5 text-right text-slate-700 uppercase text-[10px]">
                                                     Total Cirugías:
                                                 </td>
-                                                <td className="p-2.5 text-right font-black text-indigo-700 text-sm">
+                                                <td className="p-2.5 text-right font-black text-indigo-900 text-sm">
                                                     ${formatCurrency(totalSurgeriesAmount)}
                                                 </td>
                                             </tr>
@@ -3617,36 +3871,36 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                             </div>
 
                             {/* Section 2: Guards and Attendance */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-4">
                                 {/* Guardias */}
                                 <div className="space-y-2">
                                     <div className="flex justify-between items-center">
-                                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                                             <span className="size-2 rounded-full bg-emerald-600"></span>
                                             2. Resumen de Guardias
                                         </h3>
-                                        <span className="text-xs font-bold text-emerald-700">
+                                        <span className="text-xs font-bold text-emerald-800">
                                             ${formatCurrency(guardsReport.totalAmount)}
                                         </span>
                                     </div>
-                                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
+                                    <div className="p-3 bg-slate-50 border border-slate-300 rounded-xl space-y-1.5 text-xs">
                                         <div className="flex justify-between">
-                                            <span className="text-slate-500">Días hábiles proporcionales:</span>
+                                            <span className="text-slate-600">Días hábiles proporcionales:</span>
                                             <strong className="text-slate-800">
                                                 {guardsReport.weeksDetail.reduce((a, b) => a + b.equiv, 0).toFixed(2)} días
                                             </strong>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-slate-500">Fines de semana computados:</span>
+                                            <span className="text-slate-600">Fines de semana computados:</span>
                                             <strong className="text-slate-800">{guardsReport.weekendDaysCount} días</strong>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-slate-500">Feriados nacionales trabajados:</span>
+                                            <span className="text-slate-600">Feriados nacionales trabajados:</span>
                                             <strong className="text-slate-800">{guardsReport.holidaysCount} días</strong>
                                         </div>
-                                        <div className="pt-1.5 border-t border-slate-200 flex justify-between font-bold">
-                                            <span className="text-slate-700">Total días liquidados:</span>
-                                            <span className="text-emerald-800">{guardsReport.daysCount.toFixed(2)} días (${formatCurrency(guardRate)} c/u)</span>
+                                        <div className="pt-1.5 border-t border-slate-300 flex justify-between font-bold">
+                                            <span className="text-slate-800">Total días liquidados:</span>
+                                            <span className="text-emerald-900">{guardsReport.daysCount.toFixed(2)} días (${formatCurrency(guardRate)} c/u)</span>
                                         </div>
                                     </div>
                                 </div>
@@ -3654,78 +3908,79 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                 {/* Asistencia / Fichadas */}
                                 <div className="space-y-2">
                                     <div className="flex justify-between items-center">
-                                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                                             <span className="size-2 rounded-full bg-blue-600"></span>
                                             3. Asistencia / Horas Fichadas
                                         </h3>
-                                        <span className="text-xs font-bold text-blue-700">
+                                        <span className="text-xs font-bold text-blue-900">
                                             ${formatCurrency(attendanceHoursReport.amount)}
                                         </span>
                                     </div>
-                                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
+                                    <div className="p-3 bg-slate-50 border border-slate-300 rounded-xl space-y-1.5 text-xs">
                                         <div className="flex justify-between">
-                                            <span className="text-slate-500">Total de horas registradas:</span>
+                                            <span className="text-slate-600">Total de horas registradas:</span>
                                             <strong className="text-slate-800">{attendanceHoursReport.totalHours.toFixed(2)} hs</strong>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-slate-500">Tarifa horaria aplicada:</span>
+                                            <span className="text-slate-600">Tarifa horaria aplicada:</span>
                                             <strong className="text-slate-800">${formatCurrency(hourRate)} / hora</strong>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-slate-500">Marcaciones en el período:</span>
+                                            <span className="text-slate-600">Marcaciones en el período:</span>
                                             <strong className="text-slate-800">{attendanceLogs.length} registros</strong>
                                         </div>
-                                        <div className="pt-1.5 border-t border-slate-200 flex justify-between font-bold">
-                                            <span className="text-slate-700">Monto total asistencia:</span>
-                                            <span className="text-blue-800">${formatCurrency(attendanceHoursReport.amount)}</span>
+                                        <div className="pt-1.5 border-t border-slate-300 flex justify-between font-bold">
+                                            <span className="text-slate-800">Monto total asistencia:</span>
+                                            <span className="text-blue-900">${formatCurrency(attendanceHoursReport.amount)}</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
                             {/* Consolidated Total Box */}
-                            <div className="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:bg-none print:text-black print:border-2 print:border-slate-800">
+                            <div className="p-5 bg-white border-2 border-slate-800 rounded-2xl flex justify-between items-center text-slate-900">
                                 <div>
-                                    <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest print:text-slate-600">
+                                    <p className="text-xs font-bold text-slate-700 uppercase tracking-widest">
                                         Liquidación Total Consolidada del Mes
                                     </p>
-                                    <p className="text-xs text-slate-300 mt-0.5 print:text-slate-500">
+                                    <p className="text-xs text-slate-500 mt-0.5">
                                         Incluye cirugías realizadas, guardias cubiertas y horas de asistencia del período.
                                     </p>
                                 </div>
-                                <div className="text-left sm:text-right">
-                                    <span className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-white print:text-slate-900">
+                                <div className="text-right">
+                                    <span className="text-3xl font-black font-mono tracking-tight text-slate-900">
                                         ${formatCurrency(grandTotalAmount)}
                                     </span>
                                 </div>
                             </div>
 
                             {/* Signature / Digital Certificate Footer */}
-                            <div className="pt-6 border-t border-slate-300 grid grid-cols-1 sm:grid-cols-2 gap-8 text-xs">
+                            <div className="pt-6 border-t border-slate-300 grid grid-cols-2 gap-8 text-xs">
                                 <div className="space-y-2">
-                                    <p className="font-bold text-slate-700 uppercase text-[10px] tracking-wider">
+                                    <p className="font-bold text-slate-800 uppercase text-[10px] tracking-wider">
                                         Certificación Digital de Conformidad
                                     </p>
-                                    <p className="text-slate-500 text-[11px] leading-relaxed">
+                                    <p className="text-slate-600 text-[11px] leading-relaxed">
                                         {consentStatusInfo.status === 'valid'
                                             ? `Conformidad otorgada en el sistema el ${new Date(consentStatusInfo.signedAt!).toLocaleDateString('es-ES')} a las ${new Date(consentStatusInfo.signedAt!).toLocaleTimeString('es-ES')} hs por el monto total de $${formatCurrency(consentStatusInfo.signedAmount)}.`
-                                            : consentStatusInfo.isOutdated
+                                                : consentStatusInfo.isOutdated
                                             ? `Liquidación modificada con posterioridad a la última firma ($${formatCurrency(consentStatusInfo.signedAmount)} el ${new Date(consentStatusInfo.signedAt!).toLocaleDateString('es-ES')}). Requiere nueva firma.`
                                             : 'Pendiente de emisión y registro de conformidad digital por parte del profesional.'}
                                     </p>
-                                    <p className="text-[10px] font-mono text-slate-400">
+                                    <p className="text-[10px] font-mono text-slate-500">
                                         ID Registro: {currentConsent?.id || 'PENDIENTE'}
                                     </p>
                                 </div>
                                 <div className="flex flex-col items-center justify-end">
-                                    <div className="w-48 border-b border-slate-400 mb-1"></div>
-                                    <p className="font-bold text-slate-800 text-[11px]">Firma / Conformidad Técnico</p>
+                                    <div className="w-48 border-b border-slate-600 mb-1"></div>
+                                    <p className="font-bold text-slate-900 text-[11px]">Firma / Conformidad Técnico</p>
                                     <p className="text-[10px] text-slate-500">ITEO Quirófano</p>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
+                        </div>,
+                        document.body
+                    )}
+                </>
             )}
         </div>
     );

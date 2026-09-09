@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v3.10.128 (2026-09-09)
+- **Solución Definitiva de Impresión en Informe de Liquidación de Técnicos (`TecnicoPanel.tsx`, `index.css`)**:
+    * **Proyección Directa vía React Portal (`createPortal`)**:
+        - Se solucionó el problema por el cual el reporte se generaba en blanco en las vistas de impresión / guardado PDF de Chromium y Electron.
+        - Se eliminó el uso de `visibility: hidden !important` en cascada (que colapsaba las alturas dentro de contenedores `#root` anidados).
+        - El informe ahora se proyecta directamente a `document.body` mediante `createPortal(<div id="tecnico-print-portal">...</div>, document.body)`.
+        - En `@media print`, `#root` se oculta al 100% (`display: none !important`), dejando exclusivamente el documento formal con márgenes A4, membrete institucional, tablas detalladas, subtotales y bloque de firmas digitales intactos.
+    * **Diálogo de Impresión y Exportación PDF Nativo**:
+        - Invocación directa a `window.print()`, evitando conflictos con parámetros de impresoras térmicas de pulseras (`pageRanges`).
+
 ## v3.10.127 (2026-09-09)
 - **Impresión Limpia y Aislada del Informe de Liquidación (`TecnicoPanel.tsx`, `index.css`)**:
     * **Aislamiento Total del Documento Formal A4 / PDF**:
