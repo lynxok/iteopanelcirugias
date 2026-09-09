@@ -18,6 +18,13 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-09]`: **Historial de Tarifas por Vigencia y Actualización Diferencial en Técnicos (v3.10.125)**:
+    *   `quirofano.tecnico_rates`: Se agregó la columna `effective_from TEXT DEFAULT '2025-01'` y el índice único `tecnico_rates_type_code_period_idx` sobre `(rate_type, COALESCE(practice_code, ''), effective_from)` para permitir múltiples escalones históricos de una tarifa según período de vigencia.
+    *   `TecnicoPanel.tsx`: Implementación de `getRateForPeriod` para liquidar horas y guardias aplicando dinámicamente la tarifa vigente (`effective_from <= periodStr`, tomando la más reciente).
+    *   `TecnicoPanel.tsx`: Incorporación de selector de mes y año de inicio de vigencia en la tarjeta "Valores Globales", junto a la tabla de historial cronológico ("Desde MM/AAAA hasta MM/AAAA | En adelante (Vigente)") con auditoría y borrado de escalones.
+    *   `TecnicoPanel.tsx`: Guardado diferencial de tarifas globales que actualiza `updated_at` y emite `audit_logs` únicamente sobre los campos que cambiaron realmente, manteniendo intactos autor y fecha de los campos sin cambios. Corrección de inputs numéricos para tipear libremente ceros y borrar sin sobreescritura.
+*   `[2026-09-08]`: **Autor Visible en Última Edición de Valores Globales (v3.10.124)**:
+    *   `TecnicoPanel.tsx`: En "Valores Globales", el campo "Última edición" muestra el nombre del responsable con badge destacado (`por [Nombre]`). Fallback a "Administración" y migración de nulos en Supabase.
 *   `[2026-09-08]`: **Re-conformidad Dinámica e Impresión Formal con Membrete ITEO en Liquidación de Técnicos (v3.10.123)**:
     *   `TecnicoPanel.tsx`: Implementación del detector `consentStatusInfo` que invalida reactivamente el consentimiento previo si el cálculo actual difiere de lo firmado por cambios en cirugías, guardias o tarifas. Se muestra alerta ámbar y se habilita la re-firma con registro en auditoría.
     *   `TecnicoPanel.tsx`: Incorporación de botón "Imprimir Resumen" / "Resumen Detallado" con modal optimizado para impresión A4 y exportación a PDF, portando logotipo de ITEO, tablas pormenorizadas de cirugías, guardias, horas y bloque de firma.

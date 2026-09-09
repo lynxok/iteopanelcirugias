@@ -166,6 +166,15 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 *   **Asistencia**: Las horas de asistencia reales registradas/fichadas mediante el sistema de fichado de jornada se calculan de manera neta (restando los descansos tomados).
 *   **Liquidación de Asistencia**: Las horas reales acumuladas en el mes se multiplican por el **Valor Hora** (Tarifa Hora) y se suman directamente a la liquidación final del técnico.
 
+### Vigencias Históricas y Actualización Diferencial de Tarifas (09/09/2026 - v3.10.125)
+*   **Vigencia Temporal de Tarifas Globales (`effective_from`)**:
+    *   Las tarifas de **Valor Hora** y **Valor Día de Guardia** soportan definición por período mensual (`YYYY-MM`).
+    *   El cálculo mensual (`getRateForPeriod`) busca automáticamente la tarifa cuya vigencia sea la más reciente menor o igual al período liquidado (`effective_from <= periodStr`). Esto permite aumentar tarifas a futuro sin alterar los cálculos ni las liquidaciones cerradas de meses pasados.
+*   **Actualización Diferencial en Base de Datos**:
+    *   Al guardar tarifas globales o configuración general (IP WiFi, Correo institucional), el sistema compara cada valor contra su último registro en Supabase y actualiza **exclusivamente aquellos campos que hayan sido modificados**.
+    *   Los campos que no cambiaron preservan su fecha previa de edición (`updated_at`) y el nombre del usuario responsable original.
+    *   La fecha visible de última edición de hora y guardia en la interfaz refleja la vigencia del período que se esté visualizando o configurando.
+
 ### Asignación de Cirugías y Coparticipación
 ### Horarios y Asignación de Cirugías a Técnicos (10/08/2026)
 *   **Guardia Nocturna, Fines de Semana y Feriados:** 

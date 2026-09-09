@@ -4,6 +4,17 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.125 [2026-09-09]**: Lanzada la versión **v3.10.125**.
+    *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
+        *   **Historial de Tarifas con Selector de Vigencia Mensual**:
+            - Soporte para vigencias cronológicas (`effective_from: 'YYYY-MM'`) en tarifas de hora de cirugía y día de guardia en Supabase (`quirofano.tecnico_rates`).
+            - Selector de mes y año ("Aplica Desde Mes...") para definir a partir de qué período rige un nuevo valor.
+            - Tabla visual de historial cronológico ("Desde MM/AAAA hasta MM/AAAA | En adelante (Vigente)"), autor y fecha de modificación con capacidad de depuración de registros.
+            - Las liquidaciones mensuales aplican retroactiva y automáticamente la tarifa vigente que regía en el período consultado mediante `getRateForPeriod`.
+        *   **Optimización de Inputs Numéricos**:
+            - Corrección del bloqueo/sobreescritura al tipear ceros o borrar con backspace en los campos de tarifas.
+        *   **Actualización Diferencial de Fechas de Edición**:
+            - Al guardar valores globales, se auditan y actualizan únicamente los campos que sufrieron cambios reales, preservando intactos el autor y fecha previa de los campos que no fueron modificados.
 *   **v3.10.124 [2026-09-08]**: Lanzada la versión **v3.10.124**.
     *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
         *   **Autor visible en Última Edición de Valores Globales**: En "Valores Globales" (Valor hora cirugía, Valor día guardia, IP WiFi y Correo notificación), el campo "Última edición" muestra siempre el nombre del responsable en un badge destacado (`por [Nombre]`). Fallback automático a "Administración" si el dato no está en base de datos. Se corrigió retroactivamente `updated_by_name = NULL` en Supabase para los 4 registros históricos globales.
