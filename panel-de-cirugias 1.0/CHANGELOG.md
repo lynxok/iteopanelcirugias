@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v3.10.126 (2026-09-09)
+- **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
+    * **Cómputo Automático por Extensión a Turno Tarde**:
+        - Las cirugías iniciadas en el turno mañana que continúan y cuyo horario de finalización (`actual_end_time`) supera por más de 15 minutos la hora de corte (`> 15:15 hs` de lunes a jueves, o `> 14:15 hs` los viernes) se computan de forma automática al grupo de técnicos de turno tarde (50% Técnico Fijo y 50% Técnico de Guardia con fichaje de ingreso registrado).
+        - Exclusión estricta de cirugías nocturnas: la regla solo aplica si la cirugía no inició después de las 19:00 hs (evitando superposiciones con guardia nocturna pura).
+        - En la tabla de liquidación y en el resumen de conformidad, la nota identifica explícitamente estas cirugías como `"50% Turno Tarde (Extensión)"`.
+    * **Tolerancia de Extensión Configurable en Valores Globales**:
+        - Nuevo campo interactivo en *Tarifas y Ajustes* → *Valores Globales*: **"Tolerancia Extensión Turno Tarde"** (en minutos).
+        - Valor por defecto de 15 minutos, persistido dinámicamente en Supabase (`rate_type: 'overtime_tolerance'`).
+        - Incluye auditoría completa en `audit_logs` y badge de última modificación con autor y fecha.
+
 ## v3.10.125 (2026-09-09)
 - **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
     * **Historial de Tarifas con Selector de Vigencia Mensual**:

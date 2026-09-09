@@ -18,6 +18,9 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-09]`: **Cómputo por Extensión a Turno Tarde y Tolerancia Configurable en Técnicos (v3.10.126)**:
+    *   `TecnicoPanel.tsx`: Regla de liquidación para cirugías iniciadas en turno mañana que se extienden más de 15 minutos (configurable) después del corte (`> 15:15 hs` de lunes a jueves / `> 14:15 hs` los viernes) y no iniciaron después de las 19:00 hs. Se computan automáticamente al grupo de técnicos de turno tarde (50% Fijo y 50% Guardia con fichaje presente).
+    *   `TecnicoPanel.tsx`: Nuevo campo interactivo en "Tarifas y Ajustes" → "Valores Globales" para definir la "Tolerancia Extensión Turno Tarde" en minutos (`rate_type: 'overtime_tolerance'`), con persistencia en Supabase, auditoría completa y badge de última edición.
 *   `[2026-09-09]`: **Historial de Tarifas por Vigencia y Actualización Diferencial en Técnicos (v3.10.125)**:
     *   `quirofano.tecnico_rates`: Se agregó la columna `effective_from TEXT DEFAULT '2025-01'` y el índice único `tecnico_rates_type_code_period_idx` sobre `(rate_type, COALESCE(practice_code, ''), effective_from)` para permitir múltiples escalones históricos de una tarifa según período de vigencia.
     *   `TecnicoPanel.tsx`: Implementación de `getRateForPeriod` para liquidar horas y guardias aplicando dinámicamente la tarifa vigente (`effective_from <= periodStr`, tomando la más reciente).

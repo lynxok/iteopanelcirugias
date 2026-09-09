@@ -179,8 +179,10 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 ### Horarios y Asignación de Cirugías a Técnicos (10/08/2026)
 *   **Guardia Nocturna, Fines de Semana y Feriados:** 
     *   Cualquier cirugía iniciada **antes de las 06:00 hs AM** en días hábiles, **después de las 19:00 hs** en días hábiles, o en **sábados, domingos y feriados** se asigna al 100% al **Técnico de Guardia** de esa fecha.
-*   **Turno Mañana (06:00 a 14:00/15:00 hs en Días Hábiles):** 
-    *   Corresponde al personal del turno mañana. **No se asigna automáticamente al Técnico de Guardia ni al Fijo**, a menos que en la Ficha Técnica de Cirugía (`surgery_forms.instrumentadora`) se encuentre especificado su nombre expresamente.
+*   **Turno Mañana y Extensión a Turno Tarde:** 
+    *   **Horario Base Mañana**: 06:00 a 15:00 hs (lunes a jueves) y 06:00 a 14:00 hs (viernes). Corresponde al personal del turno mañana. No se asigna automáticamente al Técnico de Guardia ni al Fijo, salvo que en la Ficha Técnica (`surgery_forms.instrumentadora`) figure expresamente su nombre.
+    *   **Extensión de Cirugía a Turno Tarde (Tolerancia Configurable)**: Si una cirugía que inició en el turno mañana continúa y su horario de fin (`actual_end_time`) supera por más del margen de tolerancia configurado (por defecto **15 minutos**) la hora de corte (`> 15:15 hs` de lunes a jueves, o `> 14:15 hs` los viernes), y no comenzó después de las 19:00 hs, **se computa automáticamente al grupo de técnicos de turno tarde** (50% Técnico Fijo y 50% Técnico de Guardia con fichaje presente).
+    *   **Configuración de Tolerancia**: Se administra dinámicamente desde *Tarifas y Ajustes* → *Valores Globales* (`rate_type: 'overtime_tolerance'`), permitiendo ajustar los minutos de tolerancia y registrando su auditoría de cambios.
 ### Cómputo de Honorarios al 50% (Turno Tarde y Coparticipación)
 *   **Fórmula Directa de Liquidación**: Para toda cirugía realizada en Turno Tarde o marcada como Coparticipada, el cálculo de honorarios se realiza directamente dividiendo el **Monto QX Total** al 50%:
     $$\text{Monto QX Total} = \text{Tarifa Nomenclador} + \text{Tarifa Tiempo QX}$$

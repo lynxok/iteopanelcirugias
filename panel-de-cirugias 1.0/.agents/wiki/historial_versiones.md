@@ -4,6 +4,10 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.126 [2026-09-09]**: Lanzada la versión **v3.10.126**.
+    *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
+        *   **Cómputo Automático por Extensión a Turno Tarde**: Las cirugías iniciadas en el turno mañana que continúan y cuyo horario de finalización (`actual_end_time`) supera por más de 15 minutos la hora de corte (`> 15:15 hs` de lunes a jueves, o `> 14:15 hs` los viernes) se computan automáticamente al grupo de técnicos de turno tarde (50% Fijo y 50% Guardia con fichaje presente). Exclusión estricta de cirugías iniciadas después de las 19:00 hs.
+        *   **Tolerancia de Extensión Configurable en Valores Globales**: Nuevo campo interactivo en *Tarifas y Ajustes* → *Valores Globales* para configurar los minutos de tolerancia de extensión a turno tarde (por defecto 15 minutos), con persistencia en Supabase (`tecnico_rates`), badge de última modificación y auditoría completa en `audit_logs`.
 *   **v3.10.125 [2026-09-09]**: Lanzada la versión **v3.10.125**.
     *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
         *   **Historial de Tarifas con Selector de Vigencia Mensual**:

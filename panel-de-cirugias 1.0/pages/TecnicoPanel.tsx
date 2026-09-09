@@ -42,7 +42,7 @@ const formatCurrency = (val: number) => {
 
 interface Rate {
     id?: string;
-    rate_type: 'practice' | 'hour' | 'guard' | 'clinic_ip' | 'notification_email';
+    rate_type: 'practice' | 'hour' | 'guard' | 'clinic_ip' | 'notification_email' | 'overtime_tolerance';
     practice_code?: string;
     value: number;
     effective_from?: string;
@@ -151,6 +151,8 @@ export default function TecnicoPanel() {
     // Rate Form State
     const [hourRate, setHourRate] = useState<number | string>(0);
     const [guardRate, setGuardRate] = useState<number | string>(0);
+    const [overtimeTolerance, setOvertimeTolerance] = useState<number | string>(15);
+    const [inputOvertimeTolerance, setInputOvertimeTolerance] = useState<number | string>(15);
     const [rateMonthFrom, setRateMonthFrom] = useState<number>(new Date().getMonth());
     const [rateYearFrom, setRateYearFrom] = useState<number>(new Date().getFullYear());
     const [notificationEmail, setNotificationEmail] = useState<string>('');
@@ -362,8 +364,11 @@ export default function TecnicoPanel() {
                 const gr = activeGuardRateObj?.value || 0;
                 const cip = rateData.find((r: any) => r.rate_type === 'clinic_ip')?.practice_code || '';
                 const ne = rateData.find((r: any) => r.rate_type === 'notification_email')?.practice_code || '';
+                const ot = rateData.find((r: any) => r.rate_type === 'overtime_tolerance')?.value ?? 15;
                 setHourRate(hr);
                 setGuardRate(gr);
+                setOvertimeTolerance(ot);
+                setInputOvertimeTolerance(ot);
                 setClinicIp(cip);
                 setInputClinicIp(cip);
                 setNotificationEmail(ne);
@@ -603,14 +608,34 @@ export default function TecnicoPanel() {
                 // Madrugada antes de las 06:00 AM
                 isBefore6 = startHourFraction < 6;
 
+                // Tolerancia en minutos para considerar extensión de cirugía a turno tarde (por defecto 15 min)
+                const tolMinutes = Number(overtimeTolerance) >= 0 ? Number(overtimeTolerance) : 15;
+                const tolHours = tolMinutes / 60;
+
+                // Horario de fin si está registrado
+                let endHourFraction: number | null = null;
+                if (s.actual_end_time) {
+                    const [endH, endM] = s.actual_end_time.split(':').map(Number);
+                    endHourFraction = endH + (endM || 0) / 60;
+                    // Si cruza medianoche
+                    if (endHourFraction < startHourFraction) {
+                        endHourFraction += 24;
+                    }
+                }
+
                 // Turno tarde: lunes a jueves de 15:00 a 19:00, viernes de 14:00 a 19:00
+                // O si comenzó antes (turno mañana) pero continúa superando el corte + tolerancia y no arrancó después de las 19
                 if (dayOfWeek >= 1 && dayOfWeek <= 4) {
-                    isWithinTardeShift = startHourFraction >= 15 && startHourFraction < 19;
+                    const startedInTarde = startHourFraction >= 15 && startHourFraction < 19;
+                    const extendedIntoTarde = startHourFraction < 15 && endHourFraction !== null && endHourFraction > (15 + tolHours);
+                    isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
                 } else if (dayOfWeek === 5) {
-                    isWithinTardeShift = startHourFraction >= 14 && startHourFraction < 19;
+                    const startedInTarde = startHourFraction >= 14 && startHourFraction < 19;
+                    const extendedIntoTarde = startHourFraction < 14 && endHourFraction !== null && endHourFraction > (14 + tolHours);
+                    isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
                 }
                 
-                // Luego de las 19:00 hrs
+                // Luego de las 19:00 hrs (solo si arrancó después de las 19)
                 isAfter19 = startHourFraction >= 19;
             }
 
@@ -687,14 +712,34 @@ export default function TecnicoPanel() {
             const isFijo = tec.is_turno_tarde === true;
             
             let isWithinTardeShift = false;
+            let isExtendedIntoTarde = false;
             let isAfter19 = false;
             if (s.actual_start_time) {
                 const [h, m] = s.actual_start_time.split(':').map(Number);
                 const startHourFraction = h + (m || 0) / 60;
+
+                const tolMinutes = Number(overtimeTolerance) >= 0 ? Number(overtimeTolerance) : 15;
+                const tolHours = tolMinutes / 60;
+
+                let endHourFraction: number | null = null;
+                if (s.actual_end_time) {
+                    const [endH, endM] = s.actual_end_time.split(':').map(Number);
+                    endHourFraction = endH + (endM || 0) / 60;
+                    if (endHourFraction < startHourFraction) {
+                        endHourFraction += 24;
+                    }
+                }
+
                 if (dayOfWeek >= 1 && dayOfWeek <= 4) {
-                    isWithinTardeShift = startHourFraction >= 15 && startHourFraction < 19;
+                    const startedInTarde = startHourFraction >= 15 && startHourFraction < 19;
+                    const extendedIntoTarde = startHourFraction < 15 && endHourFraction !== null && endHourFraction > (15 + tolHours);
+                    isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
+                    isExtendedIntoTarde = extendedIntoTarde && startHourFraction < 19;
                 } else if (dayOfWeek === 5) {
-                    isWithinTardeShift = startHourFraction >= 14 && startHourFraction < 19;
+                    const startedInTarde = startHourFraction >= 14 && startHourFraction < 19;
+                    const extendedIntoTarde = startHourFraction < 14 && endHourFraction !== null && endHourFraction > (14 + tolHours);
+                    isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
+                    isExtendedIntoTarde = extendedIntoTarde && startHourFraction < 19;
                 }
                 isAfter19 = startHourFraction >= 19;
             }
@@ -728,7 +773,7 @@ export default function TecnicoPanel() {
                 }
             } else if (isWithinTardeShift) {
                 myShare = totalQx / 2;
-                shareNotes = "50% Turno Tarde";
+                shareNotes = isExtendedIntoTarde ? "50% Turno Tarde (Extensión)" : "50% Turno Tarde";
             } else {
                 if (isCoAssigned) {
                     myShare = totalQx / 2;
@@ -1393,25 +1438,28 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
 
             const numHourRate = Number(hourRate) || 0;
             const numGuardRate = Number(guardRate) || 0;
+            const numOvertimeTolerance = Number(inputOvertimeTolerance) >= 0 ? Number(inputOvertimeTolerance) : 15;
 
             // Encontrar estado actual persistido de cada uno
             const existingHourRate = rates.find(r => r.rate_type === 'hour' && (r.effective_from || '2025-01') === targetPeriodStr);
             const existingGuardRate = rates.find(r => r.rate_type === 'guard' && (r.effective_from || '2025-01') === targetPeriodStr);
             const existingClinicIp = rates.find(r => r.rate_type === 'clinic_ip');
             const existingNotifEmail = rates.find(r => r.rate_type === 'notification_email');
+            const existingOvertimeTol = rates.find(r => r.rate_type === 'overtime_tolerance');
 
             // Determinar cuáles realmente cambiaron o requieren creación
             const hasHourChanged = !existingHourRate || existingHourRate.value !== numHourRate;
             const hasGuardChanged = !existingGuardRate || existingGuardRate.value !== numGuardRate;
             const hasIpChanged = !existingClinicIp || (existingClinicIp.practice_code || '') !== (inputClinicIp || '');
             const hasEmailChanged = !existingNotifEmail || (existingNotifEmail.practice_code || '') !== (inputNotificationEmail || '');
+            const hasOvertimeTolChanged = !existingOvertimeTol || existingOvertimeTol.value !== numOvertimeTolerance;
 
-            if (!hasHourChanged && !hasGuardChanged && !hasIpChanged && !hasEmailChanged) {
+            if (!hasHourChanged && !hasGuardChanged && !hasIpChanged && !hasEmailChanged && !hasOvertimeTolChanged) {
                 alert('No se detectaron modificaciones en los valores ingresados.');
                 return;
             }
 
-            const upsertRate = async (type: 'hour' | 'guard' | 'clinic_ip' | 'notification_email', val: number, code?: string, effectivePeriod?: string, existingId?: string) => {
+            const upsertRate = async (type: 'hour' | 'guard' | 'clinic_ip' | 'notification_email' | 'overtime_tolerance', val: number, code?: string, effectivePeriod?: string, existingId?: string) => {
                 const payload: any = { 
                     rate_type: type, 
                     value: val,
@@ -1444,6 +1492,10 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                 await upsertRate('notification_email', 0, inputNotificationEmail, undefined, existingNotifEmail?.id);
                 changedFields.push('Correo Notificación');
             }
+            if (hasOvertimeTolChanged) {
+                await upsertRate('overtime_tolerance', numOvertimeTolerance, undefined, undefined, existingOvertimeTol?.id);
+                changedFields.push(`Tolerancia Tarde: ${numOvertimeTolerance} min`);
+            }
 
             await logAudit(
                 'UPDATE',
@@ -1456,7 +1508,8 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                     hour_rate: hasHourChanged ? numHourRate : undefined,
                     guard_rate: hasGuardChanged ? numGuardRate : undefined,
                     clinic_ip: hasIpChanged ? inputClinicIp : undefined,
-                    notification_email: hasEmailChanged ? inputNotificationEmail : undefined
+                    notification_email: hasEmailChanged ? inputNotificationEmail : undefined,
+                    overtime_tolerance_minutes: hasOvertimeTolChanged ? numOvertimeTolerance : undefined
                 }
             );
 
@@ -2485,6 +2538,53 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                             <p className="text-[10px] text-slate-400 mt-0.5 italic">
                                                 Al dar conformidad, se enviará el resumen a este correo y con copia al técnico.
                                             </p>
+                                        </div>
+
+                                        <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="block text-xs font-bold text-amber-900 uppercase flex items-center gap-1.5">
+                                                    <span className="material-symbols-outlined text-sm text-amber-600">more_time</span>
+                                                    Tolerancia Extensión Turno Tarde
+                                                </label>
+                                                {(() => {
+                                                    const otObj = rates.find(r => r.rate_type === "overtime_tolerance");
+                                                    return otObj?.updated_at ? (
+                                                        <span className="text-[10px] text-amber-700 font-semibold bg-amber-100/70 px-1.5 py-0.5 rounded border border-amber-200">
+                                                            {formatLastUpdated(otObj.updated_at, otObj.updated_by_name)?.relativeStr}
+                                                        </span>
+                                                    ) : null;
+                                                })()}
+                                            </div>
+                                            <p className="text-[11px] text-amber-800/90 leading-tight mb-2">
+                                                Si una cirugía del turno mañana se prolonga después del corte (15:00 hs L-J / 14:00 hs Vie) por más de este margen en minutos, se computará al grupo de técnicos de turno tarde (50% Fijo y 50% Guardia).
+                                            </p>
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="1"
+                                                    className="w-full bg-white text-slate-900 font-bold rounded-lg border border-amber-300 px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500 pr-16"
+                                                    value={inputOvertimeTolerance}
+                                                    onChange={e => setInputOvertimeTolerance(e.target.value)}
+                                                    placeholder="15"
+                                                />
+                                                <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-medium">minutos</span>
+                                            </div>
+                                            {(() => {
+                                                const otObj = rates.find(r => r.rate_type === "overtime_tolerance");
+                                                return (
+                                                    <p className="text-[10px] text-amber-800/70 mt-1 flex items-center gap-1 flex-wrap">
+                                                        <span className="material-symbols-outlined text-xs text-amber-500">history</span>
+                                                        {otObj?.updated_at ? (
+                                                            <span>
+                                                                Última edición: <strong className="text-slate-700">{formatLastUpdated(otObj.updated_at, otObj.updated_by_name)?.dateStr} {formatLastUpdated(otObj.updated_at, otObj.updated_by_name)?.timeStr || ""} hs</strong> por <strong className="text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200 font-semibold">{formatLastUpdated(otObj.updated_at, otObj.updated_by_name)?.author}</strong>
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-slate-400 italic">Por defecto: 15 minutos</span>
+                                                        )}
+                                                    </p>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 );
