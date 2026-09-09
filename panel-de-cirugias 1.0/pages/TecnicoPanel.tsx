@@ -45,6 +45,7 @@ interface Rate {
     rate_type: 'practice' | 'hour' | 'guard' | 'clinic_ip' | 'notification_email';
     practice_code?: string;
     value: number;
+    effective_from?: string;
     updated_at?: string;
     updated_by?: string;
     updated_by_name?: string;
@@ -144,19 +145,43 @@ export default function TecnicoPanel() {
         code: '',
         currentValue: 0
     });
-    const [rateModalInputValue, setRateModalInputValue] = useState<number>(0);
+    const [rateModalInputValue, setRateModalInputValue] = useState<number | string>(0);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
 
     // Rate Form State
-    const [hourRate, setHourRate] = useState<number>(0);
-    const [guardRate, setGuardRate] = useState<number>(0);
+    const [hourRate, setHourRate] = useState<number | string>(0);
+    const [guardRate, setGuardRate] = useState<number | string>(0);
+    const [rateMonthFrom, setRateMonthFrom] = useState<number>(new Date().getMonth());
+    const [rateYearFrom, setRateYearFrom] = useState<number>(new Date().getFullYear());
     const [notificationEmail, setNotificationEmail] = useState<string>('');
     const [inputClinicIp, setInputClinicIp] = useState<string>('');
     const [inputNotificationEmail, setInputNotificationEmail] = useState<string>('');
     const [practiceCodeInput, setPracticeCodeInput] = useState<string>('');
-    const [practiceValueInput, setPracticeValueInput] = useState<number>(0);
+    const [practiceValueInput, setPracticeValueInput] = useState<number | string>(0);
     const [practiceSearchFilter, setPracticeSearchFilter] = useState<string>('');
     const [practiceSortOption, setPracticeSortOption] = useState<'cases_desc' | 'cases_asc' | 'code_asc' | 'code_desc' | 'price_desc' | 'price_asc'>('cases_desc');
+
+    // Helper: Obtener la tarifa histórica vigente para un período específico ('YYYY-MM')
+    const getRateForPeriod = useCallback((allRates: Rate[], type: 'hour' | 'guard', periodStr: string) => {
+        const matchingRates = allRates
+            .filter(r => r.rate_type === type)
+            .map(r => ({
+                ...r,
+                effectiveFrom: r.effective_from || '2025-01'
+            }))
+            .filter(r => r.effectiveFrom <= periodStr)
+            .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+
+        if (matchingRates.length > 0) {
+            return matchingRates[0];
+        }
+
+        // Si no hay ninguna anterior o igual, tomar la más antigua disponible
+        const anyRate = allRates
+            .filter(r => r.rate_type === type)
+            .sort((a, b) => (a.effective_from || '2025-01').localeCompare(b.effective_from || '2025-01'));
+        return anyRate[0] || null;
+    }, []);
 
     // Helper: Formato de última edición de tarifas
     const formatLastUpdated = (updated_at?: string, updated_by_name?: string) => {
@@ -331,8 +356,10 @@ export default function TecnicoPanel() {
             if (ratesRes?.data) {
                 const rateData = ratesRes.data;
                 setRates(rateData);
-                const hr = rateData.find((r: any) => r.rate_type === 'hour')?.value || 0;
-                const gr = rateData.find((r: any) => r.rate_type === 'guard')?.value || 0;
+                const activeHourRateObj = getRateForPeriod(rateData, 'hour', periodStr);
+                const activeGuardRateObj = getRateForPeriod(rateData, 'guard', periodStr);
+                const hr = activeHourRateObj?.value || 0;
+                const gr = activeGuardRateObj?.value || 0;
                 const cip = rateData.find((r: any) => r.rate_type === 'clinic_ip')?.practice_code || '';
                 const ne = rateData.find((r: any) => r.rate_type === 'notification_email')?.practice_code || '';
                 setHourRate(hr);
@@ -409,7 +436,7 @@ export default function TecnicoPanel() {
         } catch (err) {
             console.error('Error fetching TecnicoPanel data:', err);
         }
-    }, [selectedYear, selectedMonth, selectedTecnicoId, isLevelAdmin]);
+    }, [selectedYear, selectedMonth, selectedTecnicoId, isLevelAdmin, getRateForPeriod]);
 
     // Obtener IP una sola vez al montar
     useEffect(() => {
@@ -1361,13 +1388,30 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
     const handleSaveGlobalRates = async () => {
         setIsSavingRate(true);
         try {
-            const oldHourRate = rates.find(r => r.rate_type === 'hour')?.value ?? 0;
-            const oldGuardRate = rates.find(r => r.rate_type === 'guard')?.value ?? 0;
-            const oldClinicIp = clinicIp;
-            const oldNotificationEmail = notificationEmail;
             const authorName = user?.name || user?.email || 'Administración';
+            const targetPeriodStr = `${rateYearFrom}-${String(rateMonthFrom + 1).padStart(2, '0')}`;
 
-            const upsertRate = async (type: 'hour' | 'guard' | 'clinic_ip' | 'notification_email', val: number, code?: string) => {
+            const numHourRate = Number(hourRate) || 0;
+            const numGuardRate = Number(guardRate) || 0;
+
+            // Encontrar estado actual persistido de cada uno
+            const existingHourRate = rates.find(r => r.rate_type === 'hour' && (r.effective_from || '2025-01') === targetPeriodStr);
+            const existingGuardRate = rates.find(r => r.rate_type === 'guard' && (r.effective_from || '2025-01') === targetPeriodStr);
+            const existingClinicIp = rates.find(r => r.rate_type === 'clinic_ip');
+            const existingNotifEmail = rates.find(r => r.rate_type === 'notification_email');
+
+            // Determinar cuáles realmente cambiaron o requieren creación
+            const hasHourChanged = !existingHourRate || existingHourRate.value !== numHourRate;
+            const hasGuardChanged = !existingGuardRate || existingGuardRate.value !== numGuardRate;
+            const hasIpChanged = !existingClinicIp || (existingClinicIp.practice_code || '') !== (inputClinicIp || '');
+            const hasEmailChanged = !existingNotifEmail || (existingNotifEmail.practice_code || '') !== (inputNotificationEmail || '');
+
+            if (!hasHourChanged && !hasGuardChanged && !hasIpChanged && !hasEmailChanged) {
+                alert('No se detectaron modificaciones en los valores ingresados.');
+                return;
+            }
+
+            const upsertRate = async (type: 'hour' | 'guard' | 'clinic_ip' | 'notification_email', val: number, code?: string, effectivePeriod?: string, existingId?: string) => {
                 const payload: any = { 
                     rate_type: type, 
                     value: val,
@@ -1376,34 +1420,47 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                     updated_by_name: authorName
                 };
                 if (code !== undefined) payload.practice_code = code;
-                
-                // buscar si existe
-                const match = rates.find(r => r.rate_type === type);
-                if (match?.id) payload.id = match.id;
+                if (effectivePeriod) payload.effective_from = effectivePeriod;
+                if (existingId) payload.id = existingId;
 
                 const { error } = await supabase.from('tecnico_rates').upsert(payload);
                 if (error) throw error;
             };
 
-            await upsertRate('hour', hourRate);
-            await upsertRate('guard', guardRate);
-            await upsertRate('clinic_ip', 0, inputClinicIp);
-            await upsertRate('notification_email', 0, inputNotificationEmail);
+            const changedFields: string[] = [];
+            if (hasHourChanged) {
+                await upsertRate('hour', numHourRate, undefined, targetPeriodStr, existingHourRate?.id);
+                changedFields.push(`Hora: $${numHourRate}`);
+            }
+            if (hasGuardChanged) {
+                await upsertRate('guard', numGuardRate, undefined, targetPeriodStr, existingGuardRate?.id);
+                changedFields.push(`Guardia: $${numGuardRate}`);
+            }
+            if (hasIpChanged) {
+                await upsertRate('clinic_ip', 0, inputClinicIp, undefined, existingClinicIp?.id);
+                changedFields.push('IP Clínica');
+            }
+            if (hasEmailChanged) {
+                await upsertRate('notification_email', 0, inputNotificationEmail, undefined, existingNotifEmail?.id);
+                changedFields.push('Correo Notificación');
+            }
 
             await logAudit(
                 'UPDATE',
                 'Técnicos - Tarifas Globales',
-                'GLOBAL_RATES',
-                `${user?.name || 'Usuario'} actualizó los valores globales de liquidación de técnicos.`,
+                `GLOBAL_RATES_${targetPeriodStr}`,
+                `${user?.name || 'Usuario'} actualizó valores en Gestión de Técnicos (${changedFields.join(', ')})${hasHourChanged || hasGuardChanged ? ` [Vigencia desde ${targetPeriodStr}]` : ''}.`,
                 {
-                    hour_rate: { old: oldHourRate, new: hourRate },
-                    guard_rate: { old: oldGuardRate, new: guardRate },
-                    clinic_ip: { old: oldClinicIp, new: inputClinicIp },
-                    notification_email: { old: oldNotificationEmail, new: inputNotificationEmail }
+                    effective_from: targetPeriodStr,
+                    changed_fields: changedFields,
+                    hour_rate: hasHourChanged ? numHourRate : undefined,
+                    guard_rate: hasGuardChanged ? numGuardRate : undefined,
+                    clinic_ip: hasIpChanged ? inputClinicIp : undefined,
+                    notification_email: hasEmailChanged ? inputNotificationEmail : undefined
                 }
             );
 
-            alert('Tarifas y correos de notificación actualizados con éxito.');
+            alert(`Cambios guardados correctamente (${changedFields.join(', ')}).`);
             fetchData();
         } catch (e: any) {
             alert('Error al guardar tarifas: ' + e.message);
@@ -1412,19 +1469,43 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
         }
     };
 
-    const savePracticeRateValue = async (rawCode: string, value: number, oserDisplayCode?: string) => {
+    const handleDeleteHistoricalRate = async (id: string, label: string) => {
+        if (!confirm(`¿Está seguro de eliminar este registro histórico de tarifa (${label})?`)) return;
+
+        try {
+            const targetRate = rates.find(r => r.id === id);
+            const { error } = await supabase.from('tecnico_rates').delete().eq('id', id);
+            if (error) throw error;
+
+            await logAudit(
+                'DELETE',
+                'Técnicos - Tarifa Histórica',
+                id,
+                `${user?.name || 'Usuario'} eliminó el registro histórico de tarifa: ${label}.`,
+                { rate: targetRate }
+            );
+
+            alert('Registro eliminado correctamente.');
+            fetchData();
+        } catch (e: any) {
+            alert('Error al eliminar registro: ' + e.message);
+        }
+    };
+
+    const savePracticeRateValue = async (rawCode: string, value: number | string, oserDisplayCode?: string) => {
         if (!rawCode.trim()) {
             alert('Código de práctica inválido.');
             return false;
         }
         setIsSavingRate(true);
         try {
+            const numValue = Number(value) || 0;
             const code = rawCode.trim().replace(/\./g, '');
             const authorName = user?.name || user?.email || 'Administración';
             const payload: any = {
                 rate_type: 'practice',
                 practice_code: code,
-                value: value,
+                value: numValue,
                 updated_at: new Date().toISOString(),
                 updated_by: user?.id,
                 updated_by_name: authorName
@@ -1442,10 +1523,10 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                 isUpdate ? 'UPDATE' : 'CREATE',
                 'Técnicos - Tarifa Práctica',
                 code,
-                `${user?.name || 'Usuario'} ${isUpdate ? 'actualizó' : 'creó'} la tarifa para la práctica [${oserDisplayCode || code}] a $${value.toLocaleString()}.`,
+                `${user?.name || 'Usuario'} ${isUpdate ? 'actualizó' : 'creó'} la tarifa para la práctica [${oserDisplayCode || code}] a $${numValue.toLocaleString()}.`,
                 {
                     practice_code: code,
-                    value: isUpdate ? { old: oldValue, new: value } : value
+                    value: isUpdate ? { old: oldValue, new: numValue } : numValue
                 }
             );
 
@@ -1493,6 +1574,44 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
 
     const practiceRates = useMemo(() => {
         return rates.filter(r => r.rate_type === 'practice');
+    }, [rates]);
+
+    // Historial ordenado y con rangos calculados ("Desde - Hasta") para Tarifas Globales (Hora y Guardia)
+    const globalRatesHistory = useMemo(() => {
+        const buildTimeline = (type: 'hour' | 'guard') => {
+            const list = rates
+                .filter(r => r.rate_type === type)
+                .map(r => ({
+                    ...r,
+                    effectiveFrom: r.effective_from || '2025-01'
+                }))
+                .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+
+            return list.map((item, idx) => {
+                const nextItem = list[idx + 1];
+                let toStr = 'En adelante (Vigente)';
+                if (nextItem) {
+                    const [ny, nm] = nextItem.effectiveFrom.split('-').map(Number);
+                    const prevDate = new Date(ny, nm - 2, 1);
+                    const prevM = String(prevDate.getMonth() + 1).padStart(2, '0');
+                    toStr = `${prevM}/${prevDate.getFullYear()}`;
+                }
+                const [fy, fm] = item.effectiveFrom.split('-');
+                const fromStr = `${fm}/${fy}`;
+
+                return {
+                    ...item,
+                    fromStr,
+                    toStr,
+                    isCurrentActive: !nextItem
+                };
+            }).reverse(); // Más recientes arriba
+        };
+
+        return {
+            hours: buildTimeline('hour'),
+            guards: buildTimeline('guard')
+        };
     }, [rates]);
 
     const allowedIps = clinicIp ? clinicIp.split(',').map(ip => ip.trim()) : [];
@@ -2203,8 +2322,9 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                             </h3>
 
                             {(() => {
-                                const hourRateObj = rates.find(r => r.rate_type === 'hour');
-                                const guardRateObj = rates.find(r => r.rate_type === 'guard');
+                                const targetPeriodStr = `${rateYearFrom}-${String(rateMonthFrom + 1).padStart(2, '0')}`;
+                                const hourRateObj = rates.find(r => r.rate_type === 'hour' && (r.effective_from || '2025-01') === targetPeriodStr) || getRateForPeriod(rates, 'hour', targetPeriodStr);
+                                const guardRateObj = rates.find(r => r.rate_type === 'guard' && (r.effective_from || '2025-01') === targetPeriodStr) || getRateForPeriod(rates, 'guard', targetPeriodStr);
                                 const clinicIpObj = rates.find(r => r.rate_type === 'clinic_ip');
                                 const notifEmailObj = rates.find(r => r.rate_type === 'notification_email');
 
@@ -2221,9 +2341,11 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                             </div>
                                             <input
                                                 type="number"
+                                                step="any"
+                                                min="0"
                                                 className="w-full bg-slate-50 text-slate-900 font-bold rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
                                                 value={hourRate}
-                                                onChange={e => setHourRate(Number(e.target.value))}
+                                                onChange={e => setHourRate(e.target.value)}
                                             />
                                             <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 flex-wrap">
                                                 <span className="material-symbols-outlined text-xs text-slate-400">history</span>
@@ -2248,9 +2370,11 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                             </div>
                                             <input
                                                 type="number"
+                                                step="any"
+                                                min="0"
                                                 className="w-full bg-slate-50 text-slate-900 font-bold rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
                                                 value={guardRate}
-                                                onChange={e => setGuardRate(Number(e.target.value))}
+                                                onChange={e => setGuardRate(e.target.value)}
                                             />
                                             <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 flex-wrap">
                                                 <span className="material-symbols-outlined text-xs text-slate-400">history</span>
@@ -2262,6 +2386,43 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                     <span className="text-slate-400 italic">Sin registro de edición previa</span>
                                                 )}
                                             </p>
+                                        </div>
+
+                                        {/* Selector de Vigencia (Desde qué mes aplica) */}
+                                        <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-3">
+                                            <div className="flex items-center gap-1.5 mb-1.5 text-indigo-900 font-bold text-xs">
+                                                <span className="material-symbols-outlined text-sm text-indigo-600">event_upcoming</span>
+                                                <span>Vigencia de las Nuevas Tarifas</span>
+                                            </div>
+                                            <p className="text-[11px] text-indigo-700/90 leading-tight mb-2.5">
+                                                Definí a partir de qué período se aplicarán estos valores de hora y guardia. Regirán desde ese mes en adelante.
+                                            </p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Aplica Desde Mes</label>
+                                                    <select
+                                                        className="w-full bg-white text-slate-800 text-xs font-bold rounded-lg border border-slate-300 py-1.5 px-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                        value={rateMonthFrom}
+                                                        onChange={e => setRateMonthFrom(Number(e.target.value))}
+                                                    >
+                                                        {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((m, idx) => (
+                                                            <option key={idx} value={idx}>{m}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Año</label>
+                                                    <select
+                                                        className="w-full bg-white text-slate-800 text-xs font-bold rounded-lg border border-slate-300 py-1.5 px-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                        value={rateYearFrom}
+                                                        onChange={e => setRateYearFrom(Number(e.target.value))}
+                                                    >
+                                                        {[2025, 2026, 2027].map(y => (
+                                                            <option key={y} value={y}>{y}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
                                         </div>
 
                                         <div>
@@ -2332,9 +2493,10 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                             <button
                                 onClick={handleSaveGlobalRates}
                                 disabled={isSavingRate}
-                                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md mt-6 transition-all active:scale-98"
+                                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md mt-6 transition-all active:scale-98 flex items-center justify-center gap-2"
                             >
-                                {isSavingRate ? 'Guardando...' : 'Guardar Valores'}
+                                <span className="material-symbols-outlined text-base">save</span>
+                                {isSavingRate ? 'Guardando...' : 'Guardar Nuevos Valores'}
                             </button>
                         </div>
 
@@ -2397,9 +2559,11 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Monto ($)</label>
                                     <input
                                         type="number"
+                                        step="any"
+                                        min="0"
                                         className="w-full bg-white text-slate-900 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold"
                                         value={practiceValueInput}
-                                        onChange={e => setPracticeValueInput(Number(e.target.value))}
+                                        onChange={e => setPracticeValueInput(e.target.value)}
                                     />
                                 </div>
                                 <div className="col-span-1 flex items-end">
@@ -2635,6 +2799,174 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                         );
                                     });
                                 })()}
+                            </div>
+                        </div>
+
+                        {/* HISTORIAL Y REGISTRO DE VIGENCIAS (HORA Y GUARDIA) */}
+                        <div className="lg:col-span-3 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                                <div>
+                                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-indigo-600">history_toggle_off</span>
+                                        Historial de Vigencias y Valores (Hora de Cirugía y Día de Guardia)
+                                    </h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        Registro cronológico de períodos contemplados. Cada liquidación mensual aplicará de forma automática el valor que estuvo vigente en ese período.
+                                    </p>
+                                </div>
+                                <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg w-fit">
+                                    Período en Pantalla: {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][selectedMonth]} {selectedYear}
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Historial Valor Hora */}
+                                <div className="space-y-2">
+                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                                        <span className="size-2 rounded-full bg-indigo-500"></span>
+                                        Historial: Valor de la Hora de Cirugía
+                                    </h4>
+                                    <div className="overflow-x-auto border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                                        <table className="w-full text-left text-xs">
+                                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                                                <tr>
+                                                    <th className="p-2.5">Período Vigencia</th>
+                                                    <th className="p-2.5 text-right">Valor / Hora</th>
+                                                    <th className="p-2.5">Última Edición</th>
+                                                    <th className="p-2.5 text-center">Acción</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 bg-white">
+                                                {globalRatesHistory.hours.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={4} className="p-4 text-center text-slate-400 italic">
+                                                            No hay registros de valor hora
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    globalRatesHistory.hours.map((r, idx) => (
+                                                        <tr key={r.id || idx} className={`hover:bg-slate-50 ${r.isCurrentActive ? 'bg-indigo-50/40' : ''}`}>
+                                                            <td className="p-2.5 whitespace-nowrap">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className="font-bold text-slate-800 font-mono">
+                                                                        {r.fromStr}
+                                                                    </span>
+                                                                    <span className="text-slate-400 text-[10px]">hasta</span>
+                                                                    <span className={`font-mono text-[11px] ${r.isCurrentActive ? 'text-emerald-700 font-bold' : 'text-slate-600'}`}>
+                                                                        {r.toStr}
+                                                                    </span>
+                                                                    {r.isCurrentActive && (
+                                                                        <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded uppercase">
+                                                                            Vigente
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="p-2.5 text-right font-black text-slate-900 whitespace-nowrap">
+                                                                ${formatCurrency(r.value)}
+                                                            </td>
+                                                            <td className="p-2.5 text-[10px] text-slate-500">
+                                                                {r.updated_at ? (
+                                                                    <div>
+                                                                        <span className="font-medium">{formatLastUpdated(r.updated_at)?.dateStr}</span>
+                                                                        <span className="text-slate-400 block">{r.updated_by_name || 'Admin'}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-slate-400 italic">-</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="p-2.5 text-center">
+                                                                {globalRatesHistory.hours.length > 1 && r.id && (
+                                                                    <button
+                                                                        onClick={() => handleDeleteHistoricalRate(r.id!, `Hora $${r.value} desde ${r.fromStr}`)}
+                                                                        className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                                                                        title="Eliminar este escalón histórico de tarifa"
+                                                                    >
+                                                                        <span className="material-symbols-outlined text-base">delete</span>
+                                                                    </button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                {/* Historial Valor Guardia */}
+                                <div className="space-y-2">
+                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                                        <span className="size-2 rounded-full bg-emerald-500"></span>
+                                        Historial: Valor del Día de Guardia
+                                    </h4>
+                                    <div className="overflow-x-auto border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                                        <table className="w-full text-left text-xs">
+                                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                                                <tr>
+                                                    <th className="p-2.5">Período Vigencia</th>
+                                                    <th className="p-2.5 text-right">Valor / Día</th>
+                                                    <th className="p-2.5">Última Edición</th>
+                                                    <th className="p-2.5 text-center">Acción</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 bg-white">
+                                                {globalRatesHistory.guards.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={4} className="p-4 text-center text-slate-400 italic">
+                                                            No hay registros de valor guardia
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    globalRatesHistory.guards.map((r, idx) => (
+                                                        <tr key={r.id || idx} className={`hover:bg-slate-50 ${r.isCurrentActive ? 'bg-emerald-50/40' : ''}`}>
+                                                            <td className="p-2.5 whitespace-nowrap">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className="font-bold text-slate-800 font-mono">
+                                                                        {r.fromStr}
+                                                                    </span>
+                                                                    <span className="text-slate-400 text-[10px]">hasta</span>
+                                                                    <span className={`font-mono text-[11px] ${r.isCurrentActive ? 'text-emerald-700 font-bold' : 'text-slate-600'}`}>
+                                                                        {r.toStr}
+                                                                    </span>
+                                                                    {r.isCurrentActive && (
+                                                                        <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 text-[9px] font-black rounded uppercase">
+                                                                            Vigente
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td className="p-2.5 text-right font-black text-slate-900 whitespace-nowrap">
+                                                                ${formatCurrency(r.value)}
+                                                            </td>
+                                                            <td className="p-2.5 text-[10px] text-slate-500">
+                                                                {r.updated_at ? (
+                                                                    <div>
+                                                                        <span className="font-medium">{formatLastUpdated(r.updated_at)?.dateStr}</span>
+                                                                        <span className="text-slate-400 block">{r.updated_by_name || 'Admin'}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-slate-400 italic">-</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="p-2.5 text-center">
+                                                                {globalRatesHistory.guards.length > 1 && r.id && (
+                                                                    <button
+                                                                        onClick={() => handleDeleteHistoricalRate(r.id!, `Guardia $${r.value} desde ${r.fromStr}`)}
+                                                                        className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                                                                        title="Eliminar este escalón histórico de tarifa"
+                                                                    >
+                                                                        <span className="material-symbols-outlined text-base">delete</span>
+                                                                    </button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2965,7 +3297,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                         className="w-full bg-slate-50 focus:bg-white text-slate-900 font-black rounded-xl border border-slate-300 pl-8 pr-4 py-2.5 text-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                                         placeholder="0"
                                         value={rateModalInputValue}
-                                        onChange={e => setRateModalInputValue(Number(e.target.value))}
+                                        onChange={e => setRateModalInputValue(e.target.value)}
                                     />
                                 </div>
                             </div>

@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## v3.10.125 (2026-09-09)
+- **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
+    * **Historial de Tarifas con Selector de Vigencia Mensual**:
+        - Soporte para vigencias cronológicas (`effective_from: 'YYYY-MM'`) en tarifas de hora de cirugía y día de guardia.
+        - Selector de mes y año ("Aplica Desde Mes...") para definir a partir de qué período rige un nuevo valor.
+        - Tabla visual de historial cronológico ("Desde MM/AAAA hasta MM/AAAA | En adelante (Vigente)"), autor y fecha de modificación.
+        - Las liquidaciones mensuales aplican retroactiva y automáticamente la tarifa vigente que regía en el período liquidado.
+    * **Optimización de Inputs Numéricos**:
+        - Corrección del bloqueo/sobreescritura al tipear ceros o borrar en los campos de tarifas.
+    * **Actualización Diferencial de Fechas de Edición**:
+        - Al guardar valores globales, se auditan y actualizan únicamente los campos que sufrieron cambios reales, preservando intactos el autor y fecha previa de los campos que no fueron modificados.
+        - La información de última edición de hora y guardia refleja la vigencia del período seleccionado.
+
 ## v3.10.124 (2026-09-08)
 - **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
     * **Autor visible en Última Edición de Valores Globales**:
