@@ -83,7 +83,7 @@ const Settings: React.FC = () => {
     ];
 
     const MAJOR_ROLES = [
-        'SuperAdmin', 'Administrativo', 'Administrativo de Guardias', 'Anestesista', 
+        'SuperAdmin', 'Administrativo', 'Administrativo ART', 'Administrativo de Guardias', 'Anestesista', 
         'Auditoria', 'Caja', 'Cirujano', 'Direccion', 'Enfermeria', 
         'Facturacion', 'Farmacia', 'Gerencia', 'Internacion', 
         'Medico', 'Mucama', 'Oficina ART', 'Ortopedia', 'Personal', 

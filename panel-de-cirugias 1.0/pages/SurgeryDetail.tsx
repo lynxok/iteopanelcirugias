@@ -553,7 +553,7 @@ export const SurgeryDetail: React.FC = () => {
                             </button>
                         )}
 
-                        {!isNew && status !== 'suspended' && (['SuperAdmin', 'Tecnico', 'DireccionMedica', 'Oficina ART', 'Internacion'].includes(currentUserRole)) && (
+                        {!isNew && status !== 'suspended' && (['SuperAdmin', 'Tecnico', 'DireccionMedica', 'Oficina ART', 'Administrativo ART', 'Internacion'].includes(currentUserRole)) && (
                             <button
                                 onClick={() => setSuspensionModal({ isOpen: true, reason: '', observations: '', isDefinitive: false, isEdit: false })}
                                 className={`px-4 py-2 rounded border border-amber-200 bg-amber-50 text-amber-700 font-bold text-sm hover:bg-amber-100 transition-colors flex items-center gap-2`}

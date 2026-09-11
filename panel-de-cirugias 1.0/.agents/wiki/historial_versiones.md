@@ -4,6 +4,11 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.131 [2026-09-11]**: Lanzada la versión **v3.10.131**.
+    *   **Nuevo Rol Híbrido "Administrativo ART" (`types.ts`, `permissions.ts`, `AdminDashboard.tsx`, `SurgeryDetail.tsx`, `Settings.tsx`)**:
+        *   Creación del rol `'Administrativo ART'` con permisos base de edición y visualización completa sobre todas las cirugías del sanatorio.
+        *   Acceso integrado al Tablero de Control ART / Administrativo con visibilidad de pedidos de autorización ART, notificación a pacientes y confirmación.
+        *   Habilitado para suspender/cancelar intervenciones quirúrgicas y validar internación en coberturas ART.
 *   **v3.10.130 [2026-09-11]**: Lanzada la versión **v3.10.130**.
     *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`, `reglas_de_negocio.md`)**:
         *   **Vigencia Estricta desde Septiembre 2026 para Extensión a Turno Tarde**: Se limitó el cómputo y la asignación automática de cirugías extendidas hacia el turno tarde exclusivamente a intervenciones realizadas desde el 1 de septiembre de 2026 (`date >= '2026-09-01'`), preservando intactos los períodos históricos anteriores.

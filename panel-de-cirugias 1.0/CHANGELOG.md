@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v3.10.131 (2026-09-11)
+- **Nuevo Rol Híbrido "Administrativo ART" (`types.ts`, `permissions.ts`, `AdminDashboard.tsx`, `SurgeryDetail.tsx`, `Settings.tsx`)**:
+    * **Creación del Rol y Permisos Base**:
+        - Se dio de alta el tipo `'Administrativo ART'` en el modelo de roles de la aplicación con permisos administrativos completos por defecto.
+    * **Capacidades Híbridas y Alcance**:
+        - **Visión General**: A diferencia del rol puro de `Oficina ART`, tiene visión completa de todas las cirugías del sanatorio (como `Administrativo`), sin restricciones de cobertura en calendario, listados o estadísticas.
+        - **Tablero de Control ART**: Acceso directo al Tablero Administrativo / ART con visibilidad y control sobre las columnas de *Pedido de autorización ART*, *Paciente Notificado*, *Disponibilidad de Paciente* y *Confirmación de Turno*.
+        - **Gestión Quirúrgica y Logística**: Habilitado para suspender o cancelar cirugías y editar el motivo de suspensión en la ficha quirúrgica.
+        - **Validación de Admisión ART**: Habilitado para validar internación / admisión en cirugías de ART que cumplan con requisitos pre-quirúrgicos y consentimientos.
+    * **Gestión Visual en Configuración**:
+        - Selector de rol en creación/edición de usuarios (`UserModal.tsx`), matriz de permisos y nuevo badge verde esmeralda distintivo en la lista de usuarios.
+
 ## v3.10.130 (2026-09-11)
 - **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`, `reglas_de_negocio.md`)**:
     * **Vigencia Estricta desde Septiembre 2026 para Extensión a Turno Tarde**:
