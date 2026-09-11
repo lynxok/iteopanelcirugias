@@ -4,6 +4,15 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.129 [2026-09-11]**: Lanzada la versión **v3.10.129**.
+    *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`, `reglas_de_negocio.md`)**:
+        *   **Cómputo de Tiempo Excedente a Turno Tarde Post-Tolerancia**: Para cirugías iniciadas en la mañana que se extienden al turno tarde (`> 15:15 hs` L-J / `> 14:15 hs` Vie), el tiempo de cirugía computable para los instrumentistas de turno tarde se liquida **estrictamente a partir de la hora de corte + tolerancia** hasta el fin efectivo (`actual_end_time`), abonando exclusivamente el tiempo excedente trabajado.
+        *   **Monto Fijo de Práctica**: Se mantiene el 50% de la tarifa por nomenclador.
+        *   **Visualización Detallada**: Muestra el desglose de minutos computables versus minutos totales tanto en la grilla interactiva como en el reporte formal A4 / PDF.
+*   **v3.10.128 [2026-09-09]**: Lanzada la versión **v3.10.128**.
+    *   **Impresión en Informe de Liquidación de Técnicos**: Proyección directa vía `createPortal` a `document.body` y diálogo nativo para exportación PDF limpia.
+*   **v3.10.127 [2026-09-09]**: Lanzada la versión **v3.10.127**.
+    *   **Aislamiento de Impresión**: Formato A4 portrait institucional con aislamiento de `#tecnico-printable-report`.
 *   **v3.10.126 [2026-09-09]**: Lanzada la versión **v3.10.126**.
     *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`)**:
         *   **Cómputo Automático por Extensión a Turno Tarde**: Las cirugías iniciadas en el turno mañana que continúan y cuyo horario de finalización (`actual_end_time`) supera por más de 15 minutos la hora de corte (`> 15:15 hs` de lunes a jueves, o `> 14:15 hs` los viernes) se computan automáticamente al grupo de técnicos de turno tarde (50% Fijo y 50% Guardia con fichaje presente). Exclusión estricta de cirugías iniciadas después de las 19:00 hs.

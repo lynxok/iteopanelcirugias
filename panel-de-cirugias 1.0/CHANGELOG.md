@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v3.10.129 (2026-09-11)
+- **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`, `reglas_de_negocio.md`)**:
+    * **Cómputo de Tiempo Excedente a Turno Tarde Post-Tolerancia**:
+        - Para cirugías iniciadas en la mañana que se extienden al turno tarde superando el corte + tolerancia (`> 15:15 hs` L-J / `> 14:15 hs` Vie), el tiempo de cirugía computable para los instrumentistas de turno tarde se liquida **estrictamente a partir de la hora de corte + tolerancia** (15:15 hs / 14:15 hs) hasta el horario de finalización efectivo (`actual_end_time`).
+        - Ya no se asigna la duración completa transcurrida durante la mañana, abonando exclusivamente los minutos reales excedentes trabajados por el turno tarde (con el bloque correspondiente de redondeo).
+        - Se mantiene el 50% de la tarifa fija por código de nomenclador para cada instrumentador del turno tarde.
+    * **Desglose Visual en Tabla y Reporte Formal A4**:
+        - La columna de duración refleja tanto los minutos computables post-tolerancia como la duración total quirúrgica de la intervención: `[min computables] / [min redondeados]` y `(Ext. Xm de Ym tot.)`.
+        - El reporte formal imprimible en A4 / PDF también incorpora este desglose transparente para auditoría de pagos.
+    * **Aclaración en Interfaz de Valores Globales**:
+        - Se actualizó el texto descriptivo del campo "Tolerancia Extensión Turno Tarde" para clarificar la regla de cálculo exacta.
+
 ## v3.10.128 (2026-09-09)
 - **Solución Definitiva de Impresión en Informe de Liquidación de Técnicos (`TecnicoPanel.tsx`, `index.css`)**:
     * **Proyección Directa vía React Portal (`createPortal`)**:

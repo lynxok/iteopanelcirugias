@@ -715,6 +715,8 @@ export default function TecnicoPanel() {
             let isWithinTardeShift = false;
             let isExtendedIntoTarde = false;
             let isAfter19 = false;
+            let tardeExtensionStartStr: string | null = null;
+
             if (s.actual_start_time) {
                 const [h, m] = s.actual_start_time.split(':').map(Number);
                 const startHourFraction = h + (m || 0) / 60;
@@ -736,14 +738,35 @@ export default function TecnicoPanel() {
                     const extendedIntoTarde = startHourFraction < 15 && endHourFraction !== null && endHourFraction > (15 + tolHours);
                     isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
                     isExtendedIntoTarde = extendedIntoTarde && startHourFraction < 19;
+                    if (isExtendedIntoTarde) {
+                        const effectiveStartMin = 15 * 60 + tolMinutes;
+                        const effH = Math.floor(effectiveStartMin / 60);
+                        const effM = effectiveStartMin % 60;
+                        tardeExtensionStartStr = `${String(effH).padStart(2, '0')}:${String(effM).padStart(2, '0')}`;
+                    }
                 } else if (dayOfWeek === 5) {
                     const startedInTarde = startHourFraction >= 14 && startHourFraction < 19;
                     const extendedIntoTarde = startHourFraction < 14 && endHourFraction !== null && endHourFraction > (14 + tolHours);
                     isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
                     isExtendedIntoTarde = extendedIntoTarde && startHourFraction < 19;
+                    if (isExtendedIntoTarde) {
+                        const effectiveStartMin = 14 * 60 + tolMinutes;
+                        const effH = Math.floor(effectiveStartMin / 60);
+                        const effM = effectiveStartMin % 60;
+                        tardeExtensionStartStr = `${String(effH).padStart(2, '0')}:${String(effM).padStart(2, '0')}`;
+                    }
                 }
                 isAfter19 = startHourFraction >= 19;
             }
+
+            // Duración computable específica para este técnico (si es extensión, computa desde corte + tolerancia)
+            const effectiveDurationMin = (isExtendedIntoTarde && tardeExtensionStartStr && s.actual_end_time)
+                ? calculateDurationMinutes(tardeExtensionStartStr, s.actual_end_time)
+                : realMin;
+            const effectiveRoundedMin = getRoundedDurationMinutes(effectiveDurationMin);
+            const effectiveRoundedHrs = effectiveRoundedMin / 60;
+            const effectiveTimeCost = effectiveRoundedHrs * hourRate;
+            const effectiveTotalQx = practiceRate + effectiveTimeCost;
 
             // Verificar si el técnico asignado en la Ficha Técnica difiere de guardia/turno tarde
             const formInstrumentadora = Array.isArray(s.surgery_forms) ? s.surgery_forms[0]?.instrumentadora : s.surgery_forms?.instrumentadora;
@@ -766,21 +789,21 @@ export default function TecnicoPanel() {
 
             if (dayOfWeek === 0 || dayOfWeek === 6 || isAfter19) {
                 if (isCoAssigned) {
-                    myShare = totalQx / 2;
+                    myShare = effectiveTotalQx / 2;
                     shareNotes = "50% Coparticipada (Fin de Semana / Nocturno)";
                 } else {
-                    myShare = totalQx;
+                    myShare = effectiveTotalQx;
                     shareNotes = "100% Guardia (Fin de Semana / Nocturno)";
                 }
             } else if (isWithinTardeShift) {
-                myShare = totalQx / 2;
+                myShare = effectiveTotalQx / 2;
                 shareNotes = isExtendedIntoTarde ? "50% Turno Tarde (Extensión)" : "50% Turno Tarde";
             } else {
                 if (isCoAssigned) {
-                    myShare = totalQx / 2;
+                    myShare = effectiveTotalQx / 2;
                     shareNotes = "50% Coparticipada";
                 } else {
-                    myShare = totalQx;
+                    myShare = effectiveTotalQx;
                     shareNotes = "100% Asignado";
                 }
             }
@@ -799,9 +822,13 @@ export default function TecnicoPanel() {
                 practiceCode: code || rawCode.replace(/\./g, '').trim(),
                 realMin,
                 roundedMin,
+                effectiveDurationMin,
+                effectiveRoundedMin,
+                isExtendedIntoTarde,
                 practiceRate,
-                timeCost,
-                totalCost: totalQx,
+                timeCost: effectiveTimeCost,
+                totalCost: effectiveTotalQx,
+                originalTotalCost: totalQx,
                 share: actualShare,
                 estimatedShare,
                 notes: shareNotes,
@@ -816,7 +843,7 @@ export default function TecnicoPanel() {
                 manualStatus
             };
         });
-    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate]);
+    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate, overtimeTolerance]);
 
     const totalSurgeriesAmount = useMemo(() => {
         return surgeriesReport.reduce((acc, curr) => acc + curr.share, 0);
@@ -2029,7 +2056,16 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                     {s.procedure}
                                                 </td>
                                                 <td className="px-6 py-4 text-center font-semibold text-slate-700">
-                                                    {s.realMin}m / <span className="text-indigo-600">{s.roundedMin}m</span>
+                                                    {s.isExtendedIntoTarde ? (
+                                                        <div className="flex flex-col items-center">
+                                                            <span>{s.effectiveDurationMin}m / <span className="text-indigo-600 font-bold">{s.effectiveRoundedMin}m</span></span>
+                                                            <span className="text-[10px] text-amber-700 font-normal" title={`Duración total Qx: ${s.realMin}m (${s.roundedMin}m)`}>
+                                                                (Ext. {s.effectiveRoundedMin}m de {s.realMin}m tot.)
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span>{s.realMin}m / <span className="text-indigo-600">{s.roundedMin}m</span></span>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4 text-right font-medium text-slate-600">
                                                     <div className="flex items-center justify-end gap-1.5">
@@ -2562,7 +2598,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                 })()}
                                             </div>
                                             <p className="text-[11px] text-amber-800/90 leading-tight mb-2">
-                                                Si una cirugía del turno mañana se prolonga después del corte (15:00 hs L-J / 14:00 hs Vie) por más de este margen en minutos, se computará al grupo de técnicos de turno tarde (50% Fijo y 50% Guardia).
+                                                Si una cirugía del turno mañana supera el corte (15:00 hs L-J / 14:00 hs Vie) por más de este margen en minutos, se computará al turno tarde abonando el tiempo transcurrido desde las 15:00/14:00 hs + tolerancia hasta el fin real.
                                             </p>
                                             <div className="relative">
                                                 <input
@@ -3845,7 +3881,14 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                         {s.procedureText || s.procedure}
                                                     </td>
                                                     <td className="p-2.5 text-center text-slate-700 whitespace-nowrap">
-                                                        {s.realMin}m ({s.roundedMin}m)
+                                                        {s.isExtendedIntoTarde ? (
+                                                            <div>
+                                                                <span>{s.effectiveDurationMin}m ({s.effectiveRoundedMin}m)</span>
+                                                                <span className="block text-[9px] text-slate-400">tot: {s.realMin}m</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span>{s.realMin}m ({s.roundedMin}m)</span>
+                                                        )}
                                                     </td>
                                                     <td className="p-2.5 text-slate-600 font-medium">
                                                         {s.notes}

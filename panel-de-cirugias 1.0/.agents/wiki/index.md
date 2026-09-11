@@ -18,6 +18,10 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-11]`: **Cómputo de Tiempo Excedente en Extensiones a Turno Tarde (`TecnicoPanel.tsx`)**:
+    *   Para cirugías iniciadas en la mañana que se extienden al turno tarde (superando el corte + tolerancia: `> 15:15 hs` L-J / `> 14:15 hs` Vie), el tiempo quirúgico a liquidar a los instrumentistas de turno tarde ahora se computa **estrictamente a partir de la hora de corte + tolerancia** hasta el horario de finalización (`actual_end_time`), en lugar de tomar la duración total de la mañana.
+    *   Se mantiene el 50% de la tarifa fija de práctica por nomenclador.
+    *   La tabla interactiva y el informe impreso reflejan tanto los minutos computables post-tolerancia como la duración total de la intervención.
 *   `[2026-09-09]`: **Cómputo por Extensión a Turno Tarde y Tolerancia Configurable en Técnicos (v3.10.126)**:
     *   `TecnicoPanel.tsx`: Regla de liquidación para cirugías iniciadas en turno mañana que se extienden más de 15 minutos (configurable) después del corte (`> 15:15 hs` de lunes a jueves / `> 14:15 hs` los viernes) y no iniciaron después de las 19:00 hs. Se computan automáticamente al grupo de técnicos de turno tarde (50% Fijo y 50% Guardia con fichaje presente).
     *   `TecnicoPanel.tsx`: Nuevo campo interactivo en "Tarifas y Ajustes" → "Valores Globales" para definir la "Tolerancia Extensión Turno Tarde" en minutos (`rate_type: 'overtime_tolerance'`), con persistencia en Supabase, auditoría completa y badge de última edición.
