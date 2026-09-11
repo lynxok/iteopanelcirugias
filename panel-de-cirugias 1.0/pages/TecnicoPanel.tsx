@@ -624,15 +624,18 @@ export default function TecnicoPanel() {
                     }
                 }
 
+                // Fecha de la cirugía para vigencia de reglas
+                const isFromSept2026 = s.date >= '2026-09-01';
+
                 // Turno tarde: lunes a jueves de 15:00 a 19:00, viernes de 14:00 a 19:00
-                // O si comenzó antes (turno mañana) pero continúa superando el corte + tolerancia y no arrancó después de las 19
+                // O si comenzó antes (turno mañana) pero continúa superando el corte + tolerancia y no arrancó después de las 19 (rige desde Septiembre 2026)
                 if (dayOfWeek >= 1 && dayOfWeek <= 4) {
                     const startedInTarde = startHourFraction >= 15 && startHourFraction < 19;
-                    const extendedIntoTarde = startHourFraction < 15 && endHourFraction !== null && endHourFraction > (15 + tolHours);
+                    const extendedIntoTarde = isFromSept2026 && startHourFraction < 15 && endHourFraction !== null && endHourFraction > (15 + tolHours);
                     isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
                 } else if (dayOfWeek === 5) {
                     const startedInTarde = startHourFraction >= 14 && startHourFraction < 19;
-                    const extendedIntoTarde = startHourFraction < 14 && endHourFraction !== null && endHourFraction > (14 + tolHours);
+                    const extendedIntoTarde = isFromSept2026 && startHourFraction < 14 && endHourFraction !== null && endHourFraction > (14 + tolHours);
                     isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
                 }
                 
@@ -733,9 +736,12 @@ export default function TecnicoPanel() {
                     }
                 }
 
+                // Fecha de la cirugía para vigencia de reglas
+                const isFromSept2026 = s.date >= '2026-09-01';
+
                 if (dayOfWeek >= 1 && dayOfWeek <= 4) {
                     const startedInTarde = startHourFraction >= 15 && startHourFraction < 19;
-                    const extendedIntoTarde = startHourFraction < 15 && endHourFraction !== null && endHourFraction > (15 + tolHours);
+                    const extendedIntoTarde = isFromSept2026 && startHourFraction < 15 && endHourFraction !== null && endHourFraction > (15 + tolHours);
                     isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
                     isExtendedIntoTarde = extendedIntoTarde && startHourFraction < 19;
                     if (isExtendedIntoTarde) {
@@ -746,7 +752,7 @@ export default function TecnicoPanel() {
                     }
                 } else if (dayOfWeek === 5) {
                     const startedInTarde = startHourFraction >= 14 && startHourFraction < 19;
-                    const extendedIntoTarde = startHourFraction < 14 && endHourFraction !== null && endHourFraction > (14 + tolHours);
+                    const extendedIntoTarde = isFromSept2026 && startHourFraction < 14 && endHourFraction !== null && endHourFraction > (14 + tolHours);
                     isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
                     isExtendedIntoTarde = extendedIntoTarde && startHourFraction < 19;
                     if (isExtendedIntoTarde) {

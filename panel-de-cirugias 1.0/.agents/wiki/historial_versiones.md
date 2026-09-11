@@ -4,6 +4,9 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.130 [2026-09-11]**: Lanzada la versión **v3.10.130**.
+    *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`, `reglas_de_negocio.md`)**:
+        *   **Vigencia Estricta desde Septiembre 2026 para Extensión a Turno Tarde**: Se limitó el cómputo y la asignación automática de cirugías extendidas hacia el turno tarde exclusivamente a intervenciones realizadas desde el 1 de septiembre de 2026 (`date >= '2026-09-01'`), preservando intactos los períodos históricos anteriores.
 *   **v3.10.129 [2026-09-11]**: Lanzada la versión **v3.10.129**.
     *   **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`, `reglas_de_negocio.md`)**:
         *   **Cómputo de Tiempo Excedente a Turno Tarde Post-Tolerancia**: Para cirugías iniciadas en la mañana que se extienden al turno tarde (`> 15:15 hs` L-J / `> 14:15 hs` Vie), el tiempo de cirugía computable para los instrumentistas de turno tarde se liquida **estrictamente a partir de la hora de corte + tolerancia** hasta el fin efectivo (`actual_end_time`), abonando exclusivamente el tiempo excedente trabajado.

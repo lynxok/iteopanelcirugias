@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.10.130 (2026-09-11)
+- **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`, `reglas_de_negocio.md`)**:
+    * **Vigencia Estricta desde Septiembre 2026 para Extensión a Turno Tarde**:
+        - La regla de extensión de cirugías al turno tarde (corte a las 15:00 hs L-J / 14:00 hs Vie + tolerancia) y su cálculo de tiempo computable post-tolerancia aplican **exclusivamente a cirugías con fecha a partir del 1 de septiembre de 2026 (`date >= '2026-09-01'`)**.
+        - Las liquidaciones de períodos históricos previos (agosto 2026 y anteriores) mantienen íntegramente sus cálculos originales cerrados sin sufrir alteraciones ni asignaciones retroactivas no previstas.
+
 ## v3.10.129 (2026-09-11)
 - **Gestión de Técnicos e Instrumentadores (`TecnicoPanel.tsx`, `reglas_de_negocio.md`)**:
     * **Cómputo de Tiempo Excedente a Turno Tarde Post-Tolerancia**:
