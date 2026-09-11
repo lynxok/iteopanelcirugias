@@ -21,7 +21,8 @@ export const loadPermissionsFromDB = async (): Promise<any> => {
           .limit(1);
 
         if (!error && data && data.length > 0 && data[0].value) {
-          memoryCachedPermissions = JSON.parse(data[0].value);
+          const parsed = JSON.parse(data[0].value);
+          memoryCachedPermissions = { ...LEGACY_PERMISSIONS, ...parsed };
         } else {
           memoryCachedPermissions = LEGACY_PERMISSIONS;
         }

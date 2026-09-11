@@ -4,6 +4,10 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.10.132 [2026-09-11]**: Lanzada la versión **v3.10.132**.
+    *   **Corrección de Permisos y Menú para "Administrativo ART"**:
+        *   Sincronización en Supabase de `role_permissions` en `quirofano.admin_settings` para persistir el nuevo rol en backend.
+        *   Fallback preventivo en `checkAccess` hacia `LEGACY_PERMISSIONS` y fusión automática (`{ ...LEGACY_PERMISSIONS, ...parsed }`) en `Sidebar.tsx` y `useRolePermissions.ts` para que ningún rol nuevo quede sin opciones de navegación por desfasaje de caché.
 *   **v3.10.131 [2026-09-11]**: Lanzada la versión **v3.10.131**.
     *   **Nuevo Rol Híbrido "Administrativo ART" (`types.ts`, `permissions.ts`, `AdminDashboard.tsx`, `SurgeryDetail.tsx`, `Settings.tsx`)**:
         *   Creación del rol `'Administrativo ART'` con permisos base de edición y visualización completa sobre todas las cirugías del sanatorio.

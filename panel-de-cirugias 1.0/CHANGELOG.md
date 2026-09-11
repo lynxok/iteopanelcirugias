@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v3.10.132 (2026-09-11)
+- **Corrección Crítica de Permisos y Menú para "Administrativo ART" (`permissions.ts`, `useRolePermissions.ts`, `Sidebar.tsx`)**:
+    * **Sincronización en Base de Datos**: Se persistieron los permisos completos del nuevo rol en la clave `role_permissions` de la tabla `quirofano.admin_settings` en Supabase.
+    * **Fallback y Fusión Inteligente en Frontend**:
+        - `checkAccess`: Incorpora fallback automático a `LEGACY_PERMISSIONS` cuando la base de datos o el caché no contengan aún la clave del rol consultado, impidiendo pantallas en blanco o desaparición de opciones del sidebar.
+        - `Sidebar.tsx` y `useRolePermissions.ts`: Ahora fusionan siempre los permisos cacheados/descargados de la base de datos con `LEGACY_PERMISSIONS`, garantizando que cualquier rol nuevo tenga visibilidad inmediata de todos sus módulos autorizados sin depender de refrescos forzados de caché.
+
 ## v3.10.131 (2026-09-11)
 - **Nuevo Rol Híbrido "Administrativo ART" (`types.ts`, `permissions.ts`, `AdminDashboard.tsx`, `SurgeryDetail.tsx`, `Settings.tsx`)**:
     * **Creación del Rol y Permisos Base**:
