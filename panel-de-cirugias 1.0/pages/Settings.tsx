@@ -66,6 +66,7 @@ const Settings: React.FC = () => {
         { id: 'admin_dashboard', label: 'Tablero Admin', icon: 'admin_panel_settings' },
         { id: 'alerts', label: 'Centro de Alertas', icon: 'notifications' },
         { id: 'calendar', label: 'Calendario', icon: 'calendar_today' },
+        { id: 'consulting_rooms', label: 'Consultorios', icon: 'meeting_room' },
         { id: 'resident_shifts', label: 'Guardias (Calendario)', icon: 'medical_services' },
         { id: 'on_duty', label: 'Médico de Guardia (Semanal)', icon: 'medical_services' },
         { id: 'kanban', label: 'Planificación', icon: 'view_kanban' },

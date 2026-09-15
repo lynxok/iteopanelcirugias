@@ -43,7 +43,13 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     *   **Orden en ART y Particulares**: Directo por fecha de creación (`created_at` ascendente).
 *   **Cirugías Ambulatorias**: Una cirugía se considera ambulatoria si el switch **"Modalidad Ambulatoria"** (`is_ambulatory`) está activo en su Ficha Clínica o si está agendada en un quirófano configurado como ambulatorio (`operating_room.is_ambulatory`). Las cirugías de guardia (`isGuardia`) **no se marcan automáticamente como ambulatorias**, permitiendo requerir internación si el cuadro clínico lo exige. Cuando una cirugía es ambulatoria, el sistema omite automáticamente los requerimientos y bloqueos de guardado de **Exámenes Pre-quirúrgicos** (sin exigir la fecha de realización de pre-quirúrgicos), **Firma de Consentimiento Informado** y **Validación Cama/ART**, mostrando avisos informativos y computando la validación clínica como completada (`OK`).
 
-### Lógica de Finalización y Auto-Inicio
+### Lógica de Finalización, Auto-Inicio y Ficha Técnica
+*   **Sincronización de Horarios en Ficha Técnica (`SurgeryForm`)**:
+    *   Al modificar y guardar la **Hora de Inicio de Cirugía (H.C.)** o la **Hora de Fin de Cirugía (H.F.)** en la Ficha Técnica, el sistema actualiza de manera simultánea e indivisible:
+        1. La tabla `quirofano.surgery_forms` (`cirugia_inicio`, `cirugia_fin`).
+        2. La tabla `quirofano.surgeries` (`actual_start_time`, `actual_end_time`), garantizando que el Monitor, Calendario y reportes reflejen el nuevo horario sin desfasaje.
+    *   **Prioridad de Carga (`fetchExistingForm`)**: La hora explícitamente cargada en la Ficha Técnica (`form.cirugia_inicio`, `form.cirugia_fin`) actúa como la fuente de verdad prioritaria frente a cualquier dato previo en caché o en la tabla de cirugías.
+    *   **Regla de Anestesia vs Cirugía**: Si la Hora de Fin de Anestesia (`H.F. ANESTESIA`) es posterior a la Hora de Fin de Cirugía cargada (`H.F. CIRUGÍA`), el fin de cirugía adopta automáticamente el horario de fin de anestesia (`finalHfc = tHfa`).
 *   **Auto-Inicio**: Si una cirugía con horario asignado se encuentra en estado "Pendiente" a la hora de comienzo programada, el sistema la muestra como "En Curso" en tiempo real.
 *   **Auto-Finalización**:
     *   El monitor en vivo cambia el estado de la cirugía a `completed` en la base de datos cuando excede su tiempo estimado más un **buffer de 10 minutos**.

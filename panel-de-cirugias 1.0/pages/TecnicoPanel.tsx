@@ -41,6 +41,21 @@ const formatCurrency = (val: number) => {
     });
 };
 
+const formatTimeDisplay = (timeStr?: string | null) => {
+    if (!timeStr) return '--:--';
+    if (timeStr.includes('T')) {
+        const d = new Date(timeStr);
+        if (isNaN(d.getTime())) return '--:--';
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+    // Formato HH:mm:ss o HH:mm
+    const parts = timeStr.split(':');
+    if (parts.length >= 2) {
+        return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+    }
+    return timeStr;
+};
+
 interface Rate {
     id?: string;
     rate_type: 'practice' | 'hour' | 'guard' | 'clinic_ip' | 'notification_email' | 'overtime_tolerance';
@@ -68,6 +83,79 @@ interface Consent {
     amount_calculated?: number | null;
     status: string;
 }
+
+export interface SurgeryPracticeItem {
+    rawCode: string;
+    code: string;
+    description: string;
+    rate: number;
+    rateUpdatedAt?: string;
+    rateUpdatedByName?: string;
+}
+
+// Helper: Extraer múltiples prácticas de una cadena de procedimientos quirúrgicos (soporta separadores +, corchetes y códigos libres)
+export const parseSurgeryPractices = (procedureStr: string, allRates: Rate[]): SurgeryPracticeItem[] => {
+    if (!procedureStr || !procedureStr.trim()) return [];
+
+    // Dividir por '+' o por coma seguida de inicio de práctica (ej: [CODE] o texto)
+    const rawParts = procedureStr.includes('+')
+        ? procedureStr.split('+')
+        : procedureStr.split(/,\s*(?=\[|[0-9]{2}\.[0-9]{2})/);
+
+    const practices: SurgeryPracticeItem[] = [];
+
+    rawParts.forEach(part => {
+        const trimmed = part.trim();
+        if (!trimmed) return;
+
+        let rawCode = '';
+        let description = '';
+
+        const matchBracket = trimmed.match(/^\[(.*?)\]\s*(.*)/);
+        const matchColon = trimmed.match(/^(.*?):\s*(.*)/);
+
+        if (matchBracket) {
+            rawCode = matchBracket[1].trim();
+            description = matchBracket[2].trim();
+        } else if (matchColon) {
+            rawCode = matchColon[1].trim();
+            description = matchColon[2].trim();
+        } else {
+            // Intentar detectar si inicia con código numérico/alfanumérico (ej: "01.01.01 Nombre")
+            const genericMatch = trimmed.match(/^([A-Za-z0-9]+(?:[\.\-][A-Za-z0-9]+)+)\s*(.*)$/);
+            if (genericMatch) {
+                rawCode = genericMatch[1].trim();
+                description = genericMatch[2].trim();
+            } else {
+                description = trimmed;
+            }
+        }
+
+        const mappedAoterCode = (nomencladorData.mapping as Record<string, string>)[rawCode] || rawCode;
+        const code = mappedAoterCode.replace(/\./g, '').trim();
+        const cleanRawCode = rawCode.replace(/\./g, '').trim();
+
+        // Buscar tarifa vigente para esta práctica
+        const existingRate = allRates.find(r => 
+            r.rate_type === 'practice' && 
+            (
+                (code && r.practice_code === code) || 
+                (cleanRawCode && r.practice_code === cleanRawCode)
+            )
+        );
+
+        practices.push({
+            rawCode,
+            code: code || cleanRawCode,
+            description: description || trimmed,
+            rate: existingRate?.value || 0,
+            rateUpdatedAt: existingRate?.updated_at,
+            rateUpdatedByName: existingRate?.updated_by_name
+        });
+    });
+
+    return practices;
+};
 
 export interface ManualSurgery {
     id: string;
@@ -123,6 +211,8 @@ export default function TecnicoPanel() {
     const [currentConsent, setCurrentConsent] = useState<Consent | null>(null);
     const [rates, setRates] = useState<Rate[]>([]);
     const [onDutyTecnicosConfig, setOnDutyTecnicosConfig] = useState<Record<string, any>>({});
+    const [selectedPracticesMap, setSelectedPracticesMap] = useState<Record<string, string[]>>({});
+    const [isSavingSelectedPractices, setIsSavingSelectedPractices] = useState<boolean>(false);
     
     // IP del cliente e IP de la clínica
     const [clientIp, setClientIp] = useState<string>('');
@@ -296,6 +386,7 @@ export default function TecnicoPanel() {
                 usersRes,
                 ratesRes,
                 onDutyRes,
+                selectedPracticesRes,
                 manualSurgeriesRes,
                 surgeriesRes,
                 attendanceRes,
@@ -313,6 +404,11 @@ export default function TecnicoPanel() {
                     .from('admin_settings')
                     .select('value')
                     .eq('key', 'on_duty_tecnicos')
+                    .maybeSingle(),
+                supabase
+                    .from('admin_settings')
+                    .select('value')
+                    .eq('key', 'tecnico_selected_practices')
                     .maybeSingle(),
                 supabase
                     .from('tecnico_manual_surgeries')
@@ -353,6 +449,17 @@ export default function TecnicoPanel() {
                     targetTecnicoId = filteredTecs[0].id;
                     setSelectedTecnicoId(targetTecnicoId);
                 }
+            }
+
+            // Procesar Prácticas Seleccionadas por Cirugía
+            if (selectedPracticesRes?.data?.value) {
+                try {
+                    setSelectedPracticesMap(JSON.parse(selectedPracticesRes.data.value) || {});
+                } catch {
+                    setSelectedPracticesMap({});
+                }
+            } else {
+                setSelectedPracticesMap({});
             }
 
             // Procesar Tarifas
@@ -672,28 +779,28 @@ export default function TecnicoPanel() {
         if (!tec) return [];
 
         return filteredSurgeries.map(s => {
-            // 1. Extraer código del nomenclador y unificar a AOTER
-            let rawCode = '';
-            let procedureText = '';
-            const matchBracket = s.procedure?.match(/^\[(.*?)\]\s*(.*)/);
-            const matchColon = s.procedure?.match(/^(.*?):\s*(.*)/);
-            if (matchBracket) {
-                rawCode = matchBracket[1].trim();
-                procedureText = matchBracket[2].trim();
-            } else if (matchColon) {
-                rawCode = matchColon[1].trim();
-                procedureText = matchColon[2].trim();
-            } else if (s.procedure) {
-                procedureText = s.procedure.trim();
-            }
+            // 1. Desglosar todas las prácticas de la cirugía
+            const allPractices = parseSurgeryPractices(s.procedure, rates);
+            const allPracticeKeys = allPractices.map(p => p.code || p.rawCode || p.description);
 
-            // Mapear a AOTER si existe equivalencia
-            const mappedAoterCode = (nomencladorData.mapping as Record<string, string>)[rawCode] || rawCode;
-            const code = mappedAoterCode.replace(/\./g, '').trim();
+            // Determinar cuáles prácticas están seleccionadas para esta cirugía
+            // Por defecto, si aún no hay entrada en selectedPracticesMap, están todas seleccionadas
+            const selectedKeys = selectedPracticesMap[s.id] !== undefined
+                ? selectedPracticesMap[s.id]
+                : allPracticeKeys;
 
-            // 2. Obtener tarifa de la práctica
-            const existingRate = rates.find(r => r.rate_type === 'practice' && (r.practice_code === code || r.practice_code === rawCode.replace(/\./g, '').trim()));
-            const practiceRate = existingRate?.value || 0;
+            const selectedPractices = allPractices.filter(p => 
+                selectedKeys.includes(p.code || p.rawCode || p.description)
+            );
+
+            // Sumar tarifa de las prácticas seleccionadas
+            const practiceRate = selectedPractices.reduce((sum, p) => sum + p.rate, 0);
+
+            // Valores de referencia (primera práctica o genérico) para compatibilidad
+            const firstPractice = allPractices[0];
+            const rawCode = firstPractice?.rawCode || '';
+            const code = firstPractice?.code || '';
+            const procedureText = firstPractice?.description || s.procedure;
 
             // 3. Duración redondeada
             const realMin = calculateDurationMinutes(s.actual_start_time, s.actual_end_time);
@@ -821,6 +928,8 @@ export default function TecnicoPanel() {
             return {
                 id: s.id,
                 date: s.date,
+                startTime: s.actual_start_time || null,
+                endTime: s.actual_end_time || null,
                 patient: s.patient?.full_name || s.patient?.name || 'Desconocido',
                 procedure: s.procedure,
                 procedureText: procedureText || s.procedure,
@@ -832,6 +941,9 @@ export default function TecnicoPanel() {
                 effectiveRoundedMin,
                 isExtendedIntoTarde,
                 practiceRate,
+                allPractices,
+                selectedPractices,
+                allPracticeKeys,
                 timeCost: effectiveTimeCost,
                 totalCost: effectiveTotalQx,
                 originalTotalCost: totalQx,
@@ -842,14 +954,14 @@ export default function TecnicoPanel() {
                 coAssignedCount: approvedManualAssignees.length,
                 formInstrumentadora: formInstrumentadora || null,
                 isInstrumentadoraMismatch: !!isInstrumentadoraMismatch,
-                rateUpdatedAt: existingRate?.updated_at,
-                rateUpdatedByName: existingRate?.updated_by_name,
+                rateUpdatedAt: firstPractice?.rateUpdatedAt,
+                rateUpdatedByName: firstPractice?.rateUpdatedByName,
                 isManual,
                 manualRecord: myManual || null,
                 manualStatus
             };
         });
-    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate, overtimeTolerance]);
+    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate, overtimeTolerance, selectedPracticesMap]);
 
     const totalSurgeriesAmount = useMemo(() => {
         return surgeriesReport.reduce((acc, curr) => acc + curr.share, 0);
@@ -1249,6 +1361,46 @@ export default function TecnicoPanel() {
         }
     };
 
+    // Gestión de Selección Manual de Prácticas Quirúrgicas por Cirugía
+    const handleTogglePractice = async (surgeryId: string, practiceKey: string, allPracticeKeys: string[]) => {
+        if (!isLevelAdmin) return;
+        setIsSavingSelectedPractices(true);
+
+        const currentSelected = selectedPracticesMap[surgeryId] !== undefined 
+            ? selectedPracticesMap[surgeryId] 
+            : [...allPracticeKeys];
+
+        let newSelected: string[];
+        if (currentSelected.includes(practiceKey)) {
+            newSelected = currentSelected.filter(k => k !== practiceKey);
+        } else {
+            newSelected = [...currentSelected, practiceKey];
+        }
+
+        const newMap = {
+            ...selectedPracticesMap,
+            [surgeryId]: newSelected
+        };
+
+        setSelectedPracticesMap(newMap);
+
+        try {
+            const { error } = await supabase
+                .from('admin_settings')
+                .upsert({
+                    key: 'tecnico_selected_practices',
+                    value: JSON.stringify(newMap)
+                }, { onConflict: 'key' });
+
+            if (error) throw error;
+        } catch (err: any) {
+            console.error('Error saving selected practices:', err);
+            alert('Error al guardar la selección de prácticas: ' + err.message);
+        } finally {
+            setIsSavingSelectedPractices(false);
+        }
+    };
+
     // Gestión de Fichadas (Check-In / Out)
     const handleClockAction = async (type: 'check_in' | 'break_out' | 'break_in' | 'check_out') => {
         if (!user) return;
@@ -1390,7 +1542,12 @@ export default function TecnicoPanel() {
             if (surgeriesReport.length > 0) {
                 surgeriesDetailText = surgeriesReport.map((s, idx) => {
                     const dateFormatted = new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
-                    return `  ${idx + 1}. [${dateFormatted}] ${s.patient} | ${s.procedure} | ${s.notes} -> $${formatCurrency(s.share)}`;
+                    let practiceBreakdown = '';
+                    if (s.allPractices && s.allPractices.length > 1) {
+                        const settled = s.selectedPractices.map(p => `${p.code ? `[${p.code}] ` : ''}${p.description} ($${formatCurrency(p.rate)})`).join(', ');
+                        practiceBreakdown = `\n     └ Prácticas liquidadas (${s.selectedPractices.length}/${s.allPractices.length}): ${settled}`;
+                    }
+                    return `  ${idx + 1}. [${dateFormatted}] ${s.patient} | ${s.procedure} | ${s.notes} -> $${formatCurrency(s.share)}${practiceBreakdown}`;
                 }).join('\n');
             } else {
                 surgeriesDetailText = '  (No se registraron cirugías computadas en el período)';
@@ -2042,6 +2199,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                             <th className="px-6 py-4">Fecha</th>
                                             <th className="px-6 py-4">Paciente</th>
                                             <th className="px-6 py-4">Procedimiento</th>
+                                            <th className="px-6 py-4 text-center">Horario</th>
                                             <th className="px-6 py-4 text-center">Duración (Real / Redond.)</th>
                                             <th className="px-6 py-4 text-right">Tarifa Nomenclador</th>
                                             <th className="px-6 py-4 text-right">Tarifa Tiempo (Qx)</th>
@@ -2058,8 +2216,69 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                     {new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
                                                 </td>
                                                 <td className="px-6 py-4 font-bold text-slate-900 uppercase">{s.patient}</td>
-                                                <td className="px-6 py-4 max-w-xs truncate font-medium text-slate-600" title={s.procedure}>
-                                                    {s.procedure}
+                                                <td className="px-6 py-4 max-w-sm font-medium text-slate-600">
+                                                    {s.allPractices && s.allPractices.length > 1 ? (
+                                                        <div className="flex flex-col gap-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-black tracking-tight">
+                                                                    <span className="material-symbols-outlined text-xs">checklist</span>
+                                                                    {s.selectedPractices.length} de {s.allPractices.length} prácticas a liquidar
+                                                                </span>
+                                                                {isLevelAdmin && (
+                                                                    <span className="text-[10px] text-slate-400 italic">
+                                                                        (Tildar las que correspondan al técnico)
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="space-y-1.5 pl-1">
+                                                                {s.allPractices.map((p, pIdx) => {
+                                                                    const pKey = p.code || p.rawCode || p.description;
+                                                                    const isChecked = s.selectedPractices.some(sp => (sp.code || sp.rawCode || sp.description) === pKey);
+
+                                                                    return (
+                                                                        <label
+                                                                            key={pKey || pIdx}
+                                                                            className={`flex items-start gap-2 p-1.5 rounded-lg border transition-all cursor-pointer select-none ${
+                                                                                isChecked 
+                                                                                    ? 'bg-slate-50 border-slate-200 text-slate-900' 
+                                                                                    : 'bg-white border-dashed border-slate-200 text-slate-400 opacity-60 hover:opacity-100'
+                                                                            } ${!isLevelAdmin ? 'cursor-default' : 'hover:border-indigo-300'}`}
+                                                                        >
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={isChecked}
+                                                                                disabled={!isLevelAdmin || isSavingSelectedPractices}
+                                                                                onChange={() => handleTogglePractice(s.id, pKey, s.allPracticeKeys)}
+                                                                                className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
+                                                                            />
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <div className="flex items-baseline gap-1.5 flex-wrap">
+                                                                                    {p.code && (
+                                                                                        <span className="font-bold text-indigo-900 text-xs">
+                                                                                            [{p.rawCode || p.code}]
+                                                                                        </span>
+                                                                                    )}
+                                                                                    <span className="text-xs font-semibold leading-tight">
+                                                                                        {p.description}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </label>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="truncate" title={s.procedure}>
+                                                            {s.procedure}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-center whitespace-nowrap">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs tracking-tight">
+                                                        <span className="material-symbols-outlined text-[14px] text-slate-400">schedule</span>
+                                                        {formatTimeDisplay(s.startTime)} – {formatTimeDisplay(s.endTime)}
+                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-4 text-center font-semibold text-slate-700">
                                                     {s.isExtendedIntoTarde ? (
@@ -2074,36 +2293,86 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 text-right font-medium text-slate-600">
-                                                    <div className="flex items-center justify-end gap-1.5">
-                                                        {s.practiceRate > 0 ? (
-                                                            <span className="font-bold text-slate-800">${s.practiceRate.toLocaleString()}</span>
-                                                        ) : (
-                                                            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[11px] font-bold" title="Sin tarifa de nomenclador establecida">
-                                                                <span className="material-symbols-outlined text-xs text-amber-500">warning</span>
-                                                                $0
-                                                            </span>
-                                                        )}
-                                                        {isLevelAdmin && (
-                                                            <button
-                                                                onClick={() => openRateModal(s.practiceCode || s.rawCode, s.rawCode, s.procedureText || s.procedure, s.practiceRate, s.rateUpdatedAt, s.rateUpdatedByName)}
-                                                                className={`p-1 rounded-md transition-all ${
-                                                                    s.practiceRate > 0 
-                                                                        ? 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50' 
-                                                                        : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100 font-bold text-[10px] px-1.5 py-0.5 flex items-center gap-0.5 border border-indigo-200'
-                                                                }`}
-                                                                title={s.practiceRate > 0 ? `Editar tarifa de ${s.rawCode || s.practiceCode}` : `Cargar tarifa para ${s.rawCode || s.practiceCode}`}
-                                                            >
-                                                                {s.practiceRate > 0 ? (
-                                                                    <span className="material-symbols-outlined text-sm">edit</span>
-                                                                ) : (
-                                                                    <>
-                                                                        <span className="material-symbols-outlined text-xs">add</span>
-                                                                        <span>Cargar</span>
-                                                                    </>
-                                                                )}
-                                                            </button>
-                                                        )}
-                                                    </div>
+                                                    {s.allPractices && s.allPractices.length > 1 ? (
+                                                        <div className="flex flex-col items-end gap-1.5">
+                                                            {/* Suma total de las prácticas seleccionadas */}
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <span className="text-[10px] uppercase font-bold text-slate-400">Total Nomencl.:</span>
+                                                                <span className={`font-black text-sm ${s.practiceRate > 0 ? "text-slate-900" : "text-amber-700"}`}>
+                                                                    ${s.practiceRate.toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                            {/* Desglose individual de cada práctica para edición / carga rápida */}
+                                                            <div className="w-full flex flex-col items-end gap-1 pt-1 border-t border-slate-100">
+                                                                {s.allPractices.map((p, pIdx) => {
+                                                                    const pKey = p.code || p.rawCode || p.description;
+                                                                    const isChecked = s.selectedPractices.some(sp => (sp.code || sp.rawCode || sp.description) === pKey);
+                                                                    return (
+                                                                        <div key={pKey || pIdx} className={`flex items-center justify-end gap-1.5 text-xs ${isChecked ? "text-slate-800" : "text-slate-400 line-through"}`}>
+                                                                            <span className="text-[11px] font-medium truncate max-w-[120px]" title={p.description}>
+                                                                                {p.code ? `[${p.code}]` : p.description}:
+                                                                            </span>
+                                                                            {p.rate > 0 ? (
+                                                                                <span className="font-bold">${p.rate.toLocaleString()}</span>
+                                                                            ) : (
+                                                                                <span className="inline-flex items-center px-1.5 py-0.2 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-bold">
+                                                                                    $0
+                                                                                </span>
+                                                                            )}
+                                                                            {isLevelAdmin && (
+                                                                                <button
+                                                                                    onClick={() => openRateModal(p.code || p.rawCode, p.rawCode, p.description, p.rate, p.rateUpdatedAt, p.rateUpdatedByName)}
+                                                                                    className={`p-0.5 rounded transition-all ${
+                                                                                        p.rate > 0
+                                                                                            ? "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                                                                            : "text-indigo-600 bg-indigo-50 hover:bg-indigo-100 font-bold text-[9px] px-1 py-0.2 flex items-center border border-indigo-200"
+                                                                                    }`}
+                                                                                    title={p.rate > 0 ? `Editar tarifa de ${p.code || p.rawCode}` : `Cargar tarifa para ${p.code || p.rawCode}`}
+                                                                                >
+                                                                                    {p.rate > 0 ? (
+                                                                                        <span className="material-symbols-outlined text-xs">edit</span>
+                                                                                    ) : (
+                                                                                        <span>Cargar</span>
+                                                                                    )}
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            {s.practiceRate > 0 ? (
+                                                                <span className="font-bold text-slate-800">${s.practiceRate.toLocaleString()}</span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[11px] font-bold" title="Sin tarifa de nomenclador establecida">
+                                                                    <span className="material-symbols-outlined text-xs text-amber-500">warning</span>
+                                                                    $0
+                                                                </span>
+                                                            )}
+                                                            {isLevelAdmin && (
+                                                                <button
+                                                                    onClick={() => openRateModal(s.practiceCode || s.rawCode, s.rawCode, s.procedureText || s.procedure, s.practiceRate, s.rateUpdatedAt, s.rateUpdatedByName)}
+                                                                    className={`p-1 rounded-md transition-all ${
+                                                                        s.practiceRate > 0
+                                                                            ? "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                                                                            : "text-indigo-600 bg-indigo-50 hover:bg-indigo-100 font-bold text-[10px] px-1.5 py-0.5 flex items-center gap-0.5 border border-indigo-200"
+                                                                    }`}
+                                                                    title={s.practiceRate > 0 ? `Editar tarifa de ${s.rawCode || s.practiceCode}` : `Cargar tarifa para ${s.rawCode || s.practiceCode}`}
+                                                                >
+                                                                    {s.practiceRate > 0 ? (
+                                                                        <span className="material-symbols-outlined text-sm">edit</span>
+                                                                    ) : (
+                                                                        <>
+                                                                            <span className="material-symbols-outlined text-xs">add</span>
+                                                                            <span>Cargar</span>
+                                                                        </>
+                                                                    )}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4 text-right font-medium text-slate-600">${s.timeCost.toLocaleString()}</td>
                                                 <td className="px-6 py-4 text-right font-semibold bg-slate-50/50 text-slate-700">${s.totalCost.toLocaleString()}</td>
@@ -3612,6 +3881,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                     <th className="p-2.5">Fecha</th>
                                                     <th className="p-2.5">Paciente</th>
                                                     <th className="p-2.5">Procedimiento / Cód.</th>
+                                                    <th className="p-2.5 text-center">Horario</th>
                                                     <th className="p-2.5 text-center">Duración</th>
                                                     <th className="p-2.5 text-left">Regla / Cómputo</th>
                                                     <th className="p-2.5 text-right">Monto Liquidado</th>
@@ -3626,9 +3896,29 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                         <td className="p-2.5 font-bold text-slate-900 uppercase">
                                                             {s.patient}
                                                         </td>
-                                                        <td className="p-2.5 text-slate-700 max-w-xs truncate" title={s.procedure}>
-                                                            <span className="font-semibold text-indigo-900">{s.practiceCode ? `[${s.practiceCode}] ` : ''}</span>
-                                                            {s.procedureText || s.procedure}
+                                                        <td className="p-2.5 text-slate-700 max-w-xs">
+                                                            {s.allPractices && s.allPractices.length > 1 ? (
+                                                                <div>
+                                                                    <p className="font-semibold text-slate-800 text-[11px] leading-tight mb-1" title={s.procedure}>
+                                                                        {s.procedure}
+                                                                    </p>
+                                                                    <div className="space-y-0.5 pl-1.5 border-l-2 border-indigo-200">
+                                                                        {s.selectedPractices.map((p, pIdx) => (
+                                                                            <p key={pIdx} className="text-[10px] text-indigo-900 font-medium">
+                                                                                • {p.code ? `[${p.code}] ` : ''}{p.description} <span className="font-bold text-indigo-700">(${formatCurrency(p.rate)})</span>
+                                                                            </p>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="truncate" title={s.procedure}>
+                                                                    <span className="font-semibold text-indigo-900">{s.practiceCode ? `[${s.practiceCode}] ` : ''}</span>
+                                                                    {s.procedureText || s.procedure}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-2.5 text-center text-slate-600 font-semibold whitespace-nowrap">
+                                                            {formatTimeDisplay(s.startTime)} – {formatTimeDisplay(s.endTime)}
                                                         </td>
                                                         <td className="p-2.5 text-center text-slate-600 whitespace-nowrap">
                                                             {s.realMin}m ({s.roundedMin}m)
@@ -3644,7 +3934,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                             </tbody>
                                             <tfoot className="bg-slate-50 font-bold border-t border-slate-200">
                                                 <tr>
-                                                    <td colSpan={5} className="p-2.5 text-right text-slate-600 uppercase text-[10px]">
+                                                    <td colSpan={6} className="p-2.5 text-right text-slate-600 uppercase text-[10px]">
                                                         Total Cirugías:
                                                     </td>
                                                     <td className="p-2.5 text-right font-black text-indigo-700 text-sm">

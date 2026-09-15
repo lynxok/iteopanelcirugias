@@ -19,6 +19,12 @@ Las tablas principales en el esquema `quirofano` son:
 *   `users`: Tabla personalizada de datos de usuarios autenticados.
     *   Campos añadidos: `resident_level` (para guardar nivel actual: R1, R2, R3, R4), `resident_level_history` (JSONB, registro histórico de niveles con fechas de vigencia `valid_from`) y `can_view_all_vendors` (para proveedores de ortopedia habilitados a ver cirugías de otras empresas).
 *   `audit_logs`: Tabla inmutable utilizada para registrar cambios críticos de estados, creaciones y eliminaciones (`old` -> `new`).
+*   `consulting_rooms`: Consultorios físicos de atención ambulatoria/médica (ej. `C2`-`C5`, `NEURO 1`-`9`), con nombre, sector, color identificador, orden, equipamiento asignado (`equipment TEXT[]`) y tarifa base por hora (`hourly_rate NUMERIC(12,2)`).
+*   `consulting_professionals`: Médicos y especialistas de consultorio con nombre, especialidad, matrícula, tarifa especial pactada opcional (`custom_hourly_rate NUMERIC(12,2)`) y vínculo a `quirofano.doctors` y `quirofano.users`.
+*   `consulting_room_equipment_catalog`: Catálogo de aparatología y accesorios para consultorios (`name`, `category`, `icon`), permitiendo etiquetado y creación on-the-fly de equipamiento (ej. Ecografía, ECG, Bicicleta ergométrica, etc.).
+*   `consulting_room_schedules`: Franjas horarias recurrentes asignadas por día de la semana (`day_of_week`), hora de inicio (`start_time`), fin (`end_time`), notas y estado activo. RLS y claves foráneas activas.
+*   `calendar_holidays`: Registro oficial de feriados nacionales y fechas específicas de Sanidad (ATSA, Día del Médico, asuetos de salud), con columnas `date`, `name`, `holiday_type` ('nacional', 'sanidad', 'provincial', 'institucional', 'otro'), `affects_consulting` (boolean) y `notes`.
+*   `consulting_calendar_exceptions`: Excepciones puntuales o por rangos de fecha sobre consultorios (`vacaciones`, `licencia`, `reemplazo`, `horario_especial`, `bloqueo_consultorio`), asociadas a profesional titular, profesional suplente (`substitute_professional_id`) y consultorio. Superpone y adapta dinámicamente la grilla base sobre el calendario real.
 
 ## Row Level Security (RLS)
 El RLS está habilitado y es altamente restrictivo en todas las tablas sensibles del esquema `quirofano`:

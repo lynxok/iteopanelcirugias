@@ -1,5 +1,62 @@
 # CHANGELOG
 
+## v3.12.0 (2026-09-15)
+- **Módulo de Liquidación Técnica y Gestión Quirúrgica (`TecnicoPanel.tsx`, `types.ts`, `reglas_de_negocio.md`)**:
+    * **Desglose Multi-Práctica con Selección Individual de Nomenclador**:
+        - Soporte integral para cirugías que incluyen múltiples prácticas simultáneas: ahora el sistema parsea y desglosa cada código/práctica individualmente.
+        - Capacidad para que la administración o supervisión tilde/destilde de manera precisa qué prácticas corresponden liquidar a los instrumentadores/técnicos (`tecnico_selected_practices` persistido en configuración global).
+        - Desglose detallado tanto en la tabla principal como en el comprobante y resumen imprimible.
+    * **Nueva Columna "Horario" en Tabla de Liquidación y Comprobante Imprimible**:
+        - Se incorporó la columna dedicada **"Horario"** (`HH:mm – HH:mm`) antes de la duración computable, aportando total trazabilidad sobre las horas reales de inicio y finalización registradas en quirófano.
+        - Facilita la auditoría visual y explica transparentemente las extensiones de jornada horaria hacia el turno tarde.
+
+## v3.11.1 (2026-09-15)
+- **Corrección en Ficha Técnica Quirúrgica (`SurgeryForm.tsx`, `reglas_de_negocio.md`)**:
+    * **Persistencia y Sincronización de Horarios Reales de Cirugía**:
+        - Se corrigió el problema por el cual al modificar la **Hora de Fin de Cirugía (H.F.)** o de **Inicio (H.C.)** en la ficha técnica, al reabrir la ficha se restablecía el horario previo.
+        - **Guardado Atómico Dual**: Ahora `handleSave` actualiza de manera simultánea `surgery_forms` (`cirugia_fin`, `cirugia_inicio`) y `surgeries` (`actual_end_time`, `actual_start_time`).
+        - **Prioridad de Carga en `fetchExistingForm`**: Los horarios cargados en la ficha técnica se definieron como fuente de verdad prioritaria sobre cualquier dato estancado en la tabla de cirugías o la prop en memoria.
+
+## v3.11.0 (2026-09-14)
+- **Nuevo Módulo de Gestión de Consultorios, Calendario Dinámico y Feriados (`ConsultingRoomsPage.tsx`, `types.ts`, `Sidebar.tsx`)**:
+    * **Migración y Desacoplamiento de Excel a Supabase (`quirofano`)**:
+        - Se migraron los datos del archivo `HORARIOS CONSULTORIOS.xlsx` de Gerencia a las nuevas tablas `quirofano.consulting_rooms`, `quirofano.consulting_professionals` y `quirofano.consulting_room_schedules`.
+        - Compactación inteligente de 1.898 filas de slots de 30 minutos a 84 bloques continuos consolidados con RLS e integridad referencial.
+    * **Feriados Nacionales y Asuetos de Sanidad (`quirofano.calendar_holidays`)**:
+        - Base de datos con los feriados nacionales oficiales de Argentina y fechas críticas de sanidad (ej. *21 de Septiembre - Día de la Sanidad ATSA*, *Día del Médico*), con indicador de afectación directa a consultorios externos.
+    * **Calendario Dinámico con Novedades y Excepciones (`quirofano.consulting_calendar_exceptions`)**:
+        - Proyección inteligente: para cualquier fecha real del año se toma la plantilla semanal estándar y se le superponen las novedades registradas:
+            * 🏖️ **Vacaciones y Licencias**: Bloque tachado con aviso visual de ausencia.
+            * 🔄 **Reemplazos / Médicos Suplentes**: Cobertura del consultorio indicando el profesional suplente y a quién reemplaza.
+            * ⏰ **Atenciones Extraordinarias / Horarios Especiales**.
+            * 🚫 **Bloqueo de Consultorio**: Muestra inhabilitación física de la sala por obras o mantenimiento.
+        - Modos de navegación: **Vista Diaria** con timeline continuo y **Vista Mensual** (grilla de 30/31 días con marcadores de feriados y badges de novedades).
+    * **Visualización de Bloques Continuos**:
+        - En la grilla semanal y diaria, las franjas horarias extendidas (ej. 08:30 a 12:30) se representan como un único bloque continuo proporcional a la duración real, con colores distintivos por profesional.
+    * **Dashboard Financiero Ejecutivo y Tarifas (Exclusivo SuperAdmin y Dirección)**:
+        - Pestaña confidencial **"Tarifas y Finanzas"** con acceso restringido a `SuperAdmin` y `Direccion`.
+        - Configuración de **Tarifa Base por Hora** por consultorio físico (`hourly_rate`).
+        - Configuración de **Tarifa Especial Pactada** por profesional (`custom_hourly_rate`), con prioridad automática sobre la tarifa del consultorio.
+        - KPIs en tiempo real: Facturación Mensual Estimada, Facturación Semanal Efectiva, Capacidad Máxima al 100% y Eficiencia de Facturación.
+        - Desglose tabular por consultorio (horas ocupadas, equipamiento, tarifa/h, ingresos semanales y mensuales) y por profesional (alquileres generados y horas asignadas).
+    * **Buscador Inteligente de Turnos Libres, Paquetes Combinados y Reserva Inmediata**:
+        - Modal de consulta rápida: permite ingresar día de la semana (ej. Lunes) y franja horaria requerida (ej. 14:00 a 18:00).
+        - **Criterios Operativos Avanzados**:
+            * Equipamiento / accesorios médicos requeridos con filtrado multi-tag en tiempo real.
+            * Exclusión rápida de consultorios específicos con 1 clic (toggles tachados).
+            * Duración mínima continua por tramo/consultorio en paquetes combinados (30m, 1h, 1.5h, 2h).
+            * Filtro por sector y profesional a asignar.
+        - **Detección de Paquetes Combinados y Consultorios Individuales**:
+            * Sugiere consultorios 100% libres o paquetes combinados continuos para cubrir la franja completa rotando de consultorio sin solapamiento.
+        - **Doble Modalidad de Reserva con 1 Clic**:
+            * **Fijo Semanal (Para Siempre)**: Preconfigura la asignación en la plantilla semanal estándar (`consulting_room_schedules`).
+            * **Fecha Puntual**: Preconfigura la novedad en el calendario (`consulting_calendar_exceptions`) con tipo *Horario Especial / Atención Extraordinaria* para el día exacto seleccionado.
+    * **Arrastre Interactivo de Turnos (Drag and Drop 2D y Multi-Día)**:
+        - Mover bloques libremente hacia arriba o hacia abajo para adelantar o retrasar el inicio de la atención manteniendo su duración intacta.
+        - Mover horizontalmente entre diferentes consultorios con validación automática anti-solapamiento.
+        - Arrastrar directamente sobre las pestañas de días de la semana (**Lunes, Martes, Miércoles, Jueves, Viernes**) para trasladar el turno a otro día de atención.
+        - Zonas de soltado (drop zones) con feedback interactivo, preview y persistencia en Supabase.
+
 ## v3.10.132 (2026-09-11)
 - **Corrección Crítica de Permisos y Menú para "Administrativo ART" (`permissions.ts`, `useRolePermissions.ts`, `Sidebar.tsx`)**:
     * **Sincronización en Base de Datos**: Se persistieron los permisos completos del nuevo rol en la clave `role_permissions` de la tabla `quirofano.admin_settings` en Supabase.

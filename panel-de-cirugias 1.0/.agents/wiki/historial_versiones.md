@@ -4,6 +4,23 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.12.0 [2026-09-15]**: Lanzada la versión **v3.12.0**.
+    *   **Módulo de Liquidación Técnica y Gestión Quirúrgica (`TecnicoPanel.tsx`, `types.ts`, `reglas_de_negocio.md`)**:
+        *   **Desglose Multi-Práctica con Selección Individual**: Soporte para cirugías que contienen múltiples prácticas en el texto del procedimiento. El sistema permite tildar o destildar individualmente qué prácticas del nomenclador aplican al técnico para su cobro, persistiendo las selecciones en `admin_settings` (`tecnico_selected_practices`).
+        *   **Nueva Columna "Horario" en Liquidación**: Se incorporó una columna visible `Horario` (`HH:mm – HH:mm`) tanto en la tabla principal como en el resumen/comprobante de impresión mensual, brindando visibilidad inmediata sobre la hora real de inicio y fin y clarificando las extensiones al turno tarde.
+*   **v3.11.1 [2026-09-15]**: Lanzada la versión **v3.11.1**.
+    *   **Ficha Técnica Quirúrgica (`SurgeryForm.tsx`, `reglas_de_negocio.md`)**:
+        *   **Persistencia y Sincronización Bidireccional de Horarios Reales**: Se resolvió la discrepancia que provocaba que al modificar y guardar la Hora de Fin de Cirugía (`H.F. CIRUGÍA`) o Hora de Inicio (`H.C. CIRUGÍA`), al reabrir la ficha volviera a mostrarse el horario anterior.
+        *   **Sincronización Dual**: Al pulsar "Guardar Ficha", el formulario actualiza atómicamente `quirofano.surgery_forms` (`cirugia_inicio`, `cirugia_fin`) y `quirofano.surgeries` (`actual_start_time`, `actual_end_time`).
+        *   **Prioridad Inequívoca en Carga**: En `fetchExistingForm`, la lectura prioriza el dato guardado en `surgery_forms` sobre cualquier valor previo en la tabla general o en la prop del Monitor.
+*   **v3.11.0 [2026-09-14]**: Lanzada la versión **v3.11.0**.
+    *   **Nuevo Módulo de Gestión de Consultorios, Calendario Dinámico y Feriados (`ConsultingRoomsPage.tsx`, `types.ts`, `Sidebar.tsx`)**:
+        *   **Migración a Supabase (`quirofano`)**: Desacoplamiento del Excel de Gerencia a tablas `consulting_rooms`, `consulting_professionals`, `consulting_room_schedules`, `calendar_holidays` y `consulting_calendar_exceptions`.
+        *   **Feriados Nacionales y Asuetos de Sanidad**: Detección y visualización de feriados nacionales y días institucionales/sanidad (ATSA - 21 de Septiembre).
+        *   **Calendario Dinámico con Novedades**: Proyección de plantilla semanal base combinada con novedades (vacaciones/licencias, médicos suplentes con rotulación en verde, horarios especiales y bloqueo de salas).
+        *   **Buscador Inteligente de Turnos Libres y Paquetes Combinados**: Sugerencia de consultorios libres y paquetes continuos combinando salas, con filtros avanzados de equipamiento médico y reserva con 1 clic (fijo semanal o fecha puntual).
+        *   **Dashboard Financiero Ejecutivo (SuperAdmin y Dirección)**: Configuración de tarifas base por consultorio y tarifas pactadas por profesional, cálculo de facturación proyectada vs real y métricas de capacidad.
+        *   **Drag and Drop 2D y Multi-Día**: Desplazamiento interactivo de bloques horarios entre horarios, entre consultorios y entre días de la semana soltando en las pestañas.
 *   **v3.10.132 [2026-09-11]**: Lanzada la versión **v3.10.132**.
     *   **Corrección de Permisos y Menú para "Administrativo ART"**:
         *   Sincronización en Supabase de `role_permissions` en `quirofano.admin_settings` para persistir el nuevo rol en backend.

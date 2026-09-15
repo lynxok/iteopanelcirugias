@@ -381,3 +381,82 @@ export interface ResidentVacation {
   created_by?: string;
   resident?: { full_name: string, name: string };
 }
+
+// Consultorios y Horarios de Ocupación
+export interface ConsultingEquipment {
+  id: string;
+  name: string;
+  category?: string;
+  icon?: string;
+  created_at?: string;
+}
+
+export interface ConsultingRoom {
+  id: string;
+  name: string;
+  sector: string;
+  active: boolean;
+  color: string;
+  display_order: number;
+  equipment?: string[];
+  hourly_rate?: number;
+  created_at?: string;
+}
+
+export interface ConsultingProfessional {
+  id: string;
+  doctor_id?: string | null;
+  user_id?: string | null;
+  full_name: string;
+  specialty: string;
+  license_number?: string | null;
+  active: boolean;
+  color: string;
+  custom_hourly_rate?: number | null;
+  created_at?: string;
+}
+
+export interface ConsultingSchedule {
+  id: string;
+  consulting_room_id: string;
+  professional_id: string;
+  day_of_week: number; // 1: Lunes, ..., 7: Domingo
+  start_time: string; // HH:mm:ss
+  end_time: string; // HH:mm:ss
+  notes?: string | null;
+  active: boolean;
+  created_at?: string;
+  consulting_rooms?: ConsultingRoom;
+  consulting_professionals?: ConsultingProfessional;
+}
+
+// Feriados y Fechas Especiales (Nacionales, Sanidad, Institucionales)
+export interface CalendarHoliday {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
+  holiday_type: 'nacional' | 'sanidad' | 'provincial' | 'institucional' | 'otro';
+  affects_consulting: boolean;
+  is_recurring_yearly: boolean;
+  notes?: string | null;
+  created_at?: string;
+}
+
+// Excepciones de Calendario (Vacaciones, Licencias, Suplencias, Turnos Extraordinarios)
+export interface ConsultingCalendarException {
+  id: string;
+  exception_type: 'vacaciones' | 'licencia' | 'reemplazo' | 'horario_especial' | 'bloqueo_consultorio' | 'otro';
+  start_date: string; // YYYY-MM-DD
+  end_date: string; // YYYY-MM-DD
+  consulting_room_id?: string | null;
+  professional_id?: string | null;
+  substitute_professional_id?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  reason?: string | null;
+  active: boolean;
+  created_at?: string;
+  consulting_rooms?: ConsultingRoom;
+  consulting_professionals?: ConsultingProfessional;
+  substitute_professionals?: ConsultingProfessional;
+}

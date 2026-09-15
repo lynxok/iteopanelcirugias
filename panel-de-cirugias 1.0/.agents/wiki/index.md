@@ -18,6 +18,25 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-15]`: **Liquidación de Técnicos: Selección Multi-Práctica y Columna de Horarios (`TecnicoPanel.tsx`, v3.12.0)**:
+    *   **Desglose Multi-Práctica**: Se implementó el soporte para liquidar cirugías con más de un código o práctica quirúrgica en el texto del procedimiento. Los administradores pueden tildar o destildar individualmente qué prácticas del nomenclador aplican al técnico.
+    *   **Persistencia de Selección**: Se almacena la configuración de prácticas seleccionadas por cirugía en `quirofano.admin_settings` (`tecnico_selected_practices`).
+    *   **Columna "Horario"**: Se agregó la columna visual dedicada de `Horario` (`HH:mm – HH:mm`) tanto en la tabla principal como en el modal de impresión, facilitando la verificación de los horarios reales de inicio y finalización y las extensiones al turno tarde.
+*   `[2026-09-15]`: **Persistencia y Sincronización Bidireccional de Horarios en Ficha Técnica (`SurgeryForm.tsx`)**:
+    *   **Problema Detectado**: Al editar y guardar la hora de fin de cirugía (`hfc`) en la ficha técnica, el formulario confirmaba guardado exitoso pero al reabrir la ficha se restablecía el horario previo.
+    *   **Causa Raíz**: El guardado persistía `cirugia_fin` en la tabla `surgery_forms`, pero no sincronizaba el campo `actual_end_time` (ni `actual_start_time`) en la tabla `surgeries`. A su vez, `fetchExistingForm` leía con mayor prioridad `surgeries.actual_end_time` de la base de datos o de la prop de la cirugía, sobreescribiendo el valor guardado en `surgery_forms`.
+    *   **Solución Aplicada**:
+        1. En `handleSave`, se agregó la actualización automática a la tabla `surgeries` con `actual_start_time` y `actual_end_time` formateados en `HH:mm:ss`.
+        2. En `fetchExistingForm`, se estableció que el valor guardado en `surgery_forms` (`form.cirugia_fin` y `form.cirugia_inicio`) tenga máxima prioridad sobre la tabla `surgeries` y sobre la prop en memoria.
+*   `[2026-09-14]`: **Nuevo Módulo de Ocupación de Consultorios, Calendario Dinámico y Feriados**:
+    *   **Tablas en Supabase (`quirofano`)**: Se crearon `consulting_rooms`, `consulting_professionals`, `consulting_room_schedules`, `calendar_holidays` y `consulting_calendar_exceptions` con RLS, claves foráneas e integridad referencial.
+    *   **Feriados y Asuetos de Sanidad**: Sembrado e integración de feriados nacionales de Argentina 2026 y fechas clave del sector de la salud (`ATSA - Día de la Sanidad` con cierre de consultorios externos, `Día del Médico`, etc.).
+    *   **Calendario Dinámico y Novedades**: Nueva vista `Calendario Fechas` en `ConsultingRoomsPage.tsx` con navegación por fecha real (subvistas Día y Mes) que proyecta la plantilla base semanal y aplica dinámicamente novedades:
+        *   🏖️ Vacaciones y Licencias médicas (el bloque se tacha con badge identificatorio).
+        *   🔄 Médicos Suplentes / Reemplazos (el bloque muestra al profesional que cubre la atención en color verde).
+        *   ⏰ Atenciones extraordinarias y 🚫 Bloqueo de consultorio por obras o mantenimiento.
+    *   **Migración de Datos**: Se ejecutó el script `scripts/migrate_consultorios.cjs` extrayendo y compactando 1.898 filas de slots de 30 minutos del Excel `HORARIOS CONSULTORIOS.xlsx` de Gerencia en 84 franjas horarias consolidadas para 13 consultorios y 34 profesionales.
+    *   **Vistas Operativas**: 1) Calendario Dinámico con Feriados/Novedades, 2) Grilla Base Semanal Continua, 3) Vista por Profesional, 4) Analítica de Ocupación vs. Meta 70% y 5) Gestión de Consultorios/Médicos con vinculación opcional a `quirofano.doctors` y `quirofano.users`.
 *   `[2026-09-11]`: **Nuevo Rol Híbrido "Administrativo ART"**:
     *   Se creó el rol de sistema `Administrativo ART` en `types.ts`, `LEGACY_PERMISSIONS`, configuración de usuarios (`UserModal.tsx`) y matriz de control de accesos (`PermissionsTab.tsx` / `Settings.tsx`).
     *   **Alcance**: Otorga permisos de visualización y edición completa de todas las cirugías del sanatorio (como `Administrativo`), integrando además acceso al **Tablero de Control ART** ([AdminDashboard.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/AdminDashboard.tsx)), gestión y tildado de *Pedido de autorización ART*, *Paciente Notificado*, confirmación de turnos, y capacidad de suspender/cancelar cirugías ([SurgeryDetail.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/SurgeryDetail.tsx) / [TopBanners.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/surgery-detail/TopBanners.tsx)).
