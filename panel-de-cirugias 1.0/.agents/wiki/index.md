@@ -18,6 +18,20 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-16]`: **Control Global de Consumo de Stock por Cirugías (v3.12.1)**:
+    *   **Switch Maestro SuperAdmin**: Se incorporó un toggle con control exclusivo para `SuperAdmin` en la cabecera de la sección *Stock / Farmacia* y en la pestaña *Vademécum* de Configuración para activar/desactivar globalmente el consumo automático de stock derivado de fichas quirúrgicas.
+    *   **Persistencia Backend**: El flag se almacena en `quirofano.admin_settings` (`stock_consumption_enabled`).
+    *   **Comportamiento en Ficha**: Cuando está en `OFF`, las fichas técnicas salvan normalmente los insumos registrados sin tocar las cantidades ni generar movimientos en el inventario. En `ON`, procesa y audita débitos y devoluciones en `quirofano.stock_movements`.
+*   `[2026-09-16]`: **Corrección de ReferenceError en Buscador de Consultorios (`finderSpecificDate`)**:
+    *   **Problema**: Al buscar turnos libres en Consultorios (`ConsultingRoomsPage.tsx`), saltaba pantalla de error "Algo salió mal" con `ReferenceError: finderSpecificDate is not defined`.
+    *   **Solución**: Se declaró e inicializó el estado `const [finderSpecificDate, setFinderSpecificDate] = useState<string>(() => formatDateToISO(new Date()));`.
+*   `[2026-09-16]`: **Corrección de Calendario Vacío para Usuario Admisión (`Calendar.tsx`)**:
+    *   **Problema**: Al ingresar con usuario Admisión (Administrativo de Guardias), el calendario mensual de Septiembre de 2026 se mostraba sin eventos a pesar de haber más de 85 cirugías.
+    *   **Causa y Solución**: Desborde de longitud de URL en PostgREST (HTTP 414) por consultar más de 380 UUIDs en `surgery_documents` de una sola vez. Se fragmentó la consulta en lotes de 50 IDs con `Promise.all` no bloqueante, se vinculó la clave de caché al usuario/rol (`roleKey`) y se añadieron `user?.id` y `user?.role` a las dependencias de carga.
+*   `[2026-09-16]`: **Normalización de Códigos de Vademécum e Histórico Acumulativo (`catalog_items.previous_codes`)**:
+    *   **Columna Acumulativa**: Se agregó `previous_codes TEXT[] DEFAULT '{}'` en `quirofano.catalog_items` y en la interfaz TypeScript `CatalogItem` en `types.ts`.
+    *   **Alineación con Reportes Sanatoriales**: Se actualizaron los códigos de insumos y medicamentos al código oficial del sistema sanatorial (PDFs de stock de Cirugía y Enfermería).
+    *   **Preservación de Historial**: Los códigos previos de la app fueron resguardados dentro del array `previous_codes`, permitiendo que futuras reasignaciones sigan acumulando códigos anteriores sin perder trazabilidad.
 *   `[2026-09-15]`: **Liquidación de Técnicos: Selección Multi-Práctica y Columna de Horarios (`TecnicoPanel.tsx`, v3.12.0)**:
     *   **Desglose Multi-Práctica**: Se implementó el soporte para liquidar cirugías con más de un código o práctica quirúrgica en el texto del procedimiento. Los administradores pueden tildar o destildar individualmente qué prácticas del nomenclador aplican al técnico.
     *   **Persistencia de Selección**: Se almacena la configuración de prácticas seleccionadas por cirugía en `quirofano.admin_settings` (`tecnico_selected_practices`).
@@ -212,6 +226,12 @@ El wiki está dividido en las siguientes secciones lógicas:
 *   `[2026-08-04]`: Agregado el filtro independiente de **Fecha de Facturación** (`planillaBillingStartDate` / `planillaBillingEndDate`) en el módulo de Facturación ([Billing.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Billing.tsx)). Convive con el filtro de Fecha de Práctica/Cirugía tanto en la cabecera del panel de **Estadísticas** como en la **Planilla de Internaciones**, filtrando los registros por su fecha de facturación asignada (`fe_factur`).
 *   `[2026-08-04]`: Lanzada la versión **v3.10.83**. Incluye la exención automática de prequirúrgicos, firma de consentimiento e indicador Cama/ART para cirugías ambulatorias y de guardia en la Ficha Clínica (`PatientSection.tsx` / `LogisticsSection.tsx` / `Kanban.tsx` / `Calendar.tsx`), edición de Guardias de Residentes y filtros de Facturación. Generado el paquete de distribución `dist`.
 *   `[2026-08-05]`: Lanzada la versión **v3.10.88**. Solucionado el problema de corte de texto en pulseras web y la doble rotación de 90° (`landscape: true`) en Electron desktop. Registrada la regla estricta de prohibición de modificaciones estéticas no solicitadas en `decisiones_tecnicas.md`.
+*   `[2026-09-16]`: Implementado el módulo integral de **Stock / Farmacia Quirúrgica** ([StockPage.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/StockPage.tsx)) y la vinculación con la **Ficha Técnica de Cirugía** ([SurgeryForm.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/SurgeryForm.tsx)):
+    - Acceso para roles `Tecnico`, `Quirofano` y `SuperAdmin` con 5 pestañas: Inventario General, Ingreso por Remito, Egreso Manual (UTI/Guardia/Piso/Vencimiento), Importación masiva Excel/CSV y Kardex histórico.
+    - Autocompletado de insumos con stock físico en tiempo real en la Ficha de Cirugía.
+    - Checkbox interno `[✓] Desc. stock` / `No descontar` con `print:hidden` para exclusión de impresiones físicas y soporte de uso residual/parcial de ampollas.
+    - Descuento automático en cirugías y reversión automática (`REINTEGRO_CIRUGIA`) ante destilde o eliminación de ítems.
+    - Migración de base de datos en Supabase: `catalog_items.stock_actual`, `catalog_items.stock_minimo`, `surgery_form_items.descontar_stock`, `surgery_form_items.stock_descontado` y nueva tabla `quirofano.stock_movements`.
 
 
 

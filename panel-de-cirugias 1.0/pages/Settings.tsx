@@ -387,6 +387,10 @@ const Settings: React.FC = () => {
                                 catalogFilters={s.catalogFilters}
                                 setCatalogFilters={s.setCatalogFilters}
                                 handleDeleteCatalogItem={s.handleDeleteCatalogItem}
+                                stockConsumptionEnabled={s.stockConsumptionEnabled}
+                                isTogglingStockConsumption={s.isTogglingStockConsumption}
+                                onToggleStockConsumption={s.toggleStockConsumption}
+                                isSuperAdmin={s.user?.role === 'SuperAdmin'}
                             />
                         )}
 

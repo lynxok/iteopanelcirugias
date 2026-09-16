@@ -219,3 +219,23 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     - **Tarifas por Práctica (`CREATE` / `UPDATE` / `DELETE`)**: Guarda el código de práctica, montos modificados/eliminados y el usuario responsable.
     - **Cirugías Manuales y Co-asignaciones (`CREATE` / `DELETE`)**: Identifica paciente, técnico sumado o removido, y quién ejecutó la acción.
     - **Fichadas y Conformidades (`CREATE` / `STATUS_CHANGE`)**: Registra la IP, tipo de fichada o monto liquidado al momento de otorgar la conformidad mensual.
+
+### Módulo de Stock, Farmacia Quirúrgica y Descuento en Cirugías (16/09/2026)
+*   **Sección Stock / Farmacia (`/stock`)**:
+    - Administrada por los roles `Tecnico`, `Quirofano` y `SuperAdmin`.
+    - Dispone de 5 pestañas operativas:
+      1. *Inventario General*: Balance en tiempo real, alertas de stock mínimo, filtros de tipo (`anesthesia` / `surgery`), modal de alta/edición de insumos y acciones rápidas de ajuste.
+      2. *Ingreso de Mercadería*: Recepción de insumos con proveedor, número de remito/factura, lote y observaciones.
+      3. *Egreso / Salida Manual*: Salidas extraordinarias no vinculadas a cirugía (derivaciones a UTI, Guardia, Piso, Vencimiento, Rotura, Urgencia) con médico o técnico solicitante.
+      4. *Importador Excel / CSV*: Carga masiva de catálogos mediante formato XLSX o CSV con previsualización y descarga de plantilla modelo.
+      5. *Kardex / Movimientos*: Auditoría cronológica inmutable de todos los movimientos de stock con balance anterior y resultante.
+*   **Ficha de Cirugía - Manejo de Insumos y Checkbox de Uso Interno**:
+    - **Separación de Tablas**: Insumos divididos estrictamente en *Anestesia* y *Cirugía / Descartables*.
+    - **Autocompletado con Vademécum**: Al escribir un insumo, el menú desplegable muestra el stock físico actual disponible en farmacia.
+    - **Checkbox de Uso Interno (`[✓] Desc. stock` / `No descontar`)**:
+      - Permite registrar el medicamento en el historial clínico del paciente aunque se haya consumido una fracción/residuo de ampolla o frasco que no deba descontar una unidad completa de stock.
+      - **Restricción Estricta de Impresión**: Estilizado obligatoriamente con la clase CSS `print:hidden`. Es invisible en la impresión física, exportación a PDF y hojas quirúrgicas oficiales.
+    - **Descuento y Reversión Automática**:
+      - Al guardar la ficha técnica con `descontar_stock = true`, descuenta automáticamente del inventario y registra un movimiento `CONSUMO_CIRUGIA` vinculado al ID de la cirugía y paciente.
+      - Si posteriormente se abre la ficha y se destilda el ítem o se elimina de la lista, el sistema detecta que estaba descontado (`stock_descontado = true`), **reintegra automáticamente las unidades al stock** y asienta un movimiento `REINTEGRO_CIRUGIA` sin romper la trazabilidad.
+    - **Integridad Histórica**: Las cirugías anteriores y registros históricos de materiales nunca se ven afectados ni recalculados retroactivamente.

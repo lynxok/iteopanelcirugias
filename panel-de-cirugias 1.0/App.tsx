@@ -39,6 +39,7 @@ const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard').then
 const ResidentShifts = lazyWithRetry(() => import('./pages/ResidentShifts'));
 const ConsultingRoomsPage = lazyWithRetry(() => import('./pages/ConsultingRoomsPage'));
 const TecnicoPanel = lazyWithRetry(() => import('./pages/TecnicoPanel'));
+const StockPage = lazyWithRetry(() => import('./pages/StockPage'));
 
 // Componentes estáticos que son ligeros
 import { PatientPrintLabel } from './components/PatientPrintLabel';
@@ -222,6 +223,7 @@ const App: React.FC = () => {
               <Route path="/medico" element={<RoleProtectedRoute sectionId="medico"><Layout><DoctorPanel /></Layout></RoleProtectedRoute>} />
               <Route path="/billing" element={<RoleProtectedRoute sectionId="billing"><Layout><Billing /></Layout></RoleProtectedRoute>} />
               <Route path="/tecnicos" element={<RoleProtectedRoute sectionId="tecnicos"><Layout><TecnicoPanel /></Layout></RoleProtectedRoute>} />
+              <Route path="/stock" element={<RoleProtectedRoute sectionId="stock"><Layout><StockPage /></Layout></RoleProtectedRoute>} />
               <Route path="/nueva-cirugia" element={<RoleProtectedRoute sectionId="surgeries" requiredLevel="edit"><Layout><SurgeryDetail /></Layout></RoleProtectedRoute>} />
               <Route path="/error-logs" element={<RoleProtectedRoute sectionId="error_logs"><Layout><ErrorLogViewer /></Layout></RoleProtectedRoute>} />
               <Route path="/help" element={<RoleProtectedRoute sectionId="help"><Layout><Help /></Layout></RoleProtectedRoute>} />

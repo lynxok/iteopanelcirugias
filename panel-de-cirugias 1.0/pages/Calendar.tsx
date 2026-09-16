@@ -488,9 +488,8 @@ const Calendar: React.FC = () => {
     useEffect(() => {
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
-        const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
         fetchInitialData(year, month);
-    }, [currentDate.getFullYear(), currentDate.getMonth()]); // Only re-fetch on month/year change
+    }, [currentDate.getFullYear(), currentDate.getMonth(), user?.id, user?.role]); // Re-fetch on month/year or user/role change
 
     // -- Cascade Displacement Logic --
     const calculateDisplacement = (
@@ -768,7 +767,8 @@ const Calendar: React.FC = () => {
     const fetchInitialData = async (targetYear?: number, targetMonth?: number, forceRefresh = false) => {
         const year = targetYear ?? currentDate.getFullYear();
         const month = targetMonth ?? currentDate.getMonth();
-        const cacheKey = `${year}-${month}`;
+        const roleKey = `${user?.id || 'anon'}_${user?.role || 'norole'}_${user?.doctorId || ''}_${user?.vendorId || ''}`;
+        const cacheKey = `${year}-${month}_${roleKey}`;
 
         // Instant load from cache if available and not forced
         if (!forceRefresh && calendarCache[cacheKey]) {
@@ -834,7 +834,9 @@ const Calendar: React.FC = () => {
             ]);
 
             const orData = orRes.data;
-            if (orRes.error) throw orRes.error;
+            if (orRes.error) {
+                console.warn('Error loading operating rooms:', orRes.error);
+            }
             if (surRes.error) throw surRes.error;
 
             // Sort operating rooms manually
@@ -890,16 +892,27 @@ const Calendar: React.FC = () => {
                 };
             });
 
-            // Fetch document categories only for retrieved surgeries
+            // Fetch document categories only for retrieved surgeries in chunks of 50 to avoid HTTP 414 / URI Too Long
             const surgeryIds = processedSurgeryData.map(s => s.id);
             let docData: any[] = [];
             if (surgeryIds.length > 0) {
-                const { data, error: docError } = await supabase
-                    .from('surgery_documents')
-                    .select('surgery_id, category')
-                    .in('surgery_id', surgeryIds);
-                if (docError) throw docError;
-                docData = data || [];
+                const chunkSize = 50;
+                try {
+                    const docPromises = [];
+                    for (let i = 0; i < surgeryIds.length; i += chunkSize) {
+                        const chunk = surgeryIds.slice(i, i + chunkSize);
+                        docPromises.push(
+                            supabase
+                                .from('surgery_documents')
+                                .select('surgery_id, category')
+                                .in('surgery_id', chunk)
+                        );
+                    }
+                    const docResults = await Promise.all(docPromises);
+                    docData = docResults.flatMap(r => r.data || []);
+                } catch (docErr) {
+                    console.warn('Non-blocking error fetching surgery documents:', docErr);
+                }
             }
 
             const surgeryDocsMap: Record<string, string[]> = {};

@@ -4,6 +4,12 @@ Este documento registra los cambios de versiones documentados anteriormente en e
 
 ## Versiones Recientes
 
+*   **v3.12.1 [2026-09-16]**: Lanzada la versión **v3.12.1**.
+    *   **Control Global de Consumo de Stock por Cirugías (`SurgeryForm.tsx`, `StockPage.tsx`, `VademecumTab.tsx`, `useSettings.ts`)**:
+        *   **Switch Maestro para SuperAdmin**: Se implementó un interruptor maestro global accesible exclusivamente por usuarios con rol `SuperAdmin` tanto en la cabecera de la sección *Stock / Farmacia* como en la pestaña *Vademécum* de Configuración.
+        *   **Persistencia Global en Supabase (`admin_settings`)**: El parámetro `stock_consumption_enabled` (`true`/`false`) se guarda y consulta en tiempo real mediante `save_admin_setting`.
+        *   **Condicionamiento en Ficha de Cirugía**: Si el switch se encuentra en `OFF`, las fichas técnicas permiten registrar insumos y medicamentos clínicamente pero **omiten el descuento de inventario** y la creación de movimientos de consumo/reintegro en `stock_movements`. Si se encuentra en `ON`, se activan los débitos y créditos automáticos sobre `quirofano.catalog_items.stock_actual`.
+        *   **Badge Indicativo de Estado en Ficha**: Incorporado un badge visual informativo en el encabezado de la sección de insumos de `SurgeryForm` indicando si el consumo automático se encuentra "Descuento de Stock Activo" o "Descuento de Stock Pausado".
 *   **v3.12.0 [2026-09-15]**: Lanzada la versión **v3.12.0**.
     *   **Módulo de Liquidación Técnica y Gestión Quirúrgica (`TecnicoPanel.tsx`, `types.ts`, `reglas_de_negocio.md`)**:
         *   **Desglose Multi-Práctica con Selección Individual**: Soporte para cirugías que contienen múltiples prácticas en el texto del procedimiento. El sistema permite tildar o destildar individualmente qué prácticas del nomenclador aplican al técnico para su cobro, persistiendo las selecciones en `admin_settings` (`tecnico_selected_practices`).

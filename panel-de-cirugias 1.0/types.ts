@@ -229,11 +229,37 @@ export interface CatalogItem {
   id: string;
   name: string;
   code?: string;
+  previous_codes?: string[];
   category: string;
   active: boolean;
   default_unit?: string;
   drug_name?: string;
+  stock_actual?: number;
+  stock_minimo?: number;
   created_at?: string;
+  updated_at?: string;
+}
+
+export type StockMovementType = 'INGRESO' | 'EGRESO_MANUAL' | 'CONSUMO_CIRUGIA' | 'REINTEGRO_CIRUGIA';
+
+export interface StockMovement {
+  id: string;
+  catalog_item_id: string;
+  movement_type: StockMovementType;
+  quantity: number;
+  previous_stock: number;
+  new_stock: number;
+  surgery_id?: string | null;
+  surgery_form_id?: string | null;
+  reason?: string | null;
+  authorized_by?: string | null;
+  document_number?: string | null;
+  notes?: string | null;
+  created_by?: string | null;
+  created_by_name?: string | null;
+  patient_name?: string | null;
+  created_at: string;
+  catalog_item?: CatalogItem;
 }
 
 export type AlertStatus = 'Active' | 'Resolved' | 'Snoozed';

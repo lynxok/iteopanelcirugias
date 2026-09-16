@@ -33,7 +33,7 @@ El RLS está habilitado y es altamente restrictivo en todas las tablas sensibles
 *   `quirofano.surgery_documents`, `quirofano.surgery_forms`, `quirofano.surgery_form_items`, `quirofano.surgery_materials`: Solo usuarios autenticados.
 *   `quirofano.hospital_rooms`, `quirofano.hospital_beds`, `quirofano.hospital_admissions`, `quirofano.hospital_bed_history`: Solo usuarios autenticados.
 *   `quirofano.email_notifications`, `quirofano.tecnico_manual_surgeries`: RLS activado, acceso exclusivo a usuarios autenticados.
-*   `quirofano.operating_rooms`, `quirofano.coverages`, `quirofano.catalog_items`, `quirofano.cie10_catalog`: Lectura (`SELECT`) pública/autenticada para carga de nombres y catálogos, escritura (`INSERT`/`UPDATE`/`DELETE`) con RLS habilitada para usuarios autenticados.
+*   `quirofano.operating_rooms`, `quirofano.coverages`, `quirofano.catalog_items`, `quirofano.cie10_catalog`: Lectura (`SELECT`) pública/autenticada para carga de nombres y catálogos, escritura (`INSERT`/`UPDATE`/`DELETE`) con RLS habilitada para usuarios autenticados. En `quirofano.catalog_items` se cuenta con la columna `previous_codes TEXT[] DEFAULT '{}'` para acumular de forma perpetua los códigos históricos ante reasignaciones o cambios en el sistema sanatorial.
 *   `quirofano.nomenclador_items`: Lectura (`SELECT`) pública/autenticada, escritura (`INSERT`/`UPDATE`/`DELETE`) con RLS exclusiva restringida a `SuperAdmin` (`Escritura exclusiva SuperAdmin nomenclador_items`).
 *   `quirofano.practice_bed_occupancy_stats`: Almacena el recuento y promedios/medianas de días de cama recolectados por procedimiento quirúrgico.
 
@@ -71,4 +71,13 @@ El RLS está habilitado y es altamente restrictivo en todas las tablas sensibles
 *   **Normalización y Unificación de Cobertura El Norte Seguros (31/08/2026)**:
     *   Unificada la cobertura `"EL NORTE SEGUROS"` en `quirofano.coverages` tipificada como `'ART'` (eliminando registro duplicado `"SEGUROS EL NORTE"` y saneando caracteres invisibles).
     *   Actualizadas masivamente 10 cirugías y pacientes asociados para garantizar la visibilidad inmediata por parte de usuarios con rol `Oficina ART`.
+*   **Módulo de Stock / Farmacia Quirúrgica y Vademécum (16/09/2026)**:
+    *   `quirofano.catalog_items`: Añadidas columnas `stock_actual NUMERIC DEFAULT 0` y `stock_minimo NUMERIC DEFAULT 0` para control de inventario de medicamentos (anestesia) y descartables quirúrgicos.
+    *   `quirofano.surgery_form_items`: Añadidas columnas:
+        - `descontar_stock BOOLEAN DEFAULT true`: Indicador operativo interno que determina si el ítem debe descontar inventario (true) o si se usó parcialmente / de forma residual (false).
+        - `stock_descontado BOOLEAN DEFAULT false`: Estado persistido de si la deducción ya fue aplicada sobre el inventario.
+        - `catalog_item_id UUID REFERENCES quirofano.catalog_items(id)`: Enlace formal al vademécum/catálogo maestro.
+    *   `quirofano.stock_movements`: Nueva tabla de auditoría y Kardex de movimientos:
+        - Columnas: `id`, `catalog_item_id`, `movement_type` (`ENTRADA`, `SALIDA_MANUAL`, `CONSUMO_CIRUGIA`, `REINTEGRO_CIRUGIA`, `AJUSTE_INVENTARIO`, `MERMA`), `quantity`, `previous_stock`, `new_stock`, `surgery_id`, `reason`, `authorized_by`, `document_number`, `notes`, `created_by`, `patient_name`, `created_at`.
+        - Habilitado Row Level Security (RLS) con políticas para usuarios autenticados.
 

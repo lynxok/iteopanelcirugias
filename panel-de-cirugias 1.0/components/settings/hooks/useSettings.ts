@@ -46,6 +46,8 @@ export const useSettings = () => {
     const [telegramGlobalEnabled, setTelegramGlobalEnabled] = useState(false);
     const [bccEnabled, setBccEnabled] = useState(false);
     const [cie10Enabled, setCie10Enabled] = useState(false);
+    const [stockConsumptionEnabled, setStockConsumptionEnabled] = useState(false);
+    const [isTogglingStockConsumption, setIsTogglingStockConsumption] = useState(false);
     const [smtpSettings, setSmtpSettings] = useState({
         host: '',
         port: '587',
@@ -278,6 +280,7 @@ export const useSettings = () => {
                     settingsData[s.key] = s.value;
                     if (s.key === 'telegram_enabled') setBccEnabled(s.bcc_enabled === true);
                     if (s.key === 'cie10_enabled') setCie10Enabled(s.value === 'true');
+                    if (s.key === 'stock_consumption_enabled') setStockConsumptionEnabled(s.value === 'true');
                 });
                 setTelegramGlobalEnabled(settingsData.telegram_enabled === 'true');
                 setSmtpSettings({
@@ -825,7 +828,7 @@ export const useSettings = () => {
         user, activeTab, setActiveTab, isPrintingBlank, setIsPrintingBlank, materialPagesCount, setMaterialPagesCount,
         vendors, coverages, users, doctors, ors, procedures, categories, catalogItems, cie10Items, nomencladorItems, specialties,
         isLoading, isLoadingCatalog, isLoadingNomenclador, isSavingNomenclador, isSavingPermissions, isSavingSmtp, isSavingSignature,
-        rolePermissions, telegramGlobalEnabled, bccEnabled, cie10Enabled, smtpSettings, setSmtpSettings,
+        rolePermissions, telegramGlobalEnabled, bccEnabled, cie10Enabled, stockConsumptionEnabled, isTogglingStockConsumption, smtpSettings, setSmtpSettings,
         signaturePin, setSignaturePin, currentSignature, setCurrentSignature, signatureRef, setSignatureRef,
         showUserModal, setShowUserModal, newUser, setNewUser, newUserSpecialty, setNewUserSpecialty, isEditingUser, setIsEditingUser,
         systemFields, handleAddSystemField, handleDeleteSystemField,
@@ -882,6 +885,31 @@ export const useSettings = () => {
             } else {
                 console.error(error);
                 alert('Error al guardar configuración de CIE-10: ' + error.message);
+            }
+        },
+        toggleStockConsumption: async () => {
+            if (user?.role !== 'SuperAdmin') {
+                alert('Acceso denegado: Únicamente SuperAdmin puede activar o desactivar el consumo automático de stock.');
+                return;
+            }
+            setIsTogglingStockConsumption(true);
+            const newValue = !stockConsumptionEnabled;
+            try {
+                const { error } = await supabase.rpc('save_admin_setting', {
+                    p_key: 'stock_consumption_enabled',
+                    p_value: String(newValue)
+                });
+                if (!error) {
+                    setStockConsumptionEnabled(newValue);
+                } else {
+                    console.error('Error al guardar configuración de consumo de stock:', error);
+                    alert('Error al guardar configuración: ' + error.message);
+                }
+            } catch (err: any) {
+                console.error('Error en toggleStockConsumption:', err);
+                alert('Error al modificar parámetro: ' + (err.message || err));
+            } finally {
+                setIsTogglingStockConsumption(false);
             }
         },
         handleDeleteUser: async (id: string) => {
