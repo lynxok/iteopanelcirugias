@@ -80,4 +80,5 @@ El RLS está habilitado y es altamente restrictivo en todas las tablas sensibles
     *   `quirofano.stock_movements`: Nueva tabla de auditoría y Kardex de movimientos:
         - Columnas: `id`, `catalog_item_id`, `movement_type` (`ENTRADA`, `SALIDA_MANUAL`, `CONSUMO_CIRUGIA`, `REINTEGRO_CIRUGIA`, `AJUSTE_INVENTARIO`, `MERMA`), `quantity`, `previous_stock`, `new_stock`, `surgery_id`, `reason`, `authorized_by`, `document_number`, `notes`, `created_by`, `patient_name`, `created_at`.
         - Habilitado Row Level Security (RLS) con políticas para usuarios autenticados.
+    *   `quirofano.admin_settings`: Incorporada la clave `stock_consumption_enabled` (`'true'` / `'false'`) manipulada exclusivamente por `SuperAdmin` mediante la función RPC `save_admin_setting` para habilitar o deshabilitar globalmente los débitos de stock en fichas quirúrgicas.
 

@@ -238,4 +238,9 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     - **Descuento y Reversión Automática**:
       - Al guardar la ficha técnica con `descontar_stock = true`, descuenta automáticamente del inventario y registra un movimiento `CONSUMO_CIRUGIA` vinculado al ID de la cirugía y paciente.
       - Si posteriormente se abre la ficha y se destilda el ítem o se elimina de la lista, el sistema detecta que estaba descontado (`stock_descontado = true`), **reintegra automáticamente las unidades al stock** y asienta un movimiento `REINTEGRO_CIRUGIA` sin romper la trazabilidad.
+    - **Switch Maestro Global de Consumo de Stock (SuperAdmin)**:
+      - Control configurable exclusivamente por `SuperAdmin` en la cabecera de `/stock` y en la pestaña *Vademécum* de Configuración (`quirofano.admin_settings.stock_consumption_enabled`).
+      - **En OFF**: La ficha quirúrgica permite cargar medicamentos e insumos para el registro clínico, pero **omite cualquier descuento o impacto en inventario**.
+      - **En ON**: Se habilitan plenamente los débitos y reintegros automáticos en `quirofano.catalog_items` y `quirofano.stock_movements`.
+      - **Badge en Ficha**: La ficha quirúrgica incluye un badge de estado ("Descuento de Stock Activo" / "Descuento de Stock Pausado") para dar visibilidad clara al usuario.
     - **Integridad Histórica**: Las cirugías anteriores y registros históricos de materiales nunca se ven afectados ni recalculados retroactivamente.
