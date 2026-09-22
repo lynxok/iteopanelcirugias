@@ -2,8 +2,13 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
-## Versiones Recientes
-
+*   **v3.12.3 [2026-09-22]**: Lanzada la versión **v3.12.3**.
+    *   **Módulo de Facturación y Dashboard Estadístico (`Billing.tsx`)**:
+        *   **Curvas Sincronizadas y Coherentes**: El gráfico de ingresos vs facturación respeta el 100% de los filtros aplicados (búsqueda por texto, rangos, etc.).
+        *   **Lógica de Avance de Facturación**: La curva azul muestra el total de internaciones/cirugías del día de práctica, la verde cuántas ya están facturadas y la naranja cuántas permanecen pendientes.
+        *   **Click Drill-Down a Detalle de Cirugías**: Clic en cualquier fecha del gráfico o barra de estado abre el modal interactivo con el listado detallado de pacientes.
+*   **v3.12.2 [2026-09-22]**: Lanzada la versión **v3.12.2**.
+    *   **Ficha Quirúrgica (`SurgeryForm.tsx`)**: Auto-finalización de cirugías al registrar y guardar la hora de fin de cirugía (`completed`).
 *   **v3.12.1 [2026-09-16]**: Lanzada la versión **v3.12.1**.
     *   **Control Global de Consumo de Stock por Cirugías (`SurgeryForm.tsx`, `StockPage.tsx`, `VademecumTab.tsx`, `useSettings.ts`)**:
         *   **Switch Maestro para SuperAdmin**: Se implementó un interruptor maestro global accesible exclusivamente por usuarios con rol `SuperAdmin` tanto en la cabecera de la sección *Stock / Farmacia* como en la pestaña *Vademécum* de Configuración.

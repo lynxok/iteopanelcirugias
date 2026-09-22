@@ -798,68 +798,87 @@ const Billing = () => {
                     ? [...top5, { name: 'OTRAS', value: othersCount }]
                     : top5;
 
-                // Datos para volumen diario (agrupados por fecha de práctica y fecha de factura en período filtrado)
-                const uniqueDates = new Set<string>();
-                const admissionsInPeriod = planillaRows.filter(r => {
-                    if (!r.fechaRaw) return false;
-                    const rowDate = r.fechaRaw.substring(0, 10);
-                    if (planillaStartDate && rowDate < planillaStartDate) return false;
-                    if (planillaEndDate && rowDate > planillaEndDate) return false;
-                    return true;
+                // Datos para volumen por día (basados estrictamente en el universo filtrado filteredPlanilla)
+                const dateMap: Record<string, { total: PlanillaRow[]; billed: PlanillaRow[]; pending: PlanillaRow[] }> = {};
+
+                filteredPlanilla.forEach(r => {
+                    if (!r.fechaRaw) return;
+                    const dateStr = r.fechaRaw.substring(0, 10);
+                    if (!dateMap[dateStr]) {
+                        dateMap[dateStr] = { total: [], billed: [], pending: [] };
+                    }
+                    dateMap[dateStr].total.push(r);
+                    if (r.fe_factur) {
+                        dateMap[dateStr].billed.push(r);
+                    } else {
+                        dateMap[dateStr].pending.push(r);
+                    }
                 });
 
-                const invoicedInPeriod = planillaRows.filter(r => {
-                    if (!r.fe_factur) return false;
-                    if (planillaStartDate && r.fe_factur < planillaStartDate) return false;
-                    if (planillaEndDate && r.fe_factur > planillaEndDate) return false;
-                    return true;
-                });
+                // Ordenar fechas cronológicamente
+                const allSortedDates = Object.keys(dateMap).sort();
+                // Si no hay filtro de fechas específico, mostramos los últimos 20 días activos
+                const activeDates = (planillaStartDate || planillaEndDate)
+                    ? allSortedDates
+                    : allSortedDates.slice(-20);
 
-                if (planillaStartDate || planillaEndDate) {
-                    admissionsInPeriod.forEach(r => {
-                        if (r.fechaRaw) uniqueDates.add(r.fechaRaw.substring(0, 10));
-                    });
-                    invoicedInPeriod.forEach(r => {
-                        if (r.fe_factur) uniqueDates.add(r.fe_factur.substring(0, 10));
-                    });
-                } else {
-                    const sortedAdms = [...planillaRows]
-                        .filter(r => r.fechaRaw)
-                        .sort((a, b) => b.fechaRaw.localeCompare(a.fechaRaw))
-                        .slice(0, 15);
-                    sortedAdms.forEach(r => uniqueDates.add(r.fechaRaw.substring(0, 10)));
-                }
-
-                const sortedDates = Array.from(uniqueDates).sort();
-
-                const volumeChartData = sortedDates.map(dateStr => {
-                    const formattedDate = format(parseISO(dateStr), 'dd/MM/yyyy');
-                    
-                    const totalAdmissions = admissionsInPeriod.filter(r => r.fechaRaw && r.fechaRaw.substring(0, 10) === dateStr).length;
-                    const totalInvoiced = invoicedInPeriod.filter(r => r.fe_factur && r.fe_factur === dateStr).length;
-                    const invoicedPrevPeriod = invoicedInPeriod.filter(r => 
-                        r.fe_factur && r.fe_factur === dateStr && r.fechaRaw && (planillaStartDate ? r.fechaRaw.substring(0, 10) < planillaStartDate : false)
-                    ).length;
-
+                const volumeChartData = activeDates.map(dateStr => {
+                    let formattedDate = dateStr;
+                    try {
+                        formattedDate = format(parseISO(dateStr), 'dd/MM/yyyy');
+                    } catch (e) {
+                        formattedDate = dateStr;
+                    }
+                    const dayData = dateMap[dateStr] || { total: [], billed: [], pending: [] };
                     return {
+                        rawDate: dateStr,
                         date: formattedDate,
-                        "Total Internaciones": totalAdmissions,
-                        "Total Facturado": totalInvoiced,
-                        "Facturado Períodos Anteriores": invoicedPrevPeriod
+                        "Total Internaciones": dayData.total.length,
+                        "Facturadas": dayData.billed.length,
+                        "Sin Facturar": dayData.pending.length,
+                        totalRows: dayData.total,
+                        billedRows: dayData.billed,
+                        pendingRows: dayData.pending
                     };
                 });
 
-                const chartDataToRender = (planillaStartDate || planillaEndDate) ? volumeChartData : volumeChartData.slice(-15);
+                const chartDataToRender = volumeChartData;
 
                 // Datos de comparación de barra para el período filtrado
                 const totalInPeriod = filteredPlanilla.length;
                 const billedInPeriod = filteredPlanilla.filter(r => r.fe_factur).length;
+                const pendingInPeriod = filteredPlanilla.filter(r => !r.fe_factur).length;
                 const aoterInPeriod = filteredPlanilla.filter(r => r.fe_aoter).length;
 
                 const stateChartData = [
-                    { name: 'Total Internaciones', cantidad: totalInPeriod, fill: '#6366f1' },
-                    { name: 'Facturadas', cantidad: billedInPeriod, fill: '#10b981' },
-                    { name: 'Con AOTER', cantidad: aoterInPeriod, fill: '#f59e0b' },
+                    { 
+                        name: 'Total Internaciones', 
+                        cantidad: totalInPeriod, 
+                        fill: '#6366f1',
+                        rows: filteredPlanilla,
+                        description: 'Total de cirugías computadas en el período filtrado.'
+                    },
+                    { 
+                        name: 'Facturadas', 
+                        cantidad: billedInPeriod, 
+                        fill: '#10b981',
+                        rows: filteredPlanilla.filter(r => r.fe_factur),
+                        description: 'Cirugías que ya cuentan con fecha de facturación asignada.'
+                    },
+                    { 
+                        name: 'Sin Facturar / Pendientes', 
+                        cantidad: pendingInPeriod, 
+                        fill: '#f97316',
+                        rows: filteredPlanilla.filter(r => !r.fe_factur),
+                        description: 'Cirugías pendientes de facturación (sin fecha de factura).'
+                    },
+                    { 
+                        name: 'Con AOTER', 
+                        cantidad: aoterInPeriod, 
+                        fill: '#f59e0b',
+                        rows: filteredPlanilla.filter(r => r.fe_aoter),
+                        description: 'Cirugías con fecha AOTER cargada.'
+                    },
                 ];
 
                 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#94a3b8'];
@@ -1147,63 +1166,109 @@ const Billing = () => {
                                 </div>
 
                                 {/* Volumen de Internaciones */}
-                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
-                                    <h3 className="font-black text-slate-800 uppercase tracking-tight text-xs mb-6 flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-primary text-lg">stacked_line_chart</span>
-                                        Ingresos de Internación por Día (Últimos activos)
-                                    </h3>
-                                    <div className="h-64">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <ComposedChart data={chartDataToRender}>
-                                                <defs>
-                                                    <linearGradient id="colorInternaciones" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
-                                                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                                                    </linearGradient>
-                                                    <linearGradient id="colorFacturado" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                                                    </linearGradient>
-                                                </defs>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                                <XAxis dataKey="date" stroke="#94a3b8" fontSize={9} fontWeight="bold" />
-                                                <YAxis stroke="#94a3b8" fontSize={9} fontWeight="bold" allowDecimals={false} />
-                                                <Tooltip
-                                                    contentStyle={{ background: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff' }}
-                                                    labelClassName="text-slate-400 font-bold text-xs uppercase"
-                                                />
-                                                <Area type="monotone" dataKey="Total Internaciones" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorInternaciones)" />
-                                                <Area type="monotone" dataKey="Total Facturado" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorFacturado)" />
-                                                <Line type="monotone" dataKey="Facturado Períodos Anteriores" stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 3 }} />
-                                            </ComposedChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
+                                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
+                                     <div className="flex items-center justify-between mb-4">
+                                         <div>
+                                             <h3 className="font-black text-slate-800 uppercase tracking-tight text-xs flex items-center gap-2">
+                                                 <span className="material-symbols-outlined text-primary text-lg">stacked_line_chart</span>
+                                                 Ingresos de Internación vs Facturación por Día
+                                             </h3>
+                                             <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                                                 Haz clic en cualquier punto o día para ver el detalle de cirugías facturadas o pendientes.
+                                             </p>
+                                         </div>
+                                     </div>
+                                     <div className="h-64">
+                                         <ResponsiveContainer width="100%" height="100%">
+                                             <ComposedChart 
+                                                 data={chartDataToRender}
+                                                 onClick={(e: any) => {
+                                                     if (e && e.activePayload && e.activePayload.length > 0) {
+                                                         const payload = e.activePayload[0].payload;
+                                                         setStatModalSearch('');
+                                                         setStatModalData({
+                                                             title: `Cirugías del ${payload.date}`,
+                                                             description: `${payload['Total Internaciones']} cirugías realizadas el ${payload.date} (${payload['Facturadas']} facturadas, ${payload['Sin Facturar']} pendientes).`,
+                                                             icon: 'event_available',
+                                                             badgeColor: 'indigo',
+                                                             rows: payload.totalRows || []
+                                                         });
+                                                     }
+                                                 }}
+                                                 className="cursor-pointer"
+                                             >
+                                                 <defs>
+                                                     <linearGradient id="colorInternaciones" x1="0" y1="0" x2="0" y2="1">
+                                                         <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/>
+                                                         <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                                                     </linearGradient>
+                                                     <linearGradient id="colorFacturado" x1="0" y1="0" x2="0" y2="1">
+                                                         <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
+                                                         <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                                     </linearGradient>
+                                                 </defs>
+                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                 <XAxis dataKey="date" stroke="#94a3b8" fontSize={9} fontWeight="bold" />
+                                                 <YAxis stroke="#94a3b8" fontSize={9} fontWeight="bold" allowDecimals={false} />
+                                                 <Tooltip
+                                                     contentStyle={{ background: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff' }}
+                                                     labelClassName="text-slate-400 font-bold text-xs uppercase"
+                                                 />
+                                                 <Area type="monotone" dataKey="Total Internaciones" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorInternaciones)" />
+                                                 <Area type="monotone" dataKey="Facturadas" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorFacturado)" />
+                                                 <Line type="monotone" dataKey="Sin Facturar" stroke="#f97316" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 3 }} />
+                                             </ComposedChart>
+                                         </ResponsiveContainer>
+                                     </div>
+                                 </div>
 
-                                {/* Estados de Facturación */}
-                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-3">
-                                    <h3 className="font-black text-slate-800 uppercase tracking-tight text-xs mb-6 flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-primary text-lg">bar_chart</span>
-                                        Estado de Carga de Fechas de Facturación
-                                    </h3>
-                                    <div className="h-64">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={stateChartData}>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                                <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} fontWeight="bold" />
-                                                <YAxis stroke="#94a3b8" fontSize={10} fontWeight="bold" allowDecimals={false} />
-                                                <Tooltip
-                                                    contentStyle={{ background: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff' }}
-                                                />
-                                                <Bar dataKey="cantidad" name="Registros" radius={[8, 8, 0, 0]}>
-                                                    {stateChartData.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                                                    ))}
-                                                </Bar>
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
+                                 {/* Estados de Facturación */}
+                                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-3">
+                                     <div className="flex items-center justify-between mb-4">
+                                         <div>
+                                             <h3 className="font-black text-slate-800 uppercase tracking-tight text-xs flex items-center gap-2">
+                                                 <span className="material-symbols-outlined text-primary text-lg">bar_chart</span>
+                                                 Estado de Carga de Fechas de Facturación
+                                             </h3>
+                                             <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                                                 Haz clic en cualquier barra para ver el listado de pacientes en ese estado.
+                                             </p>
+                                         </div>
+                                     </div>
+                                     <div className="h-64">
+                                         <ResponsiveContainer width="100%" height="100%">
+                                             <BarChart 
+                                                 data={stateChartData}
+                                                 onClick={(e: any) => {
+                                                     if (e && e.activePayload && e.activePayload.length > 0) {
+                                                         const payload = e.activePayload[0].payload;
+                                                         setStatModalSearch('');
+                                                         setStatModalData({
+                                                             title: payload.name,
+                                                             description: payload.description,
+                                                             icon: 'bar_chart',
+                                                             badgeColor: 'indigo',
+                                                             rows: payload.rows || []
+                                                         });
+                                                     }
+                                                 }}
+                                                 className="cursor-pointer"
+                                             >
+                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                 <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} fontWeight="bold" />
+                                                 <YAxis stroke="#94a3b8" fontSize={10} fontWeight="bold" allowDecimals={false} />
+                                                 <Tooltip
+                                                     contentStyle={{ background: '#0f172a', borderRadius: '12px', border: 'none', color: '#fff' }}
+                                                 />
+                                                 <Bar dataKey="cantidad" name="Registros" radius={[8, 8, 0, 0]}>
+                                                     {stateChartData.map((entry, index) => (
+                                                         <Cell key={`cell-${index}`} fill={entry.fill} className="hover:opacity-80 transition-opacity cursor-pointer" />
+                                                     ))}
+                                                 </Bar>
+                                             </BarChart>
+                                         </ResponsiveContainer>
+                                     </div>
+                                 </div>
                             </div>
                         )}
                     </div>

@@ -1,6 +1,21 @@
 # CHANGELOG
 
-## v3.12.0 (2026-09-15)
+## v3.12.3 (2026-09-22)
+- **Módulo de Facturación y Dashboard Estadístico (`Billing.tsx`)**:
+    * **Corrección y Alineación de Curvas en Dashboard Estadístico**:
+        - Sincronización estricta de las curvas temporales con el universo filtrado (`filteredPlanilla`), respetando filtros por buscador, paciente, profesional o cobertura.
+        - Redefinición lógica de la serie temporal: la curva azul refleja el volumen de internaciones/cirugías del día de práctica, la curva verde refleja cuántas de esas cirugías ya fueron efectivamente facturadas (`fe_factur`), y la línea naranja punteada indica las pendientes por facturar/cobrar.
+    * **Interactividad y Drill-down Completo**:
+        - Habilitación de clic en cualquier punto del gráfico temporal diario o en las barras de estado para abrir el modal emergente con el desglose individual de cada cirugía (paciente, DNI, NUC, médico, cobertura, fecha factura, fecha AOTER).
+
+## v3.12.2 (2026-09-22)
+- **Ficha Quirúrgica (`SurgeryForm.tsx`)**:
+    * **Finalización Automática de Cirugías**:
+        - Al registrar o modificar la hora de fin de cirugía y presionar "Guardar Ficha", el estado de la cirugía pasa automáticamente a `completed` para agilizar el circuito sin requerir actualización manual en Monitor o Kanban.
+
+## v3.12.1 (2026-09-16)
+- **Control Global de Consumo de Stock por Cirugías (`SurgeryForm.tsx`, `StockPage.tsx`)**:
+    * Switch maestro de stock para activar o pausar débitos automáticos por cirugías.
 - **Módulo de Liquidación Técnica y Gestión Quirúrgica (`TecnicoPanel.tsx`, `types.ts`, `reglas_de_negocio.md`)**:
     * **Desglose Multi-Práctica con Selección Individual de Nomenclador**:
         - Soporte integral para cirugías que incluyen múltiples prácticas simultáneas: ahora el sistema parsea y desglosa cada código/práctica individualmente.
