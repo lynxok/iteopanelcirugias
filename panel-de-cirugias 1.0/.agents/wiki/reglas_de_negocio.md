@@ -49,6 +49,7 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
         1. La tabla `quirofano.surgery_forms` (`cirugia_inicio`, `cirugia_fin`).
         2. La tabla `quirofano.surgeries` (`actual_start_time`, `actual_end_time`), garantizando que el Monitor, Calendario y reportes reflejen el nuevo horario sin desfasaje.
     *   **Prioridad de Carga (`fetchExistingForm`)**: La hora explícitamente cargada en la Ficha Técnica (`form.cirugia_inicio`, `form.cirugia_fin`) actúa como la fuente de verdad prioritaria frente a cualquier dato previo en caché o en la tabla de cirugías.
+    *   **Auto-Finalización al Guardar Ficha Técnica**: Si al guardar la Ficha Técnica (`SurgeryForm`) se registra una hora efectiva de fin de cirugía (`actual_end_time`), el sistema actualiza de forma automática el estado de la cirugía a `completed` (siempre que no esté cancelada o suspendida), registrando la acción en `audit_logs` y permitiendo su pase inmediato al módulo de Facturación.
     *   **Regla de Anestesia vs Cirugía**: Si la Hora de Fin de Anestesia (`H.F. ANESTESIA`) es posterior a la Hora de Fin de Cirugía cargada (`H.F. CIRUGÍA`), el fin de cirugía adopta automáticamente el horario de fin de anestesia (`finalHfc = tHfa`).
 *   **Auto-Inicio**: Si una cirugía con horario asignado se encuentra en estado "Pendiente" a la hora de comienzo programada, el sistema la muestra como "En Curso" en tiempo real.
 *   **Auto-Finalización**:
