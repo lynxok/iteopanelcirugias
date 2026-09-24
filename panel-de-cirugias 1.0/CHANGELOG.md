@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v3.12.6 (2026-09-24)
+- **Actualización y Distribución Multi-Nomenclador**:
+    * Sincronización completa de binarios e instalador NSIS para la suite de nomencladores dinámicos y asignación múltiple por cobertura médica.
+
 ## v3.12.5 (2026-09-24)
 - **Soporte de Múltiples Nomencladores Simultáneos por Cobertura**:
     * **Asociación Multi-Nomenclador**: Cada cobertura médica puede tener activos múltiples nomencladores en simultáneo (ej. `AOTER + Neurocirugía`, `OSER + Neurocirugía`).
