@@ -21,20 +21,30 @@ const NomencladorSelectorModal: React.FC<NomencladorSelectorModalProps> = ({ isO
     const [isLoading, setIsLoading] = useState(false);
     const [subFilter, setSubFilter] = useState<'ALL' | 'AOTER' | 'NN'>('ALL');
 
-    const isCustomCatalog = useMemo(() => {
-        return Boolean(nomencladorType && nomencladorType !== 'AOTER' && nomencladorType !== 'NN');
+    const activeCatalogs = useMemo(() => {
+        if (!nomencladorType || nomencladorType === 'AOTER / NN') {
+            return ['AOTER', 'NN'];
+        }
+        if (nomencladorType.includes('+')) {
+            return nomencladorType.split('+').map(s => s.trim().toUpperCase()).filter(Boolean);
+        }
+        return [nomencladorType.trim().toUpperCase()];
     }, [nomencladorType]);
+
+    const isCustomCatalog = useMemo(() => {
+        return activeCatalogs.some(c => c !== 'AOTER' && c !== 'NN');
+    }, [activeCatalogs]);
 
     const isOserOnly = useMemo(() => {
-        return nomencladorType === 'OSER';
-    }, [nomencladorType]);
+        return activeCatalogs.length === 1 && activeCatalogs[0] === 'OSER';
+    }, [activeCatalogs]);
 
     const allowedTypes = useMemo(() => {
-        if (isCustomCatalog) return [nomencladorType];
+        if (isCustomCatalog) return activeCatalogs;
         if (subFilter === 'AOTER') return ['AOTER'];
         if (subFilter === 'NN') return ['NN'];
         return ['AOTER', 'NN'];
-    }, [isCustomCatalog, nomencladorType, subFilter]);
+    }, [isCustomCatalog, activeCatalogs, subFilter]);
 
     useEffect(() => {
         if (isOpen) {

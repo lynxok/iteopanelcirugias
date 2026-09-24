@@ -1,5 +1,5 @@
 import React from 'react';
-import { Coverage, Vendor, NomencladorCatalog } from '../../../types';
+import { Coverage, Vendor, NomencladorCatalog, parseCoverageNomencladores, formatCoverageNomencladores } from '../../../types';
 
 interface CoverageModalProps {
     show: boolean;
@@ -72,23 +72,54 @@ const CoverageModal: React.FC<CoverageModalProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 flex items-center gap-1">
-                            <span className="material-symbols-outlined text-sm">inventory</span>
-                            Tipo de Nomenclador
+                        <label className="block text-xs font-bold text-slate-700 uppercase mb-2 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-sm text-primary">inventory</span>
+                                Nomencladores Habilitados
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-normal lowercase">selección múltiple</span>
                         </label>
-                        <select
-                            value={coverageForm.nomenclador_type || ''}
-                            onChange={e => setCoverageForm({ ...coverageForm, nomenclador_type: e.target.value || null })}
-                            className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-bold"
-                        >
-                            <option value="">Por defecto (AOTER)</option>
-                            {catalogs.map(cat => (
-                                <option key={cat.id} value={cat.id}>
-                                    Nomenclador {cat.name}
-                                </option>
-                            ))}
-                        </select>
-                        <p className="text-[10px] text-slate-400 mt-1">Define qué lista de procedimientos se usará para esta cobertura.</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            {catalogs.map(cat => {
+                                const activeCatalogs = parseCoverageNomencladores(coverageForm);
+                                const isChecked = activeCatalogs.includes(cat.id.toUpperCase());
+
+                                return (
+                                    <label
+                                        key={cat.id}
+                                        className={`flex items-center gap-2.5 p-2 rounded-lg border text-xs font-bold cursor-pointer transition-all ${
+                                            isChecked
+                                                ? 'bg-blue-50 border-blue-300 text-blue-900 shadow-sm'
+                                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                                        }`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            className="size-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                            checked={isChecked}
+                                            onChange={() => {
+                                                let nextList: string[];
+                                                if (isChecked) {
+                                                    nextList = activeCatalogs.filter(c => c !== cat.id.toUpperCase());
+                                                    if (nextList.length === 0) nextList = ['AOTER'];
+                                                } else {
+                                                    nextList = [...activeCatalogs, cat.id.toUpperCase()];
+                                                }
+                                                setCoverageForm({
+                                                    ...coverageForm,
+                                                    nomenclador_type: formatCoverageNomencladores(nextList),
+                                                    nomenclador_types: nextList
+                                                });
+                                            }}
+                                        />
+                                        <span className="truncate">{cat.name}</span>
+                                    </label>
+                                );
+                            })}
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1.5">
+                            Puede asignar varios nomencladores simultáneamente a esta cobertura.
+                        </p>
                     </div>
                 </div>
                 <div className="p-4 md:p-6 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex justify-end gap-3">

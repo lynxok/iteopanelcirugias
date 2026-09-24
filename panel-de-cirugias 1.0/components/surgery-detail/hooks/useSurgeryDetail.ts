@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../../src/lib/supabase';
 import { captureError } from '../../../src/lib/errorLogger';
 import { createOrUpdateDoctorAlert, syncSurgeryAlerts } from '../../../src/lib/alertService';
-import { UserRole, SurgeryMaterial, SurgeryDocument } from '../../../types';
+import { UserRole, SurgeryMaterial, SurgeryDocument, parseCoverageNomencladores } from '../../../types';
 import { generateUUID } from '../../../src/lib/uuid';
 import { DOCUMENT_CATEGORIES, FALLBACK_DOCTORS, FALLBACK_VENDORS, FALLBACK_COVERAGES } from '../constants';
 import { checkAccess, checkFieldPermission, LEGACY_PERMISSIONS } from '../../../src/lib/permissions';
@@ -368,19 +368,23 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
     }, [id, isNew]);
 
     // Update nomenclador type based on selected medical coverage
+    const [currentNomencladorTypes, setCurrentNomencladorTypes] = useState<string[]>(['AOTER', 'NN']);
+
     useEffect(() => {
         if (!medicalCoverage || availableCoverages.length === 0) {
+            setCurrentNomencladorTypes(['AOTER', 'NN']);
             setCurrentNomencladorType('AOTER / NN');
             return;
         }
         
         const coverage = availableCoverages.find(c => c.name.toLowerCase() === medicalCoverage.toLowerCase());
-        const customType = coverage?.nomenclador_type;
+        const catalogs = parseCoverageNomencladores(coverage);
 
-        if (customType) {
-            setCurrentNomencladorType(customType.toUpperCase());
-        } else if (coverage?.name.toUpperCase().includes('OSER') || medicalCoverage.toUpperCase().includes('OSER')) {
-            setCurrentNomencladorType('OSER');
+        setCurrentNomencladorTypes(catalogs.length > 0 ? catalogs : ['AOTER', 'NN']);
+        if (catalogs.length === 1) {
+            setCurrentNomencladorType(catalogs[0]);
+        } else if (catalogs.length > 1) {
+            setCurrentNomencladorType(catalogs.join(' + '));
         } else {
             setCurrentNomencladorType('AOTER / NN');
         }
@@ -519,9 +523,9 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
         try {
             const defaultItem = { code: '00.00.00', description: 'A DEFINIR', type: '' };
             const cleanTerm = term.trim().toLowerCase();
-            const allowedTypes = currentNomencladorType === 'AOTER / NN' 
-                ? ['AOTER', 'NN'] 
-                : [currentNomencladorType];
+            const allowedTypes = currentNomencladorTypes.length > 0 
+                ? currentNomencladorTypes 
+                : ['AOTER', 'NN'];
 
             if (cleanTerm.length < 2) {
                 setNomencladorSuggestions([]);

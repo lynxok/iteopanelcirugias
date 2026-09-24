@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v3.12.5 (2026-09-24)
+- **Soporte de Múltiples Nomencladores Simultáneos por Cobertura**:
+    * **Asociación Multi-Nomenclador**: Cada cobertura médica puede tener activos múltiples nomencladores en simultáneo (ej. `AOTER + Neurocirugía`, `OSER + Neurocirugía`).
+    * **No Destructivo**: La asociación de un nuevo catálogo a todas o varias coberturas suma el nomenclador a las coberturas seleccionadas sin desasociar ni sobrescribir los otros catálogos que ya tenían.
+    * **Modal de Coberturas**: Selector con checkboxes interactivos para activar o desactivar cada catálogo para una cobertura individual.
+    * **Búsqueda Quirúrgica Unificada**: El buscador de prácticas consulta y sugiere simultáneamente todas las prácticas pertenecientes a cualquiera de los nomencladores habilitados para la cobertura del paciente.
+
 ## v3.12.4 (2026-09-24)
 - **Gestión Integral de Nomencladores y Asociación de Coberturas Médicas**:
     * **Catálogos Dinámicos de Nomencladores (`Settings.tsx`, `NomencladorTab.tsx`, `ManageCatalogsModal.tsx`)**:

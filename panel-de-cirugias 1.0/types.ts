@@ -141,6 +141,38 @@ export interface Coverage {
   type: 'Obra Social' | 'ART' | string;
   vendor_id?: string;
   nomenclador_type?: string | null;
+  nomenclador_types?: string[];
+}
+
+export function parseCoverageNomencladores(coverage?: Partial<Coverage> | null): string[] {
+  if (!coverage) return ['AOTER'];
+  if (Array.isArray(coverage.nomenclador_types) && coverage.nomenclador_types.length > 0) {
+    return Array.from(new Set(coverage.nomenclador_types.map(s => s.trim().toUpperCase())));
+  }
+  const raw = coverage.nomenclador_type;
+  if (!raw || !raw.trim()) {
+    // Si el nombre es OSER por defecto asigna OSER, sino AOTER
+    if (coverage.name && coverage.name.toUpperCase().includes('OSER')) {
+      return ['OSER'];
+    }
+    return ['AOTER'];
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return Array.from(new Set(parsed.map((s: any) => String(s).trim().toUpperCase())));
+    }
+  } catch {
+    // No es JSON, es un string plano
+  }
+  return [raw.trim().toUpperCase()];
+}
+
+export function formatCoverageNomencladores(catalogs: string[]): string {
+  const unique = Array.from(new Set(catalogs.map(s => s.trim().toUpperCase()).filter(Boolean)));
+  if (unique.length === 0) return JSON.stringify(['AOTER']);
+  if (unique.length === 1) return unique[0];
+  return JSON.stringify(unique);
 }
 
 export interface NomencladorItem {

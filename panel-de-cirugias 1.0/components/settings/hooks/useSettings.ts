@@ -4,7 +4,7 @@ import { useAuth } from '../../../src/lib/AuthContext';
 import { 
     Doctor, OperatingRoom, ProcedureType, AppUser, Vendor, 
     UserRole, MaterialTemplate, Coverage, CatalogItem, NomencladorItem,
-    NomencladorCatalog
+    NomencladorCatalog, parseCoverageNomencladores, formatCoverageNomencladores
 } from '../../../types';
 import { LEGACY_PERMISSIONS } from '../../../src/lib/permissions';
 
@@ -214,7 +214,13 @@ export const useSettings = () => {
 
     const fetchCoverages = useCallback(async () => {
         const { data, error } = await supabase.from('coverages').select('id, name, type, vendor_id, nomenclador_type').order('name');
-        if (!error && data) setCoverages(data);
+        if (!error && data) {
+            const mapped = data.map((c: any) => ({
+                ...c,
+                nomenclador_types: parseCoverageNomencladores(c)
+            }));
+            setCoverages(mapped);
+        }
     }, []);
 
     const fetchProcedures = useCallback(async () => {
@@ -739,27 +745,47 @@ export const useSettings = () => {
             if (setErr) throw setErr;
             setNomencladorCatalogs(updatedList);
 
-            // 2. Sincronizar asignaciones de coberturas
-            // Coberturas que deberían tener este catalog.id
+            // 2. Sincronizar asignaciones de coberturas sin destruir los demás nomencladores
             const targetIdsSet = new Set(assignedCoverageIds);
+            const { data: allDbCoverages, error: fetchErr } = await supabase
+                .from('coverages')
+                .select('id, name, nomenclador_type');
 
-            // A) Actualizar coberturas seleccionadas a catalog.id
-            if (assignedCoverageIds.length > 0) {
-                const { error: assignErr } = await supabase
-                    .from('coverages')
-                    .update({ nomenclador_type: catalog.id })
-                    .in('id', assignedCoverageIds);
-                if (assignErr) throw assignErr;
+            if (fetchErr) throw fetchErr;
+
+            const updates: { id: string; nomenclador_type: string }[] = [];
+
+            for (const cov of (allDbCoverages || [])) {
+                const currentCatalogs = parseCoverageNomencladores(cov);
+                const hasCatalog = currentCatalogs.includes(catalog.id.toUpperCase());
+                const shouldHave = targetIdsSet.has(cov.id);
+
+                let nextCatalogs = [...currentCatalogs];
+                if (shouldHave && !hasCatalog) {
+                    nextCatalogs.push(catalog.id.toUpperCase());
+                } else if (!shouldHave && hasCatalog) {
+                    nextCatalogs = nextCatalogs.filter(c => c !== catalog.id.toUpperCase());
+                    if (nextCatalogs.length === 0) {
+                        nextCatalogs = ['AOTER'];
+                    }
+                }
+
+                // Si hubo cambio
+                const currentFormatted = formatCoverageNomencladores(currentCatalogs);
+                const nextFormatted = formatCoverageNomencladores(nextCatalogs);
+                if (currentFormatted !== nextFormatted) {
+                    updates.push({ id: cov.id, nomenclador_type: nextFormatted });
+                }
             }
 
-            // B) Coberturas que antes tenían catalog.id pero ya no están en assignedCoverageIds: poner nomenclador_type a null
-            const { error: unassignErr } = await supabase
-                .from('coverages')
-                .update({ nomenclador_type: null })
-                .eq('nomenclador_type', catalog.id)
-                .not('id', 'in', `(${assignedCoverageIds.length > 0 ? assignedCoverageIds.map(id => `"${id}"`).join(',') : '""'})`);
-            if (unassignErr) {
-                console.warn('Advertencia al desasignar coberturas:', unassignErr);
+            // Ejecutar actualizaciones en lotes
+            if (updates.length > 0) {
+                for (const u of updates) {
+                    await supabase
+                        .from('coverages')
+                        .update({ nomenclador_type: u.nomenclador_type })
+                        .eq('id', u.id);
+                }
             }
 
             // Refrescar coberturas
@@ -797,11 +823,20 @@ export const useSettings = () => {
             if (setErr) throw setErr;
             setNomencladorCatalogs(updatedList);
 
-            // Revertir coberturas asociadas
-            await supabase
-                .from('coverages')
-                .update({ nomenclador_type: null })
-                .eq('nomenclador_type', catalogId);
+            // Revertir coberturas asociadas quitando catalogId de su lista
+            const { data: allDbCoverages } = await supabase.from('coverages').select('id, name, nomenclador_type');
+            if (allDbCoverages) {
+                for (const cov of allDbCoverages) {
+                    const currentCatalogs = parseCoverageNomencladores(cov);
+                    if (currentCatalogs.includes(catalogId.toUpperCase())) {
+                        const nextCatalogs = currentCatalogs.filter(c => c !== catalogId.toUpperCase());
+                        await supabase
+                            .from('coverages')
+                            .update({ nomenclador_type: formatCoverageNomencladores(nextCatalogs) })
+                            .eq('id', cov.id);
+                    }
+                }
+            }
 
             await fetchCoverages();
             return true;
