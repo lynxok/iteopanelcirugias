@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v3.12.4 (2026-09-24)
+- **Gestión Integral de Nomencladores y Asociación de Coberturas Médicas**:
+    * **Catálogos Dinámicos de Nomencladores (`Settings.tsx`, `NomencladorTab.tsx`, `ManageCatalogsModal.tsx`)**:
+        - Posibilidad de crear, editar y suprimir nomencladores médicos adicionales además de los base (`AOTER`, `OSER`, `NN`), asignando nombres, descripciones y paletas de color identificatorias.
+    * **Asociación Masiva e Individual en 1 Clic**:
+        - Herramienta rápida para vincular catálogos a "Todas las coberturas", "Ninguna" o mediante selección interactiva individual con buscador en vivo.
+    * **Búsqueda Quirúrgica y Autocompletado Dinámico (`ClinicalDetailsSection.tsx`, `NomencladorSelectorModal.tsx`)**:
+        - Autodetección del nomenclador asignado a la cobertura del paciente para filtrar códigos y sugerencias en tiempo real tanto en la ficha clínica como en el buscador general de prácticas.
+        - Compatibilidad retroactiva completa con el modo combinado general (`AOTER + NN`).
+
 ## v3.12.3 (2026-09-22)
 - **Módulo de Facturación y Dashboard Estadístico (`Billing.tsx`)**:
     * **Corrección y Alineación de Curvas en Dashboard Estadístico**:

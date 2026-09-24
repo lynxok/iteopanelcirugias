@@ -38,6 +38,7 @@ import MaterialModal from '../components/settings/modals/MaterialModal';
 import Cie10Modal from '../components/settings/modals/Cie10Modal';
 import NomencladorModal from '../components/settings/modals/NomencladorModal';
 import SpecialtiesModal from '../components/settings/modals/SpecialtiesModal';
+import { ManageCatalogsModal } from '../components/settings/modals/ManageCatalogsModal';
 import OserSyncTab from '../components/settings/OserSyncTab';
 import BedStatsTab from '../components/settings/BedStatsTab';
 
@@ -491,6 +492,8 @@ const Settings: React.FC = () => {
                                 handleToggleNomencladorActive={s.handleToggleNomencladorActive}
                                 isLoading={s.isLoadingNomenclador}
                                 isSuperAdmin={s.user?.role === 'SuperAdmin'}
+                                catalogs={s.nomencladorCatalogs}
+                                onOpenManageCatalogs={() => s.setShowManageCatalogsModal(true)}
                             />
                         )}
                     </motion.div>
@@ -546,6 +549,7 @@ const Settings: React.FC = () => {
                 setCoverageForm={s.setCoverageForm}
                 isEditing={s.isEditingCoverage}
                 vendors={s.vendors}
+                catalogs={s.nomencladorCatalogs}
             />
 
             <ORModal 
@@ -615,6 +619,17 @@ const Settings: React.FC = () => {
                 isEditing={s.isEditingNomenclador}
                 onSave={s.handleSaveNomenclador}
                 isSaving={s.isSavingNomenclador}
+                catalogs={s.nomencladorCatalogs}
+            />
+
+            <ManageCatalogsModal
+                isOpen={s.showManageCatalogsModal}
+                onClose={() => s.setShowManageCatalogsModal(false)}
+                catalogs={s.nomencladorCatalogs}
+                coverages={s.coverages}
+                onSaveCatalog={s.handleSaveNomencladorCatalog}
+                onDeleteCatalog={s.handleDeleteNomencladorCatalog}
+                isSaving={s.isSavingCatalogType}
             />
 
             <SpecialtiesModal 

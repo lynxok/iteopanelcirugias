@@ -21,16 +21,20 @@ const NomencladorSelectorModal: React.FC<NomencladorSelectorModalProps> = ({ isO
     const [isLoading, setIsLoading] = useState(false);
     const [subFilter, setSubFilter] = useState<'ALL' | 'AOTER' | 'NN'>('ALL');
 
+    const isCustomCatalog = useMemo(() => {
+        return Boolean(nomencladorType && nomencladorType !== 'AOTER' && nomencladorType !== 'NN');
+    }, [nomencladorType]);
+
     const isOserOnly = useMemo(() => {
         return nomencladorType === 'OSER';
     }, [nomencladorType]);
 
     const allowedTypes = useMemo(() => {
-        if (isOserOnly) return ['OSER'];
+        if (isCustomCatalog) return [nomencladorType];
         if (subFilter === 'AOTER') return ['AOTER'];
         if (subFilter === 'NN') return ['NN'];
         return ['AOTER', 'NN'];
-    }, [isOserOnly, subFilter]);
+    }, [isCustomCatalog, nomencladorType, subFilter]);
 
     useEffect(() => {
         if (isOpen) {
@@ -184,14 +188,18 @@ const NomencladorSelectorModal: React.FC<NomencladorSelectorModalProps> = ({ isO
                                 <span className={`text-[11px] font-black px-2 py-0.5 rounded-md border ${
                                     isOserOnly
                                         ? 'bg-purple-100 text-purple-800 border-purple-200'
+                                        : isCustomCatalog
+                                        ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
                                         : 'bg-blue-100 text-blue-800 border-blue-200'
                                 }`}>
-                                    {isOserOnly ? 'OSER' : 'AOTER + NN'}
+                                    {isOserOnly ? 'OSER' : isCustomCatalog ? nomencladorType : 'AOTER + NN'}
                                 </span>
                             </div>
                             <p className="text-xs text-slate-500 font-medium">
                                 {isOserOnly 
                                     ? 'Catálogo de procedimientos específico para cobertura OSER' 
+                                    : isCustomCatalog
+                                    ? `Catálogo de procedimientos específico: ${nomencladorType}`
                                     : 'Búsqueda combinada en Nomenclador AOTER y Nomenclador Nacional (NN)'}
                             </p>
                         </div>
@@ -204,8 +212,8 @@ const NomencladorSelectorModal: React.FC<NomencladorSelectorModalProps> = ({ isO
                     </button>
                 </div>
 
-                {/* Sub-filter tabs for non-OSER mode */}
-                {!isOserOnly && (
+                {/* Sub-filter tabs only for standard general mode (AOTER + NN) */}
+                {!isOserOnly && !isCustomCatalog && (
                     <div className="px-6 pt-3 pb-0 bg-slate-50/80 border-b border-slate-200/60 flex gap-2">
                         <button
                             type="button"

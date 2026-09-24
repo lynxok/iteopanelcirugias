@@ -1,6 +1,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { NomencladorCatalog } from '../../../types';
+
 interface NomencladorModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -8,20 +10,38 @@ interface NomencladorModalProps {
         id?: string;
         code: string;
         description: string;
-        type: 'AOTER' | 'OSER' | 'NN';
+        type: string;
         active: boolean;
     };
     setNomencladorForm: React.Dispatch<React.SetStateAction<{
         id?: string;
         code: string;
         description: string;
-        type: 'AOTER' | 'OSER' | 'NN';
+        type: string;
         active: boolean;
     }>>;
     isEditing: boolean;
     onSave: () => Promise<boolean | void>;
     isSaving?: boolean;
+    catalogs?: NomencladorCatalog[];
 }
+
+const COLOR_CLASSES: Record<string, { bg: string; border: string; text: string; activeBg: string; activeBorder: string; dot: string }> = {
+    emerald: { bg: 'bg-white', border: 'border-slate-200', text: 'text-slate-600', activeBg: 'bg-emerald-50', activeBorder: 'border-emerald-600 text-emerald-800', dot: 'bg-emerald-500' },
+    purple: { bg: 'bg-white', border: 'border-slate-200', text: 'text-slate-600', activeBg: 'bg-purple-50', activeBorder: 'border-purple-600 text-purple-800', dot: 'bg-purple-500' },
+    sky: { bg: 'bg-white', border: 'border-slate-200', text: 'text-slate-600', activeBg: 'bg-sky-50', activeBorder: 'border-sky-600 text-sky-800', dot: 'bg-sky-500' },
+    amber: { bg: 'bg-white', border: 'border-slate-200', text: 'text-slate-600', activeBg: 'bg-amber-50', activeBorder: 'border-amber-600 text-amber-800', dot: 'bg-amber-500' },
+    rose: { bg: 'bg-white', border: 'border-slate-200', text: 'text-slate-600', activeBg: 'bg-rose-50', activeBorder: 'border-rose-600 text-rose-800', dot: 'bg-rose-500' },
+    indigo: { bg: 'bg-white', border: 'border-slate-200', text: 'text-slate-600', activeBg: 'bg-indigo-50', activeBorder: 'border-indigo-600 text-indigo-800', dot: 'bg-indigo-500' },
+    teal: { bg: 'bg-white', border: 'border-slate-200', text: 'text-slate-600', activeBg: 'bg-teal-50', activeBorder: 'border-teal-600 text-teal-800', dot: 'bg-teal-500' },
+    slate: { bg: 'bg-white', border: 'border-slate-200', text: 'text-slate-600', activeBg: 'bg-slate-100', activeBorder: 'border-slate-600 text-slate-800', dot: 'bg-slate-500' }
+};
+
+const DEFAULT_CATALOGS: NomencladorCatalog[] = [
+    { id: 'AOTER', name: 'AOTER', color: 'emerald' },
+    { id: 'OSER', name: 'OSER', color: 'purple' },
+    { id: 'NN', name: 'NN (Nacional)', color: 'sky' }
+];
 
 const NomencladorModal: React.FC<NomencladorModalProps> = ({
     isOpen,
@@ -30,9 +50,12 @@ const NomencladorModal: React.FC<NomencladorModalProps> = ({
     setNomencladorForm,
     isEditing,
     onSave,
-    isSaving = false
+    isSaving = false,
+    catalogs = DEFAULT_CATALOGS
 }) => {
     if (!isOpen) return null;
+
+    const availableCatalogs = catalogs.length > 0 ? catalogs : DEFAULT_CATALOGS;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -51,13 +74,7 @@ const NomencladorModal: React.FC<NomencladorModalProps> = ({
                     {/* Header */}
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                         <div className="flex items-center gap-3">
-                            <div className={`size-10 rounded-xl flex items-center justify-center shadow-lg ${
-                                nomencladorForm.type === 'OSER'
-                                    ? 'bg-purple-600 shadow-purple-200 text-white'
-                                    : nomencladorForm.type === 'NN'
-                                    ? 'bg-sky-600 shadow-sky-200 text-white'
-                                    : 'bg-emerald-600 shadow-emerald-200 text-white'
-                            }`}>
+                            <div className="size-10 rounded-xl flex items-center justify-center shadow-lg bg-blue-600 shadow-blue-200 text-white">
                                 <span className="material-symbols-outlined text-2xl">clinical_notes</span>
                             </div>
                             <div>
@@ -65,7 +82,7 @@ const NomencladorModal: React.FC<NomencladorModalProps> = ({
                                     {isEditing ? 'Editar Práctica' : 'Nueva Práctica'}
                                 </h3>
                                 <p className="text-xs text-slate-500 font-medium">
-                                    Nomenclador {nomencladorForm.type === 'NN' ? 'NN (Nacional)' : nomencladorForm.type}
+                                    Nomenclador {nomencladorForm.type}
                                 </p>
                             </div>
                         </div>
@@ -85,43 +102,27 @@ const NomencladorModal: React.FC<NomencladorModalProps> = ({
                             <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
                                 Nomenclador de Destino
                             </label>
-                            <div className="grid grid-cols-3 gap-2.5">
-                                <button
-                                    type="button"
-                                    onClick={() => setNomencladorForm(prev => ({ ...prev, type: 'AOTER' }))}
-                                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border-2 transition-all flex items-center justify-center gap-1.5 ${
-                                        nomencladorForm.type === 'AOTER'
-                                            ? 'border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm'
-                                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                                    }`}
-                                >
-                                    <span className="size-2 rounded-full bg-emerald-500"></span>
-                                    AOTER
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setNomencladorForm(prev => ({ ...prev, type: 'OSER' }))}
-                                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border-2 transition-all flex items-center justify-center gap-1.5 ${
-                                        nomencladorForm.type === 'OSER'
-                                            ? 'border-purple-600 bg-purple-50 text-purple-800 shadow-sm'
-                                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                                    }`}
-                                >
-                                    <span className="size-2 rounded-full bg-purple-500"></span>
-                                    OSER
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setNomencladorForm(prev => ({ ...prev, type: 'NN' }))}
-                                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border-2 transition-all flex items-center justify-center gap-1.5 ${
-                                        nomencladorForm.type === 'NN'
-                                            ? 'border-sky-600 bg-sky-50 text-sky-800 shadow-sm'
-                                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                                    }`}
-                                >
-                                    <span className="size-2 rounded-full bg-sky-500"></span>
-                                    NN (Nac.)
-                                </button>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-40 overflow-y-auto custom-scrollbar p-1">
+                                {availableCatalogs.map(cat => {
+                                    const isSelected = (nomencladorForm.type || '').toUpperCase() === cat.id.toUpperCase();
+                                    const col = COLOR_CLASSES[cat.color || 'indigo'] || COLOR_CLASSES.indigo;
+
+                                    return (
+                                        <button
+                                            key={cat.id}
+                                            type="button"
+                                            onClick={() => setNomencladorForm(prev => ({ ...prev, type: cat.id }))}
+                                            className={`py-2.5 px-2 rounded-xl text-xs font-bold border-2 transition-all flex items-center justify-center gap-1.5 ${
+                                                isSelected
+                                                    ? `${col.activeBorder} ${col.activeBg} shadow-sm`
+                                                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            <span className={`size-2 rounded-full ${col.dot}`}></span>
+                                            <span className="truncate">{cat.name}</span>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
 

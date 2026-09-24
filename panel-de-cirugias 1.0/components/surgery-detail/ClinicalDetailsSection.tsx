@@ -4,6 +4,7 @@ import { AppUser, UserRole } from '../../types';
 interface NomencladorItem {
     code: string;
     description: string;
+    type?: string;
 }
 
 interface ClinicalDetailsSectionProps {

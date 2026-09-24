@@ -128,19 +128,26 @@ export interface Vendor {
   requires_material_validation?: boolean;
 }
 
+export interface NomencladorCatalog {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string; // emerald, purple, sky, amber, rose, indigo, teal, etc.
+}
+
 export interface Coverage {
   id: string;
   name: string;
   type: 'Obra Social' | 'ART' | string;
   vendor_id?: string;
-  nomenclador_type?: 'AOTER' | 'OSER' | 'NN' | string | null;
+  nomenclador_type?: string | null;
 }
 
 export interface NomencladorItem {
   id?: string;
   code: string;
   description: string;
-  type: 'AOTER' | 'OSER' | 'NN' | string;
+  type: string;
   active?: boolean;
   created_at?: string;
 }

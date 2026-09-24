@@ -2,6 +2,11 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.12.4 [2026-09-24]**: Lanzada la versión **v3.12.4**.
+    *   **Catálogos Dinámicos de Nomencladores y Asociación Masiva/Individual de Coberturas (`Settings.tsx`, `NomencladorTab.tsx`, `ManageCatalogsModal.tsx`, `CoveragesTab.tsx`, `CoverageModal.tsx`, `ClinicalDetailsSection.tsx`, `NomencladorSelectorModal.tsx`)**:
+        *   Creación, edición y borrado de nomencladores personalizados con nombre, descripción y paleta de colores.
+        *   Asociación rápida masiva a todas las coberturas, a ninguna o selección selectiva por checkboxes con buscador.
+        *   Filtrado dinámico en búsquedas clínicas de cirugías según la cobertura médica del paciente.
 *   **v3.12.3 [2026-09-22]**: Lanzada la versión **v3.12.3**.
     *   **Módulo de Facturación y Dashboard Estadístico (`Billing.tsx`)**:
         *   **Curvas Sincronizadas y Coherentes**: El gráfico de ingresos vs facturación respeta el 100% de los filtros aplicados (búsqueda por texto, rangos, etc.).

@@ -375,11 +375,11 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
         }
         
         const coverage = availableCoverages.find(c => c.name.toLowerCase() === medicalCoverage.toLowerCase());
-        const isOser = coverage?.nomenclador_type === 'OSER' || 
-                       coverage?.name.toUpperCase().includes('OSER') || 
-                       medicalCoverage.toUpperCase().includes('OSER');
-        
-        if (isOser) {
+        const customType = coverage?.nomenclador_type;
+
+        if (customType) {
+            setCurrentNomencladorType(customType.toUpperCase());
+        } else if (coverage?.name.toUpperCase().includes('OSER') || medicalCoverage.toUpperCase().includes('OSER')) {
             setCurrentNomencladorType('OSER');
         } else {
             setCurrentNomencladorType('AOTER / NN');
@@ -519,7 +519,9 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
         try {
             const defaultItem = { code: '00.00.00', description: 'A DEFINIR', type: '' };
             const cleanTerm = term.trim().toLowerCase();
-            const allowedTypes = currentNomencladorType === 'OSER' ? ['OSER'] : ['AOTER', 'NN'];
+            const allowedTypes = currentNomencladorType === 'AOTER / NN' 
+                ? ['AOTER', 'NN'] 
+                : [currentNomencladorType];
 
             if (cleanTerm.length < 2) {
                 setNomencladorSuggestions([]);

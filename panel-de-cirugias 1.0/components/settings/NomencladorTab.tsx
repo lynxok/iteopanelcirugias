@@ -1,20 +1,39 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { NomencladorItem } from '../../types';
+import { NomencladorItem, NomencladorCatalog } from '../../types';
 
 interface NomencladorTabProps {
     nomencladorItems: NomencladorItem[];
     searchNomenclador: string;
     setSearchNomenclador: (val: string) => void;
-    nomencladorFilterType: 'ALL' | 'AOTER' | 'OSER' | 'NN';
-    setNomencladorFilterType: (val: 'ALL' | 'AOTER' | 'OSER' | 'NN') => void;
-    openNewNomencladorModal: (defaultType?: 'AOTER' | 'OSER' | 'NN') => void;
+    nomencladorFilterType: string;
+    setNomencladorFilterType: (val: string) => void;
+    openNewNomencladorModal: (defaultType?: string) => void;
     openEditNomencladorModal: (item: NomencladorItem) => void;
     handleDeleteNomenclador: (id: string) => void;
     handleToggleNomencladorActive: (item: NomencladorItem) => void;
     isLoading?: boolean;
     isSuperAdmin?: boolean;
+    catalogs?: NomencladorCatalog[];
+    onOpenManageCatalogs?: () => void;
 }
+
+const COLOR_CLASSES: Record<string, { bg: string; text: string; border: string; lightBg: string; activeBtn: string }> = {
+    emerald: { bg: 'bg-emerald-500', text: 'text-emerald-700', border: 'border-emerald-500', lightBg: 'bg-emerald-50/50', activeBtn: 'bg-emerald-600 text-white' },
+    purple: { bg: 'bg-purple-500', text: 'text-purple-700', border: 'border-purple-500', lightBg: 'bg-purple-50/50', activeBtn: 'bg-purple-600 text-white' },
+    sky: { bg: 'bg-sky-500', text: 'text-sky-700', border: 'border-sky-500', lightBg: 'bg-sky-50/50', activeBtn: 'bg-sky-600 text-white' },
+    amber: { bg: 'bg-amber-500', text: 'text-amber-700', border: 'border-amber-500', lightBg: 'bg-amber-50/50', activeBtn: 'bg-amber-600 text-white' },
+    rose: { bg: 'bg-rose-500', text: 'text-rose-700', border: 'border-rose-500', lightBg: 'bg-rose-50/50', activeBtn: 'bg-rose-600 text-white' },
+    indigo: { bg: 'bg-indigo-500', text: 'text-indigo-700', border: 'border-indigo-500', lightBg: 'bg-indigo-50/50', activeBtn: 'bg-indigo-600 text-white' },
+    teal: { bg: 'bg-teal-500', text: 'text-teal-700', border: 'border-teal-500', lightBg: 'bg-teal-50/50', activeBtn: 'bg-teal-600 text-white' },
+    slate: { bg: 'bg-slate-500', text: 'text-slate-700', border: 'border-slate-500', lightBg: 'bg-slate-50/50', activeBtn: 'bg-slate-600 text-white' }
+};
+
+const DEFAULT_CATALOGS: NomencladorCatalog[] = [
+    { id: 'AOTER', name: 'AOTER', color: 'emerald' },
+    { id: 'OSER', name: 'OSER', color: 'purple' },
+    { id: 'NN', name: 'NN (Nacional)', color: 'sky' }
+];
 
 const NomencladorTab: React.FC<NomencladorTabProps> = ({
     nomencladorItems,
@@ -27,24 +46,35 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
     handleDeleteNomenclador,
     handleToggleNomencladorActive,
     isLoading = false,
-    isSuperAdmin = false
+    isSuperAdmin = false,
+    catalogs = DEFAULT_CATALOGS,
+    onOpenManageCatalogs
 }) => {
     const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState<number>(50);
 
-    // Contadores
-    const countAOTER = useMemo(() => nomencladorItems.filter(i => i.type === 'AOTER').length, [nomencladorItems]);
-    const countOSER = useMemo(() => nomencladorItems.filter(i => i.type === 'OSER').length, [nomencladorItems]);
-    const countNN = useMemo(() => nomencladorItems.filter(i => i.type === 'NN').length, [nomencladorItems]);
+    const availableCatalogs = catalogs.length > 0 ? catalogs : DEFAULT_CATALOGS;
+
+    // Contadores dinámicos
+    const countsByType = useMemo(() => {
+        const counts: Record<string, number> = {};
+        availableCatalogs.forEach(cat => {
+            counts[cat.id.toUpperCase()] = nomencladorItems.filter(i => (i.type || '').toUpperCase() === cat.id.toUpperCase()).length;
+        });
+        return counts;
+    }, [nomencladorItems, availableCatalogs]);
+
     const countTotal = nomencladorItems.length;
 
     // Filtrado
     const filteredItems = useMemo(() => {
         const query = searchNomenclador.trim().toLowerCase();
+        const selectedFilter = nomencladorFilterType.toUpperCase();
+
         return nomencladorItems.filter(item => {
             // Filtro por Nomenclador
-            if (nomencladorFilterType !== 'ALL' && item.type !== nomencladorFilterType) {
+            if (selectedFilter !== 'ALL' && (item.type || '').toUpperCase() !== selectedFilter) {
                 return false;
             }
             // Filtro por estado
@@ -102,7 +132,7 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
                                     )}
                                 </div>
                                 <p className="text-slate-500 text-xs md:text-sm font-medium">
-                                    Catálogo oficial de prácticas y códigos de los nomencladores AOTER, OSER y NN (Nomenclador Nacional).
+                                    Catálogo unificado de prácticas y códigos médicos. Asocie y filtre nomencladores por cobertura.
                                 </p>
                             </div>
                         </div>
@@ -110,13 +140,25 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
 
                     <div className="flex flex-wrap items-center gap-3">
                         {isSuperAdmin ? (
-                            <button
-                                onClick={() => openNewNomencladorModal()}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95"
-                            >
-                                <span className="material-symbols-outlined text-lg">add_circle</span>
-                                Nueva Práctica
-                            </button>
+                            <>
+                                {onOpenManageCatalogs && (
+                                    <button
+                                        type="button"
+                                        onClick={onOpenManageCatalogs}
+                                        className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95 hover:border-slate-300"
+                                    >
+                                        <span className="material-symbols-outlined text-lg text-indigo-600">settings_suggest</span>
+                                        Gestionar Nomencladores
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => openNewNomencladorModal()}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-blue-200 transition-all active:scale-95"
+                                >
+                                    <span className="material-symbols-outlined text-lg">add_circle</span>
+                                    Nueva Práctica
+                                </button>
+                            </>
                         ) : (
                             <div className="text-xs text-slate-400 font-medium flex items-center gap-1.5 bg-slate-100 px-3.5 py-2 rounded-xl border border-slate-200">
                                 <span className="material-symbols-outlined text-sm text-slate-400">admin_panel_settings</span>
@@ -135,11 +177,12 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
                     </div>
                 )}
 
-                {/* Quick Stats Pills */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Quick Stats Pills Dinámicas */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                    {/* Total */}
                     <div 
                         onClick={() => setNomencladorFilterType('ALL')}
-                        className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
                             nomencladorFilterType === 'ALL'
                                 ? 'bg-white border-blue-500 shadow-md ring-2 ring-blue-500/20'
                                 : 'bg-white/80 border-slate-200 hover:bg-white'
@@ -147,72 +190,44 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
                     >
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Prácticas</p>
-                                <p className="text-2xl font-black text-slate-800 mt-0.5">{countTotal}</p>
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total</p>
+                                <p className="text-xl font-black text-slate-800 mt-0.5">{countTotal}</p>
                             </div>
-                            <span className="material-symbols-outlined text-slate-300 text-3xl">list_alt</span>
+                            <span className="material-symbols-outlined text-slate-300 text-2xl">list_alt</span>
                         </div>
                     </div>
 
-                    <div 
-                        onClick={() => setNomencladorFilterType('AOTER')}
-                        className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                            nomencladorFilterType === 'AOTER'
-                                ? 'bg-emerald-50/50 border-emerald-500 shadow-md ring-2 ring-emerald-500/20'
-                                : 'bg-white/80 border-slate-200 hover:bg-white'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <div className="flex items-center gap-1.5">
-                                    <span className="size-2 rounded-full bg-emerald-500"></span>
-                                    <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">AOTER</p>
-                                </div>
-                                <p className="text-2xl font-black text-slate-800 mt-0.5">{countAOTER}</p>
-                            </div>
-                            <span className="material-symbols-outlined text-emerald-300 text-3xl">bookmark</span>
-                        </div>
-                    </div>
+                    {/* Por cada catálogo registrado */}
+                    {availableCatalogs.map(cat => {
+                        const isSelected = nomencladorFilterType.toUpperCase() === cat.id.toUpperCase();
+                        const col = COLOR_CLASSES[cat.color || 'indigo'] || COLOR_CLASSES.indigo;
+                        const count = countsByType[cat.id.toUpperCase()] || 0;
 
-                    <div 
-                        onClick={() => setNomencladorFilterType('OSER')}
-                        className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                            nomencladorFilterType === 'OSER'
-                                ? 'bg-purple-50/50 border-purple-500 shadow-md ring-2 ring-purple-500/20'
-                                : 'bg-white/80 border-slate-200 hover:bg-white'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <div className="flex items-center gap-1.5">
-                                    <span className="size-2 rounded-full bg-purple-500"></span>
-                                    <p className="text-[11px] font-bold uppercase tracking-wider text-purple-700">OSER</p>
+                        return (
+                            <div 
+                                key={cat.id}
+                                onClick={() => setNomencladorFilterType(cat.id)}
+                                className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                                    isSelected
+                                        ? `${col.lightBg} ${col.border} shadow-md ring-2 ring-blue-500/20`
+                                        : 'bg-white/80 border-slate-200 hover:bg-white'
+                                }`}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <div className="min-w-0 pr-1">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className={`size-2 rounded-full ${col.bg} flex-shrink-0`}></span>
+                                            <p className={`text-[10px] font-bold uppercase tracking-wider truncate ${col.text}`}>
+                                                {cat.name}
+                                            </p>
+                                        </div>
+                                        <p className="text-xl font-black text-slate-800 mt-0.5">{count}</p>
+                                    </div>
+                                    <span className="material-symbols-outlined text-slate-200 text-2xl">bookmark</span>
                                 </div>
-                                <p className="text-2xl font-black text-slate-800 mt-0.5">{countOSER}</p>
                             </div>
-                            <span className="material-symbols-outlined text-purple-300 text-3xl">verified</span>
-                        </div>
-                    </div>
-
-                    <div 
-                        onClick={() => setNomencladorFilterType('NN')}
-                        className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-                            nomencladorFilterType === 'NN'
-                                ? 'bg-sky-50/50 border-sky-500 shadow-md ring-2 ring-sky-500/20'
-                                : 'bg-white/80 border-slate-200 hover:bg-white'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <div className="flex items-center gap-1.5">
-                                    <span className="size-2 rounded-full bg-sky-500"></span>
-                                    <p className="text-[11px] font-bold uppercase tracking-wider text-sky-700">NN (Nacional)</p>
-                                </div>
-                                <p className="text-2xl font-black text-slate-800 mt-0.5">{countNN}</p>
-                            </div>
-                            <span className="material-symbols-outlined text-sky-400 text-3xl">local_hospital</span>
-                        </div>
-                    </div>
+                        );
+                    })}
                 </div>
 
                 {/* Main Card */}
@@ -243,47 +258,36 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
 
                         {/* Filter Tabs & Status */}
                         <div className="flex flex-wrap items-center gap-2">
-                            <div className="flex bg-slate-200/70 p-1 rounded-xl">
+                            <div className="flex bg-slate-200/70 p-1 rounded-xl max-w-full overflow-x-auto">
                                 <button
                                     onClick={() => setNomencladorFilterType('ALL')}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                        nomencladorFilterType === 'ALL'
+                                        nomencladorFilterType.toUpperCase() === 'ALL'
                                             ? 'bg-white text-slate-800 shadow-sm'
                                             : 'text-slate-600 hover:text-slate-900'
                                     }`}
                                 >
                                     Todos
                                 </button>
-                                <button
-                                    onClick={() => setNomencladorFilterType('AOTER')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                                        nomencladorFilterType === 'AOTER'
-                                            ? 'bg-emerald-600 text-white shadow-sm'
-                                            : 'text-slate-600 hover:text-emerald-700'
-                                    }`}
-                                >
-                                    AOTER
-                                </button>
-                                <button
-                                    onClick={() => setNomencladorFilterType('OSER')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                                        nomencladorFilterType === 'OSER'
-                                            ? 'bg-purple-600 text-white shadow-sm'
-                                            : 'text-slate-600 hover:text-purple-700'
-                                    }`}
-                                >
-                                    OSER
-                                </button>
-                                <button
-                                    onClick={() => setNomencladorFilterType('NN')}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                                        nomencladorFilterType === 'NN'
-                                            ? 'bg-sky-600 text-white shadow-sm'
-                                            : 'text-slate-600 hover:text-sky-700'
-                                    }`}
-                                >
-                                    NN (Nacional)
-                                </button>
+
+                                {availableCatalogs.map(cat => {
+                                    const isSelected = nomencladorFilterType.toUpperCase() === cat.id.toUpperCase();
+                                    const col = COLOR_CLASSES[cat.color || 'indigo'] || COLOR_CLASSES.indigo;
+
+                                    return (
+                                        <button
+                                            key={cat.id}
+                                            onClick={() => setNomencladorFilterType(cat.id)}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                isSelected
+                                                    ? `${col.activeBtn} shadow-sm`
+                                                    : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                        >
+                                            {cat.name}
+                                        </button>
+                                    );
+                                })}
                             </div>
 
                             <select
@@ -327,22 +331,18 @@ const NomencladorTab: React.FC<NomencladorTabProps> = ({
                                     <tr key={item.id || `${item.type}-${item.code}`} className="hover:bg-slate-50/70 transition-colors group">
                                         {/* Nomenclador Badge */}
                                         <td className="px-6 py-3.5">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${
-                                                item.type === 'OSER'
-                                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                                    : item.type === 'NN'
-                                                    ? 'bg-sky-50 text-sky-700 border-sky-200'
-                                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                            }`}>
-                                                <span className={`size-1.5 rounded-full ${
-                                                    item.type === 'OSER'
-                                                        ? 'bg-purple-500'
-                                                        : item.type === 'NN'
-                                                        ? 'bg-sky-500'
-                                                        : 'bg-emerald-500'
-                                                }`}></span>
-                                                {item.type === 'NN' ? 'NN (Nacional)' : item.type}
-                                            </span>
+                                            {(() => {
+                                                const cat = availableCatalogs.find(c => c.id.toUpperCase() === (item.type || '').toUpperCase());
+                                                const col = COLOR_CLASSES[cat?.color || 'indigo'] || COLOR_CLASSES.indigo;
+                                                const label = cat ? cat.name : item.type;
+
+                                                return (
+                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${col.lightBg} ${col.text} ${col.border}`}>
+                                                        <span className={`size-1.5 rounded-full ${col.bg}`}></span>
+                                                        {label}
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
 
                                         {/* Código */}

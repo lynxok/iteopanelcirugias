@@ -406,7 +406,7 @@ export const SurgeryDetail: React.FC = () => {
                             currentUserRole={currentUserRole}
                             setShowSurgeryForm={setShowSurgeryForm}
                             setIsNomencladorModalOpen={setIsNomencladorModalOpen}
-                            currentNomencladorType={currentNomencladorType as "AOTER" | "OSER"}
+                            currentNomencladorType={currentNomencladorType}
                             procedureInput={procedureInput}
                             onProcedureInputChange={handleProcedureInputChange}
                             nomencladorSuggestions={nomencladorSuggestions}

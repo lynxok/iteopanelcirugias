@@ -18,6 +18,11 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-24]`: **Catálogos Dinámicos de Nomencladores y Asociación Masiva/Individual de Coberturas**:
+    *   **Gestión Dinámica de Nomencladores**: Se incorporó en `Configuración > Nomencladores` la capacidad para que el `SuperAdmin` cree, edite y elimine catálogos de nomencladores personalizados (además de los estándar `AOTER`, `OSER`, `NN`), con paleta de color distintiva y descripción.
+    *   **Asociación Rápida a Coberturas**: Desde el modal `Gestionar Nomencladores`, se permite asociar el nomenclador en 1 clic a "Todas las coberturas", "Ninguna" o mediante selección individual interactiva con buscador en vivo.
+    *   **Persistencia Backend**: La lista de catálogos se almacena y sincroniza en `quirofano.admin_settings` (`nomenclador_catalogs`), y las coberturas se actualizan atómicamente en `quirofano.coverages` (`nomenclador_type`).
+    *   **UI Dinámica e Integración**: Actualizados `NomencladorTab`, `NomencladorModal`, `CoverageModal`, `CoveragesTab`, `ClinicalDetailsSection` y `NomencladorSelectorModal` para filtrar y sugerir automáticamente las prácticas correspondientes al nomenclador asociado a la cobertura del paciente.
 *   `[2026-09-16]`: **Control Global de Consumo de Stock por Cirugías (v3.12.1)**:
     *   **Switch Maestro SuperAdmin**: Se incorporó un toggle con control exclusivo para `SuperAdmin` en la cabecera de la sección *Stock / Farmacia* y en la pestaña *Vademécum* de Configuración para activar/desactivar globalmente el consumo automático de stock derivado de fichas quirúrgicas.
     *   **Persistencia Backend**: El flag se almacena en `quirofano.admin_settings` (`stock_consumption_enabled`).

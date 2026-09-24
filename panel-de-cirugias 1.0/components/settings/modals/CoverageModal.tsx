@@ -1,5 +1,5 @@
 import React from 'react';
-import { Coverage, Vendor } from '../../../types';
+import { Coverage, Vendor, NomencladorCatalog } from '../../../types';
 
 interface CoverageModalProps {
     show: boolean;
@@ -9,10 +9,11 @@ interface CoverageModalProps {
     setCoverageForm: (form: Partial<Coverage>) => void;
     isEditing: boolean;
     vendors: Vendor[];
+    catalogs?: NomencladorCatalog[];
 }
 
 const CoverageModal: React.FC<CoverageModalProps> = ({
-    show, onClose, onSave, coverageForm, setCoverageForm, isEditing, vendors
+    show, onClose, onSave, coverageForm, setCoverageForm, isEditing, vendors, catalogs = []
 }) => {
     if (!show) return null;
 
@@ -81,9 +82,11 @@ const CoverageModal: React.FC<CoverageModalProps> = ({
                             className="w-full bg-slate-50 text-slate-900 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all font-bold"
                         >
                             <option value="">Por defecto (AOTER)</option>
-                            <option value="AOTER">Nomenclador AOTER</option>
-                            <option value="OSER">Nomenclador OSER</option>
-                            <option value="NN">Nomenclador Nacional (NN)</option>
+                            {catalogs.map(cat => (
+                                <option key={cat.id} value={cat.id}>
+                                    Nomenclador {cat.name}
+                                </option>
+                            ))}
                         </select>
                         <p className="text-[10px] text-slate-400 mt-1">Define qué lista de procedimientos se usará para esta cobertura.</p>
                     </div>

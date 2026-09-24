@@ -43,6 +43,14 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     *   **Orden en ART y Particulares**: Directo por fecha de creación (`created_at` ascendente).
 *   **Cirugías Ambulatorias**: Una cirugía se considera ambulatoria si el switch **"Modalidad Ambulatoria"** (`is_ambulatory`) está activo en su Ficha Clínica o si está agendada en un quirófano configurado como ambulatorio (`operating_room.is_ambulatory`). Las cirugías de guardia (`isGuardia`) **no se marcan automáticamente como ambulatorias**, permitiendo requerir internación si el cuadro clínico lo exige. Cuando una cirugía es ambulatoria, el sistema omite automáticamente los requerimientos y bloqueos de guardado de **Exámenes Pre-quirúrgicos** (sin exigir la fecha de realización de pre-quirúrgicos), **Firma de Consentimiento Informado** y **Validación Cama/ART**, mostrando avisos informativos y computando la validación clínica como completada (`OK`).
 
+### Nomencladores y Asociación de Coberturas Médicas
+*   **Catálogos Dinámicos de Nomencladores**: El sistema soporta la coexistencia de múltiples catálogos de nomencladores médicos (`nomenclador_catalogs` en `quirofano.admin_settings`). Por defecto se proporcionan `AOTER`, `OSER` y `NN (Nacional)`, pero el usuario `SuperAdmin` puede añadir nuevos nomencladores con nombre, descripción y código de color.
+*   **Asociación Masiva e Individual a Coberturas**:
+    *   Cada cobertura médica (`quirofano.coverages`) puede vincularse a un tipo de nomenclador a través del campo `nomenclador_type`.
+    *   Desde la gestión de nomencladores se puede asociar un nomenclador en un solo clic a **Todas las coberturas**, a **Ninguna**, o a un conjunto de coberturas seleccionadas individualmente.
+    *   Si una cobertura no tiene un nomenclador asignado o está configurada en `AOTER`, el buscador clínico opera en modo combinado estándar (`AOTER + NN`).
+    *   Si una cobertura está vinculada a un nomenclador específico (como `OSER` u otro nomenclador personalizado), el buscador clínico y el selector de prácticas filtran y ofrecen exclusivamente las prácticas registradas bajo ese catálogo.
+
 ### Lógica de Finalización, Auto-Inicio y Ficha Técnica
 *   **Sincronización de Horarios en Ficha Técnica (`SurgeryForm`)**:
     *   Al modificar y guardar la **Hora de Inicio de Cirugía (H.C.)** o la **Hora de Fin de Cirugía (H.F.)** en la Ficha Técnica, el sistema actualiza de manera simultánea e indivisible:

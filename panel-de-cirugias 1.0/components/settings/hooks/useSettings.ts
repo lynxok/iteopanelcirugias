@@ -3,9 +3,16 @@ import { supabase, supabasePublic } from '../../../src/lib/supabase';
 import { useAuth } from '../../../src/lib/AuthContext';
 import { 
     Doctor, OperatingRoom, ProcedureType, AppUser, Vendor, 
-    UserRole, MaterialTemplate, Coverage, CatalogItem, NomencladorItem 
+    UserRole, MaterialTemplate, Coverage, CatalogItem, NomencladorItem,
+    NomencladorCatalog
 } from '../../../types';
 import { LEGACY_PERMISSIONS } from '../../../src/lib/permissions';
+
+const DEFAULT_NOMENCLADOR_CATALOGS: NomencladorCatalog[] = [
+    { id: 'AOTER', name: 'AOTER', color: 'emerald' },
+    { id: 'OSER', name: 'OSER', color: 'purple' },
+    { id: 'NN', name: 'NN (Nacional)', color: 'sky' }
+];
 
 export const useSettings = () => {
     const { user } = useAuth();
@@ -31,6 +38,7 @@ export const useSettings = () => {
     const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
     const [cie10Items, setCie10Items] = useState<any[]>([]);
     const [nomencladorItems, setNomencladorItems] = useState<NomencladorItem[]>([]);
+    const [nomencladorCatalogs, setNomencladorCatalogs] = useState<NomencladorCatalog[]>(DEFAULT_NOMENCLADOR_CATALOGS);
     const [specialties, setSpecialties] = useState<string[]>([]);
     
     // --- LOADING & SAVING STATE ---
@@ -38,6 +46,8 @@ export const useSettings = () => {
     const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
     const [isLoadingNomenclador, setIsLoadingNomenclador] = useState(false);
     const [isSavingNomenclador, setIsSavingNomenclador] = useState(false);
+    const [isSavingCatalogType, setIsSavingCatalogType] = useState(false);
+    const [showManageCatalogsModal, setShowManageCatalogsModal] = useState(false);
     const [isSavingPermissions, setIsSavingPermissions] = useState(false);
     const [isSavingSmtp, setIsSavingSmtp] = useState(false);
 
@@ -127,7 +137,7 @@ export const useSettings = () => {
     const [isEditingCie10, setIsEditingCie10] = useState(false);
 
     const [showNomencladorModal, setShowNomencladorModal] = useState(false);
-    const [nomencladorForm, setNomencladorForm] = useState<{ id?: string; code: string; description: string; type: 'AOTER' | 'OSER' | 'NN'; active: boolean }>({ code: '', description: '', type: 'AOTER', active: true });
+    const [nomencladorForm, setNomencladorForm] = useState<{ id?: string; code: string; description: string; type: string; active: boolean }>({ code: '', description: '', type: 'AOTER', active: true });
     const [isEditingNomenclador, setIsEditingNomenclador] = useState(false);
 
     const [showSpecialtiesModal, setShowSpecialtiesModal] = useState(false);
@@ -145,7 +155,7 @@ export const useSettings = () => {
     const [searchCatalog, setSearchCatalog] = useState('');
     const [searchCie10, setSearchCie10] = useState('');
     const [searchNomenclador, setSearchNomenclador] = useState('');
-    const [nomencladorFilterType, setNomencladorFilterType] = useState<'ALL' | 'AOTER' | 'OSER' | 'NN'>('ALL');
+    const [nomencladorFilterType, setNomencladorFilterType] = useState<string>('ALL');
     const [selectedProcedureId, setSelectedProcedureId] = useState<string | null>(null);
     const [isAddingCategory, setIsAddingCategory] = useState(false);
     const [newCategoryName, setNewCategoryName] = useState('');
@@ -281,6 +291,16 @@ export const useSettings = () => {
                     if (s.key === 'telegram_enabled') setBccEnabled(s.bcc_enabled === true);
                     if (s.key === 'cie10_enabled') setCie10Enabled(s.value === 'true');
                     if (s.key === 'stock_consumption_enabled') setStockConsumptionEnabled(s.value === 'true');
+                    if (s.key === 'nomenclador_catalogs' && s.value) {
+                        try {
+                            const parsedCats = JSON.parse(s.value);
+                            if (Array.isArray(parsedCats) && parsedCats.length > 0) {
+                                setNomencladorCatalogs(parsedCats);
+                            }
+                        } catch (e) {
+                            console.error('Error parsing nomenclador_catalogs setting:', e);
+                        }
+                    }
                 });
                 setTelegramGlobalEnabled(settingsData.telegram_enabled === 'true');
                 setSmtpSettings({
@@ -664,7 +684,7 @@ export const useSettings = () => {
         }
     };
 
-    const openNewNomencladorModal = (defaultType?: 'AOTER' | 'OSER' | 'NN') => {
+    const openNewNomencladorModal = (defaultType?: string) => {
         if (user?.role !== 'SuperAdmin') {
             alert('Acceso denegado: Únicamente los usuarios con rol SuperAdmin pueden crear prácticas.');
             return;
@@ -688,11 +708,110 @@ export const useSettings = () => {
             id: item.id,
             code: item.code,
             description: item.description,
-            type: (item.type as 'AOTER' | 'OSER' | 'NN') || 'AOTER',
+            type: item.type || 'AOTER',
             active: item.active ?? true
         });
         setIsEditingNomenclador(true);
         setShowNomencladorModal(true);
+    };
+
+    const handleSaveNomencladorCatalog = async (catalog: NomencladorCatalog, assignedCoverageIds: string[]): Promise<boolean> => {
+        if (user?.role !== 'SuperAdmin') {
+            alert('Acceso denegado: Únicamente los usuarios con rol SuperAdmin pueden gestionar nomencladores.');
+            return false;
+        }
+        setIsSavingCatalogType(true);
+        try {
+            // 1. Actualizar lista de nomencladores
+            const existingIndex = nomencladorCatalogs.findIndex(c => c.id.toUpperCase() === catalog.id.toUpperCase());
+            let updatedList: NomencladorCatalog[] = [];
+            if (existingIndex >= 0) {
+                updatedList = nomencladorCatalogs.map((c, i) => i === existingIndex ? { ...c, ...catalog } : c);
+            } else {
+                updatedList = [...nomencladorCatalogs, catalog];
+            }
+
+            // Guardar en admin_settings
+            const { error: setErr } = await supabase.from('admin_settings').upsert({
+                key: 'nomenclador_catalogs',
+                value: JSON.stringify(updatedList)
+            });
+            if (setErr) throw setErr;
+            setNomencladorCatalogs(updatedList);
+
+            // 2. Sincronizar asignaciones de coberturas
+            // Coberturas que deberían tener este catalog.id
+            const targetIdsSet = new Set(assignedCoverageIds);
+
+            // A) Actualizar coberturas seleccionadas a catalog.id
+            if (assignedCoverageIds.length > 0) {
+                const { error: assignErr } = await supabase
+                    .from('coverages')
+                    .update({ nomenclador_type: catalog.id })
+                    .in('id', assignedCoverageIds);
+                if (assignErr) throw assignErr;
+            }
+
+            // B) Coberturas que antes tenían catalog.id pero ya no están en assignedCoverageIds: poner nomenclador_type a null
+            const { error: unassignErr } = await supabase
+                .from('coverages')
+                .update({ nomenclador_type: null })
+                .eq('nomenclador_type', catalog.id)
+                .not('id', 'in', `(${assignedCoverageIds.length > 0 ? assignedCoverageIds.map(id => `"${id}"`).join(',') : '""'})`);
+            if (unassignErr) {
+                console.warn('Advertencia al desasignar coberturas:', unassignErr);
+            }
+
+            // Refrescar coberturas
+            await fetchCoverages();
+            return true;
+        } catch (err: any) {
+            console.error('Error guardando catálogo de nomenclador:', err);
+            alert('Error al guardar nomenclador: ' + (err.message || err));
+            return false;
+        } finally {
+            setIsSavingCatalogType(false);
+        }
+    };
+
+    const handleDeleteNomencladorCatalog = async (catalogId: string): Promise<boolean> => {
+        if (user?.role !== 'SuperAdmin') {
+            alert('Acceso denegado: Únicamente los usuarios con rol SuperAdmin pueden eliminar nomencladores.');
+            return false;
+        }
+        if (['AOTER', 'OSER', 'NN'].includes(catalogId.toUpperCase())) {
+            alert('Los nomencladores estándar del sistema (AOTER, OSER, NN) no se pueden eliminar.');
+            return false;
+        }
+        if (!window.confirm(`¿Está seguro de que desea eliminar el nomenclador "${catalogId}"? Las coberturas asociadas volverán al nomenclador estándar.`)) {
+            return false;
+        }
+
+        setIsSavingCatalogType(true);
+        try {
+            const updatedList = nomencladorCatalogs.filter(c => c.id.toUpperCase() !== catalogId.toUpperCase());
+            const { error: setErr } = await supabase.from('admin_settings').upsert({
+                key: 'nomenclador_catalogs',
+                value: JSON.stringify(updatedList)
+            });
+            if (setErr) throw setErr;
+            setNomencladorCatalogs(updatedList);
+
+            // Revertir coberturas asociadas
+            await supabase
+                .from('coverages')
+                .update({ nomenclador_type: null })
+                .eq('nomenclador_type', catalogId);
+
+            await fetchCoverages();
+            return true;
+        } catch (err: any) {
+            console.error('Error eliminando catálogo de nomenclador:', err);
+            alert('Error al eliminar nomenclador: ' + (err.message || err));
+            return false;
+        } finally {
+            setIsSavingCatalogType(false);
+        }
     };
 
     const setPermissionLevel = async (role: string, sectionId: string, level: 'none' | 'view' | 'edit') => {
@@ -826,8 +945,8 @@ export const useSettings = () => {
 
     return {
         user, activeTab, setActiveTab, isPrintingBlank, setIsPrintingBlank, materialPagesCount, setMaterialPagesCount,
-        vendors, coverages, users, doctors, ors, procedures, categories, catalogItems, cie10Items, nomencladorItems, specialties,
-        isLoading, isLoadingCatalog, isLoadingNomenclador, isSavingNomenclador, isSavingPermissions, isSavingSmtp, isSavingSignature,
+        vendors, coverages, users, doctors, ors, procedures, categories, catalogItems, cie10Items, nomencladorItems, nomencladorCatalogs, specialties,
+        isLoading, isLoadingCatalog, isLoadingNomenclador, isSavingNomenclador, isSavingCatalogType, isSavingPermissions, isSavingSmtp, isSavingSignature,
         rolePermissions, telegramGlobalEnabled, bccEnabled, cie10Enabled, stockConsumptionEnabled, isTogglingStockConsumption, smtpSettings, setSmtpSettings,
         signaturePin, setSignaturePin, currentSignature, setCurrentSignature, signatureRef, setSignatureRef,
         showUserModal, setShowUserModal, newUser, setNewUser, newUserSpecialty, setNewUserSpecialty, isEditingUser, setIsEditingUser,
@@ -840,6 +959,7 @@ export const useSettings = () => {
         showProcModal, setShowProcModal, newProcedure, setNewProcedure, showEditProcModal, setShowEditProcModal, editingProcedure, setEditingProcedure,
         showMaterialModal, setShowMaterialModal, newMaterial, setNewMaterial, showCie10Modal, setShowCie10Modal, cie10Form, setCie10Form, isEditingCie10, setIsEditingCie10,
         showNomencladorModal, setShowNomencladorModal, nomencladorForm, setNomencladorForm, isEditingNomenclador, setIsEditingNomenclador,
+        showManageCatalogsModal, setShowManageCatalogsModal, handleSaveNomencladorCatalog, handleDeleteNomencladorCatalog,
         showSpecialtiesModal, setShowSpecialtiesModal, specialtyForm, setSpecialtyForm, editingSpecialtyOriginal, setEditingSpecialtyOriginal,
         showOserSyncModal, setShowOserSyncModal, oserResults, setOserResults, oserLogs, setOserLogs,
         searchUsers, setSearchUsers, searchDoctors, setSearchDoctors, searchCoverage, setSearchCoverage, searchCatalog, setSearchCatalog, searchCie10, setSearchCie10, searchNomenclador, setSearchNomenclador,
