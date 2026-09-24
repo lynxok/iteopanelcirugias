@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v3.12.7 (2026-09-24)
+- **Normalización de Formato y Persistencia Multi-Nomenclador**:
+    * Saneamiento y estandarización del almacenamiento delimitado por comas (`AOTER,NEUROCIRUG_A`) para máxima compatibilidad con Supabase y PostgREST.
+    * Garantía de concurrencia y no desasociación en el modal de gestión de catálogos y coberturas.
+
 ## v3.12.6 (2026-09-24)
 - **Actualización y Distribución Multi-Nomenclador**:
     * Sincronización completa de binarios e instalador NSIS para la suite de nomencladores dinámicos y asignación múltiple por cobertura médica.

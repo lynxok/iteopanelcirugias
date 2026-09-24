@@ -157,22 +157,26 @@ export function parseCoverageNomencladores(coverage?: Partial<Coverage> | null):
     }
     return ['AOTER'];
   }
+  // 1. Si es formato coma ("AOTER,NEUROCIRUG_A")
+  if (raw.includes(',')) {
+    return Array.from(new Set(raw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)));
+  }
+  // 2. Si es formato JSON ("[\"AOTER\",\"NEUROCIRUG_A\"]")
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return Array.from(new Set(parsed.map((s: any) => String(s).trim().toUpperCase())));
+      return Array.from(new Set(parsed.map((s: any) => String(s).trim().toUpperCase()).filter(Boolean)));
     }
   } catch {
-    // No es JSON, es un string plano
+    // No es JSON
   }
   return [raw.trim().toUpperCase()];
 }
 
 export function formatCoverageNomencladores(catalogs: string[]): string {
   const unique = Array.from(new Set(catalogs.map(s => s.trim().toUpperCase()).filter(Boolean)));
-  if (unique.length === 0) return JSON.stringify(['AOTER']);
-  if (unique.length === 1) return unique[0];
-  return JSON.stringify(unique);
+  if (unique.length === 0) return 'AOTER';
+  return unique.join(',');
 }
 
 export interface NomencladorItem {
