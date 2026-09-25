@@ -2,6 +2,12 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.12.9 [2026-09-25]**: Lanzada la versión **v3.12.9**.
+    *   **Habilitación de Creación de Cirugías de ART para Rol Oficina ART (`permissions.ts`, `useSurgeryDetail.ts`, `PatientSection.tsx`)**:
+        *   **Permiso de Edición**: Asignado permiso `edit` en `surgeries` para el rol `Oficina ART` en `permissions.ts`, eliminando el bloqueo en solo lectura (`isReadOnly`) al ingresar en la pantalla de Nueva Cirugía.
+        *   **Restricción Estricta a Coberturas ART**: En el formulario quirúrgico (`PatientSection.tsx`), el selector desplegable de prestador filtra y ofrece únicamente las opciones pertenecientes a "Aseguradoras (ART)".
+        *   **Validación de Guardado Segura**: En `useSurgeryDetail.ts`, se incorporó validación al guardar que bloquea cualquier intento de registrar cirugías no pertenecientes a ART (`coverage.type !== 'ART'`).
+        *   **Sincronización Inmediata de Permisos**: Uso directo de `loadPermissionsFromDB()` y caché en memoria para una inicialización reactiva sin desfasajes de carga.
 *   **v3.12.8 [2026-09-25]**: Lanzada la versión **v3.12.8**.
     *   **Estadísticas de Internación y Ocupación de Habitaciones (`HospitalizationStats.tsx`)**:
         *   **Visualización Completa de Habitaciones**: Eliminado el `.slice(0, 5)` que truncaba el gráfico de torta de "Habitaciones más utilizadas". Ahora se muestran todas las habitaciones del establecimiento clínico (incluyendo la Habitación 2 / Suite).

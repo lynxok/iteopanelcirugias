@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sandbox Interactivo - Ficha de Cirugía y Control de Stock ITEO</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        primary: '#1d4ed8',
+                        anesthesia: '#4f46e5',
+                        surgery: '#059669'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col">
+
+    <!-- Top Sandbox Header -->
+    <header class="bg-slate-900 text-white shadow-md sticky top-0 z-50 border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-indigo-600 p-2 rounded-xl text-white flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                    <span class="material-symbols-outlined text-2xl">science</span>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-base font-black tracking-tight text-white">SANDBOX INTERACTIVO</h1>
+                        <span class="text-[10px] uppercase font-black bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">Prototipo Funcional</span>
+                    </div>
+                    <p class="text-xs text-slate-400">Prueba cómo convive la Ficha de Cirugía con la Sección de Stock en tiempo real</p>
+                </div>
+            </div>
+
+            <!-- View Switcher -->
+            <div class="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700">
+                <button id="btn-tab-surgery" onclick="switchView('surgery')" class="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all bg-indigo-600 text-white shadow-sm">
+                    <span class="material-symbols-outlined text-sm">assignment</span>
+                    1. Ficha de Cirugía
+                </button>
+                <button id="btn-tab-stock" onclick="switchView('stock')" class="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-white">
+                    <span class="material-symbols-outlined text-sm">inventory_2</span>
+                    2. Sección de Stock (Técnico)
+                    <span id="badge-stock-count" class="ml-1 bg-indigo-500/30 text-indigo-300 text-[10px] px-1.5 py-0.2 rounded-full font-mono">15</span>
+                </button>
+            </div>
+
+            <!-- Live Status & Reset -->
+            <div class="flex items-center gap-3 text-xs">
+                <div class="hidden sm:flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/60">
+                    <span class="size-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="text-slate-300 font-medium">Kardex en memoria: <strong id="header-kardex-count" class="text-white font-mono">0</strong> mov.</span>
+                </div>
+                <button onclick="resetData()" class="text-slate-400 hover:text-rose-400 p-2 rounded-lg hover:bg-slate-800 transition-colors" title="Restablecer valores de prueba">
+                    <span class="material-symbols-outlined text-lg">restart_alt</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
+
+        <!-- ========================================== -->
+        <!-- VIEW 1: FICHA DE CIRUGÍA (SurgeryForm)     -->
+        <!-- ========================================== -->
+        <div id="view-surgery" class="space-y-6">
+
+            <!-- Context Banner -->
+            <div class="bg-gradient-to-r from-blue-900/90 to-indigo-950 text-white p-5 rounded-2xl shadow-sm border border-blue-800/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2 text-indigo-300 text-xs font-bold uppercase tracking-wider">
+                        <span class="material-symbols-outlined text-sm">medical_services</span> Paciente en Quirófano 1
+                    </div>
+                    <h2 class="text-xl font-black tracking-tight">GONZÁLEZ, Marcelo Roberto (48 años)</h2>
+                    <p class="text-xs text-slate-300">DNI: 28.412.980 &bull; OSDE 210 &bull; <strong>Cirugía:</strong> Artroscopía de Rodilla Izquierda &bull; <strong>Cirujano:</strong> Dr. Álvarez</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="openPrintModal()" class="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border border-white/20 backdrop-blur-sm transition-all">
+                        <span class="material-symbols-outlined text-base">print</span> Simular Impresión Médica
+                    </button>
+                    <button onclick="saveSurgeryForm()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-900/30 transition-all">
+                        <span class="material-symbols-outlined text-base">save</span> Guardar Ficha y Sincronizar Stock
+                    </button>
+                </div>
+            </div>
+
+            <!-- Ficha Técnica Section: Registro de Insumos -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h3 class="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-indigo-600">inventory_2</span>
+                            Registro de Insumos & Medicación en Quirófano
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5">Los técnicos e instrumentadoras cargan los insumos consumidos. Los ítems con checkbox activo descontarán stock al guardar.</p>
+                    </div>
+                    <div class="flex items-center gap-2 text-[11px] font-bold bg-amber-50 text-amber-800 px-3 py-1 rounded-lg border border-amber-200">
+                        <span class="material-symbols-outlined text-sm text-amber-600">info</span>
+                        El checkbox es interno: NO saldrá en la impresión legal.
+                    </div>
+                </div>
+
+                <!-- Selector Row -->
+                <div class="p-6 bg-slate-50/50 border-b border-slate-200">
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        
+                        <!-- Search & Select from Vademécum -->
+                        <div class="md:col-span-5 relative">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                Elemento / Medicamento <span class="text-indigo-600 font-bold">(Vademécum con stock en vivo)</span>
+                            </label>
+                            <div class="relative">
+                                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+                                <input id="input-search-item" type="text" placeholder="Escriba para buscar en el vademécum..." 
+                                    onfocus="showItemDropdown(true)" oninput="filterItemDropdown(this.value)"
+                                    class="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none" autocomplete="off" />
+                                
+                                <!-- Suggestions Dropdown -->
+                                <div id="items-dropdown" class="hidden absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100">
+                                    <!-- Populated via JS -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quantity -->
+                        <div class="md:col-span-2">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cantidad</label>
+                            <input id="input-item-qty" type="number" min="1" value="1" 
+                                class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none text-center" />
+                        </div>
+
+                        <!-- Unit -->
+                        <div class="md:col-span-2">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Unidad</label>
+                            <select id="input-item-unit" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <option value="amp">amp (ampolla)</option>
+                                <option value="frasco">frasco</option>
+                                <option value="unidad">unidad</option>
+                                <option value="ml">ml</option>
+                                <option value="mg">mg</option>
+                                <option value="paq">paq (paquete)</option>
+                                <option value="sach">sachet</option>
+                            </select>
+                        </div>
+
+                        <!-- Category Selector -->
+                        <div class="md:col-span-2">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tabla Destino</label>
+                            <div class="flex rounded-lg overflow-hidden border border-slate-300 bg-white p-0.5">
+                                <button type="button" id="btn-cat-anest" onclick="selectFormCategory('anesthesia')" class="flex-1 py-1.5 text-[10px] font-black uppercase rounded bg-indigo-600 text-white transition-all">Anestesia</button>
+                                <button type="button" id="btn-cat-surg" onclick="selectFormCategory('surgery')" class="flex-1 py-1.5 text-[10px] font-black uppercase rounded text-slate-500 hover:text-emerald-700 transition-all">Cirugía</button>
+                            </div>
+                        </div>
+
+                        <!-- Add Button -->
+                        <div class="md:col-span-1">
+                            <button onclick="addItemToForm()" class="w-full h-[38px] bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black uppercase text-[10px] tracking-wider transition-all flex items-center justify-center gap-1 shadow-sm">
+                                <span class="material-symbols-outlined text-sm">add</span>
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- The Two Surgical Tables -->
+                <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                    <!-- Table 1: Anestesia -->
+                    <div class="border border-indigo-100 rounded-xl overflow-hidden shadow-xs flex flex-col bg-white">
+                        <div class="bg-indigo-50/80 px-4 py-3 border-b border-indigo-100 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="size-2 rounded-full bg-indigo-600"></span>
+                                <span class="text-xs font-black text-indigo-900 uppercase tracking-wider">Tabla de Anestesia</span>
+                            </div>
+                            <span id="count-anesthesia" class="text-[10px] font-black bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full font-mono">0 ítems</span>
+                        </div>
+
+                        <div class="p-3 flex-1 flex flex-col justify-between">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-xs">
+                                    <thead>
+                                        <tr class="text-[9px] uppercase font-black text-slate-400 border-b border-slate-200 pb-1">
+                                            <th class="py-1 px-2">Fármaco / Insumo</th>
+                                            <th class="py-1 px-2 text-center w-16">Dosis</th>
+                                            <th class="py-1 px-2 text-center w-36 bg-indigo-50/50 rounded-t">
+                                                <span class="text-indigo-700 font-black">¿Descontar Stock?</span>
+                                                <span class="block text-[7px] text-slate-400 font-normal lowercase">(solo uso interno)</span>
+                                            </th>
+                                            <th class="py-1 px-1 text-right w-8"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-anesthesia" class="divide-y divide-slate-100">
+                                        <!-- Populated via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="text-[10px] text-slate-400 italic pt-3 text-center border-t border-slate-100 mt-3">
+                                💡 <em>Si el fármaco se usó de forma parcial o residual, destildá el checkbox: se registrará en la historia médica pero no afectará el inventario.</em>
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Table 2: Cirugía e Insumos Generales -->
+                    <div class="border border-emerald-100 rounded-xl overflow-hidden shadow-xs flex flex-col bg-white">
+                        <div class="bg-emerald-50/80 px-4 py-3 border-b border-emerald-100 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="size-2 rounded-full bg-emerald-600"></span>
+                                <span class="text-xs font-black text-emerald-900 uppercase tracking-wider">Tabla de Cirugía / Descartables</span>
+                            </div>
+                            <span id="count-surgery" class="text-[10px] font-black bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-mono">0 ítems</span>
+                        </div>
+
+                        <div class="p-3 flex-1 flex flex-col justify-between">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-xs">
+                                    <thead>
+                                        <tr class="text-[9px] uppercase font-black text-slate-400 border-b border-slate-200 pb-1">
+                                            <th class="py-1 px-2">Material / Descartable</th>
+                                            <th class="py-1 px-2 text-center w-16">Cant.</th>
+                                            <th class="py-1 px-2 text-center w-36 bg-emerald-50/50 rounded-t">
+                                                <span class="text-emerald-700 font-black">¿Descontar Stock?</span>
+                                                <span class="block text-[7px] text-slate-400 font-normal lowercase">(solo uso interno)</span>
+                                            </th>
+                                            <th class="py-1 px-1 text-right w-8"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-surgery" class="divide-y divide-slate-100">
+                                        <!-- Populated via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="text-[10px] text-slate-400 italic pt-3 text-center border-t border-slate-100 mt-3">
+                                💡 <em>Descartables, suturas y soluciones con consumo total se descuentan directamente del depósito de quirófano.</em>
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Footer Action Bar -->
+                <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                        <span class="material-symbols-outlined text-emerald-600">verified</span>
+                        <span>Estado de sincronización: <strong id="form-sync-status" class="text-slate-700">Sin cambios pendientes</strong></span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="openPrintModal()" class="px-4 py-2 border border-slate-300 hover:bg-white bg-slate-100 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2 transition-all">
+                            <span class="material-symbols-outlined text-sm">print</span> Previsualizar Ficha Impresa
+                        </button>
+                        <button onclick="saveSurgeryForm()" class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all">
+                            <span class="material-symbols-outlined text-sm">save</span> Guardar Ficha Técnica
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- ========================================== -->
+        <!-- VIEW 2: SECCIÓN DE STOCK (Para el Técnico) -->
+        <!-- ========================================== -->
+        <div id="view-stock" class="hidden space-y-6">
+
+            <!-- Stock Metrics Header -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+                    <div class="size-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-2xl">inventory_2</span>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total Insumos</p>
+                        <h4 id="metric-total" class="text-2xl font-black text-slate-800">15</h4>
+                        <span class="text-[10px] text-slate-400 font-medium">En vademécum activo</span>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+                    <div class="size-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-2xl">check_circle</span>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase text-slate-400 tracking-wider">Stock Óptimo</p>
+                        <h4 id="metric-optimo" class="text-2xl font-black text-emerald-600">11</h4>
+                        <span class="text-[10px] text-slate-400 font-medium">Por encima del mínimo</span>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+                    <div class="size-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-2xl">warning</span>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase text-slate-400 tracking-wider">Stock Bajo</p>
+                        <h4 id="metric-bajo" class="text-2xl font-black text-amber-600">3</h4>
+                        <span class="text-[10px] text-slate-400 font-medium">Requiere reposición</span>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-4">
+                    <div class="size-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                        <span class="material-symbols-outlined text-2xl">block</span>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase text-slate-400 tracking-wider">Sin Stock / Crítico</p>
+                        <h4 id="metric-agotado" class="text-2xl font-black text-rose-600">1</h4>
+                        <span class="text-[10px] text-slate-400 font-medium">Saldo en 0 o negativo</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stock Tabs Navigation -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                
+                <div class="border-b border-slate-200 px-6 pt-4 bg-slate-50 flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex gap-2">
+                        <button onclick="switchStockSubTab('inventory')" id="tab-btn-inventory" class="px-4 py-2.5 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-base">format_list_bulleted</span> Inventario General
+                        </button>
+                        <button onclick="switchStockSubTab('entry')" id="tab-btn-entry" class="px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-base text-emerald-600">add_box</span> + Ingreso de Mercadería
+                        </button>
+                        <button onclick="switchStockSubTab('exit')" id="tab-btn-exit" class="px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-base text-rose-600">indeterminate_check_box</span> − Egreso / Salida Manual
+                        </button>
+                        <button onclick="switchStockSubTab('import')" id="tab-btn-import" class="px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-base">upload_file</span> Importar Excel / CSV
+                        </button>
+                        <button onclick="switchStockSubTab('kardex')" id="tab-btn-kardex" class="px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-base">history</span> Kardex / Movimientos
+                            <span id="badge-kardex-count" class="bg-indigo-100 text-indigo-700 text-[10px] px-1.5 py-0.2 rounded-full font-mono">0</span>
+                        </button>
+                    </div>
+
+                    <div class="pb-3 flex gap-2">
+                        <button onclick="openNewItemModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all">
+                            <span class="material-symbols-outlined text-base">add</span> Nuevo Insumo
+                        </button>
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 1: INVENTARIO GENERAL -->
+                <div id="subtab-inventory" class="p-6 space-y-4">
+                    
+                    <!-- Search & Filters -->
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div class="relative flex-1 min-w-[240px]">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+                            <input id="input-search-stock" type="text" placeholder="Buscar por nombre, código de barra o droga..." oninput="renderStockTable()"
+                                class="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-slate-400 uppercase text-[10px]">Filtrar:</span>
+                            <div class="bg-slate-100 p-1 rounded-xl flex gap-1 text-xs">
+                                <button onclick="setCategoryFilter('all')" id="filter-all" class="px-3 py-1 rounded-lg font-bold bg-white text-slate-800 shadow-2xs">Todos</button>
+                                <button onclick="setCategoryFilter('anesthesia')" id="filter-anesthesia" class="px-3 py-1 rounded-lg font-bold text-slate-500 hover:text-indigo-600">Anestesia</button>
+                                <button onclick="setCategoryFilter('surgery')" id="filter-surgery" class="px-3 py-1 rounded-lg font-bold text-slate-500 hover:text-emerald-600">Cirugía</button>
+                                <button onclick="setCategoryFilter('alert')" id="filter-alert" class="px-3 py-1 rounded-lg font-bold text-slate-500 hover:text-amber-600">⚠️ Stock Bajo</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Inventory Table -->
+                    <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-wider border-b border-slate-200">
+                                <tr>
+                                    <th class="px-4 py-3">Código</th>
+                                    <th class="px-4 py-3">Insumo / Medicamento</th>
+                                    <th class="px-4 py-3 text-center">Categoría</th>
+                                    <th class="px-4 py-3 text-center">Unidad</th>
+                                    <th class="px-4 py-3 text-right">Stock Actual</th>
+                                    <th class="px-4 py-3 text-right">Stock Mínimo</th>
+                                    <th class="px-4 py-3 text-center">Estado</th>
+                                    <th class="px-4 py-3 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-stock" class="divide-y divide-slate-100 font-medium">
+                                <!-- Populated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 2: INGRESO DE MERCADERÍA (ENTRADAS) -->
+                <div id="subtab-entry" class="hidden p-6 max-w-2xl mx-auto space-y-6">
+                    <div class="text-center space-y-1">
+                        <div class="size-12 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center font-bold">
+                            <span class="material-symbols-outlined text-2xl">add_box</span>
+                        </div>
+                        <h3 class="text-base font-black text-slate-800">Registrar Ingreso de Stock a Quirófano</h3>
+                        <p class="text-xs text-slate-500">Suma unidades físicas que ingresan desde compras o la farmacia central.</p>
+                    </div>
+
+                    <form onsubmit="event.preventDefault(); submitStockEntry();" class="space-y-4 bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Seleccionar Insumo del Catálogo</label>
+                            <select id="entry-item-id" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none">
+                                <!-- Populated via JS -->
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">Cantidad a Ingresar</label>
+                                <input id="entry-qty" type="number" min="1" value="10" required 
+                                    class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">N° Remito / Comprobante (Opcional)</label>
+                                <input id="entry-doc" type="text" placeholder="Ej: REM-8941" 
+                                    class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Observaciones / Proveedor</label>
+                            <input id="entry-notes" type="text" placeholder="Ej: Entrega Droguería del Sud, lote 2026-A" 
+                                class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-emerald-500 outline-none" />
+                        </div>
+
+                        <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20 transition-all">
+                            <span class="material-symbols-outlined text-base">check_circle</span>
+                            Confirmar Ingreso y Sumar al Stock
+                        </button>
+                    </form>
+                </div>
+
+                <!-- SUB-TAB 2.B: EGRESO DE MERCADERÍA (SALIDAS MANUALES) -->
+                <div id="subtab-exit" class="hidden p-6 max-w-2xl mx-auto space-y-6">
+                    <div class="text-center space-y-1">
+                        <div class="size-12 rounded-2xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center font-bold">
+                            <span class="material-symbols-outlined text-2xl">indeterminate_check_box</span>
+                        </div>
+                        <h3 class="text-base font-black text-slate-800">Registrar Egreso / Salida de Stock</h3>
+                        <p class="text-xs text-slate-500">Descuenta unidades por préstamos a otros servicios, descarte por vencimiento, rotura o consumo no quirúrgico.</p>
+                    </div>
+
+                    <form onsubmit="event.preventDefault(); submitStockExit();" class="space-y-4 bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Insumo a Retirar del Quirófano</label>
+                            <select id="exit-item-id" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-rose-500 outline-none">
+                                <!-- Populated via JS -->
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">Cantidad a Egresar</label>
+                                <input id="exit-qty" type="number" min="1" value="1" required 
+                                    class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-rose-500 outline-none" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">Motivo / Destino del Egreso</label>
+                                <select id="exit-reason" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-rose-500 outline-none">
+                                    <option value="Préstamo a Terapia Intensiva (UTI)">Préstamo a Terapia Intensiva (UTI)</option>
+                                    <option value="Préstamo a Guardia / Shockroom">Préstamo a Guardia / Shockroom</option>
+                                    <option value="Préstamo a Piso de Internación">Préstamo a Piso de Internación</option>
+                                    <option value="Descarte por Vencimiento">Descarte por Vencimiento</option>
+                                    <option value="Rotura / Deterioro en Quirófano">Rotura / Deterioro en Quirófano</option>
+                                    <option value="Consumo de Urgencia Fuera de Turno">Consumo de Urgencia Fuera de Turno</option>
+                                    <option value="Ajuste por Faltante de Inventario">Ajuste por Faltante de Inventario</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">Solicitado / Autorizado por</label>
+                                <input id="exit-auth" type="text" placeholder="Ej: Dr. Pérez (UTI) / Enf. Guardia" required
+                                    class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-rose-500 outline-none" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">N° Vale / Comprobante (Opcional)</label>
+                                <input id="exit-doc" type="text" placeholder="Ej: VALE-104" 
+                                    class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-rose-500 outline-none" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Observaciones Adicionales</label>
+                            <input id="exit-notes" type="text" placeholder="Ej: Se entregó con compromiso de devolución el viernes" 
+                                class="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-rose-500 outline-none" />
+                        </div>
+
+                        <button type="submit" class="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-rose-900/20 transition-all">
+                            <span class="material-symbols-outlined text-base">remove_circle</span>
+                            Confirmar Egreso y Restar del Stock
+                        </button>
+                    </form>
+                </div>
+
+                <!-- SUB-TAB 3: IMPORTADOR EXCEL / CSV -->
+                <div id="subtab-import" class="hidden p-6 space-y-6">
+                    <div class="max-w-3xl mx-auto space-y-6">
+                        
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <div>
+                                <h4 class="text-sm font-black text-slate-800">Carga Masiva desde Excel o CSV</h4>
+                                <p class="text-xs text-slate-500">Cargue un nuevo listado con código, nombre, categoría, unidad, stock inicial y mínimo.</p>
+                            </div>
+                            <button onclick="downloadSampleTemplate()" class="bg-white hover:bg-slate-100 text-indigo-600 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border border-indigo-200 shadow-2xs transition-colors">
+                                <span class="material-symbols-outlined text-base">download</span>
+                                Descargar Plantilla Modelo (.csv)
+                            </button>
+                        </div>
+
+                        <!-- Dropzone Simulator -->
+                        <div class="border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl p-8 text-center bg-white transition-colors cursor-pointer" onclick="simulateLoadExcel()">
+                            <div class="size-14 rounded-full bg-indigo-50 text-indigo-600 mx-auto flex items-center justify-center mb-3">
+                                <span class="material-symbols-outlined text-3xl">upload_file</span>
+                            </div>
+                            <h5 class="text-sm font-bold text-slate-800">Haga clic aquí para simular la subida de un Excel (.xlsx) o (.csv)</h5>
+                            <p class="text-xs text-slate-400 mt-1">El sistema mapeará automáticamente las columnas y permitirá previsualizar antes de guardar.</p>
+                            <span class="inline-block mt-3 bg-indigo-50 text-indigo-700 text-[11px] font-bold px-3 py-1 rounded-lg border border-indigo-200">
+                                Probar carga automática de 5 nuevos insumos médicos
+                            </span>
+                        </div>
+
+                        <!-- Import Preview Area -->
+                        <div id="import-preview-area" class="hidden space-y-4">
+                            <div class="flex items-center justify-between">
+                                <h5 class="text-xs font-black uppercase text-slate-700 tracking-wider flex items-center gap-2">
+                                    <span class="size-2 rounded-full bg-indigo-600"></span> Previsualización del archivo (5 insumos detectados)
+                                </h5>
+                                <button onclick="confirmExcelImport()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all">
+                                    <span class="material-symbols-outlined text-sm">cloud_upload</span> Confirmar e Importar al Catálogo
+                                </button>
+                            </div>
+
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-left text-xs">
+                                    <thead class="bg-slate-50 text-slate-500 text-[10px] font-black uppercase border-b border-slate-200">
+                                        <tr>
+                                            <th class="px-3 py-2">Código</th>
+                                            <th class="px-3 py-2">Nombre</th>
+                                            <th class="px-3 py-2">Categoría</th>
+                                            <th class="px-3 py-2">Unidad</th>
+                                            <th class="px-3 py-2 text-right">Stock Inicial</th>
+                                            <th class="px-3 py-2 text-right">Stock Mínimo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-import-preview" class="divide-y divide-slate-100 font-medium">
+                                        <!-- Populated via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 4: KARDEX / MOVIMIENTOS -->
+                <div id="subtab-kardex" class="hidden p-6 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="text-sm font-black text-slate-800">Libro de Movimientos de Quirófano (Kardex)</h4>
+                            <p class="text-xs text-slate-500">Trazabilidad total: muestra quién, cuándo y en qué cirugía se consumió o ingresó cada insumo.</p>
+                        </div>
+                        <button onclick="clearKardexHistory()" class="text-xs text-rose-500 hover:text-rose-700 font-bold">Limpiar Historial</button>
+                    </div>
+
+                    <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-50 text-slate-500 text-[10px] font-black uppercase border-b border-slate-200">
+                                <tr>
+                                    <th class="px-4 py-3">Fecha y Hora</th>
+                                    <th class="px-4 py-3 text-center">Tipo</th>
+                                    <th class="px-4 py-3">Insumo</th>
+                                    <th class="px-4 py-3 text-center">Cant.</th>
+                                    <th class="px-4 py-3 text-right">Stock Final</th>
+                                    <th class="px-4 py-3">Referencia / Paciente</th>
+                                    <th class="px-4 py-3">Usuario</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-kardex" class="divide-y divide-slate-100 font-medium">
+                                <!-- Populated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- ==================================================== -->
+    <!-- MODAL 1: PREVISUALIZACIÓN DE IMPRESIÓN MÉDICA LIMPIA -->
+    <!-- ==================================================== -->
+    <div id="modal-print" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            <div class="bg-slate-900 text-white px-6 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-emerald-400">print</span>
+                    <h4 class="text-xs font-black uppercase tracking-wider">Simulación de Hoja Impresa / PDF Legal</h4>
+                </div>
+                <button onclick="closePrintModal()" class="text-slate-400 hover:text-white">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+
+            <!-- Printable Sheet Content -->
+            <div class="p-8 overflow-y-auto font-sans text-slate-900 space-y-6 bg-white">
+                <div class="border-b-2 border-slate-900 pb-3 flex justify-between items-end">
+                    <div>
+                        <h2 class="text-xl font-black uppercase tracking-tight">Ficha Técnica de Cirugía</h2>
+                        <p class="text-[10px] font-bold text-slate-500 uppercase">Centro Quirúrgico ITEO - Protocolo Post-Operatorio</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] font-bold bg-slate-100 px-2 py-1 rounded border border-slate-300">SST-MOD-042</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div><span class="text-[10px] text-slate-400 font-bold block uppercase">Paciente:</span> <strong>GONZÁLEZ, Marcelo R.</strong></div>
+                    <div><span class="text-[10px] text-slate-400 font-bold block uppercase">DNI:</span> <strong>28.412.980</strong></div>
+                    <div><span class="text-[10px] text-slate-400 font-bold block uppercase">Fecha:</span> <strong>16/09/2026</strong></div>
+                    <div class="col-span-2"><span class="text-[10px] text-slate-400 font-bold block uppercase">Procedimiento:</span> <strong>Artroscopía de Rodilla Izquierda</strong></div>
+                    <div><span class="text-[10px] text-slate-400 font-bold block uppercase">Cirujano:</span> <strong>Dr. Álvarez</strong></div>
+                </div>
+
+                <!-- Clean Tables on Print (NO CHECKBOXES) -->
+                <div class="space-y-4">
+                    <div class="border-l-4 border-indigo-600 pl-3">
+                        <h3 class="text-xs font-black uppercase tracking-wider text-slate-800">1. Medicación Administrada por Anestesiología</h3>
+                    </div>
+                    <table class="w-full text-xs border border-slate-300">
+                        <thead class="bg-slate-100 text-[10px] uppercase font-bold text-slate-600">
+                            <tr>
+                                <th class="border border-slate-300 px-3 py-1.5 text-left">Fármaco / Medicamento</th>
+                                <th class="border border-slate-300 px-3 py-1.5 text-center w-24">Cantidad</th>
+                                <th class="border border-slate-300 px-3 py-1.5 text-center w-28">Unidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="print-tbody-anesthesia">
+                            <!-- Clean list populated via JS without checkboxes -->
+                        </tbody>
+                    </table>
+
+                    <div class="border-l-4 border-emerald-600 pl-3 pt-2">
+                        <h3 class="text-xs font-black uppercase tracking-wider text-slate-800">2. Insumos y Descartables Quirúrgicos</h3>
+                    </div>
+                    <table class="w-full text-xs border border-slate-300">
+                        <thead class="bg-slate-100 text-[10px] uppercase font-bold text-slate-600">
+                            <tr>
+                                <th class="border border-slate-300 px-3 py-1.5 text-left">Insumo / Material</th>
+                                <th class="border border-slate-300 px-3 py-1.5 text-center w-24">Cantidad</th>
+                                <th class="border border-slate-300 px-3 py-1.5 text-center w-28">Unidad</th>
+                            </tr>
+                        </thead>
+                        <tbody id="print-tbody-surgery">
+                            <!-- Clean list populated via JS without checkboxes -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Signatures -->
+                <div class="pt-8 grid grid-cols-2 gap-8 text-center text-xs">
+                    <div class="border-t border-slate-400 pt-2">
+                        <p class="font-bold">Firma y Sello Anestesiólogo</p>
+                    </div>
+                    <div class="border-t border-slate-400 pt-2">
+                        <p class="font-bold">Firma y Sello Cirujano</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-100 px-6 py-3 border-t border-slate-200 flex justify-between items-center">
+                <span class="text-xs text-slate-500 italic">✓ Verificado: Las decisiones de stock no son visibles en este documento.</span>
+                <button onclick="closePrintModal()" class="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors">
+                    Cerrar Previsualización
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ==================================================== -->
+    <!-- MODAL 2: NUEVO INSUMO EN CATÁLOGO                   -->
+    <!-- ==================================================== -->
+    <div id="modal-new-item" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+            <div class="bg-indigo-600 text-white px-6 py-4 flex justify-between items-center">
+                <h4 class="text-sm font-black uppercase tracking-wider">Nuevo Insumo en Vademécum</h4>
+                <button onclick="closeNewItemModal()" class="text-indigo-200 hover:text-white">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+
+            <form onsubmit="event.preventDefault(); saveNewItemCatalog();" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Nombre del Insumo / Medicamento *</label>
+                    <input id="modal-item-name" type="text" required placeholder="Ej: Fentanilo 0.05mg 5ml" 
+                        class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Código (Opcional)</label>
+                        <input id="modal-item-code" type="text" placeholder="Ej: ANE-005" 
+                            class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Categoría</label>
+                        <select id="modal-item-cat" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                            <option value="anesthesia">Anestesia</option>
+                            <option value="surgery">Cirugía / Insumos</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Unidad</label>
+                        <select id="modal-item-unit" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                            <option value="amp">amp</option>
+                            <option value="frasco">frasco</option>
+                            <option value="unidad">unidad</option>
+                            <option value="ml">ml</option>
+                            <option value="paq">paq</option>
+                            <option value="sach">sach</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Stock Inicial</label>
+                        <input id="modal-item-stock" type="number" min="0" value="0" 
+                            class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-center" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Stock Mín.</label>
+                        <input id="modal-item-min" type="number" min="0" value="5" 
+                            class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none text-center" />
+                    </div>
+                </div>
+
+                <div class="pt-2 flex justify-end gap-2">
+                    <button type="button" onclick="closeNewItemModal()" class="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800">Cancelar</button>
+                    <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all">Guardar Insumo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="hidden fixed bottom-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-3 transition-all duration-300">
+        <span id="toast-icon" class="material-symbols-outlined text-emerald-400">check_circle</span>
+        <span id="toast-msg" class="text-xs font-bold">Notificación</span>
+    </div>
+
+    <!-- JAVASCRIPT STATE ENGINE -->
+    <script>
+        // -------------------------------------------------------------
+        // INITIAL STATE & MOCK CATALOG
+        // -------------------------------------------------------------
+        const DEFAULT_CATALOG = [
+            { id: '1', code: 'ANE-001', name: 'Propofol 1% x 20ml', category: 'anesthesia', unit: 'amp', stock: 12, min: 5 },
+            { id: '2', code: 'ANE-002', name: 'Fentanilo 0.05mg x 5ml', category: 'anesthesia', unit: 'amp', stock: 4, min: 5 }, // Stock bajo
+            { id: '3', code: 'ANE-003', name: 'Bupivacaína 0.5% x 20ml', category: 'anesthesia', unit: 'frasco', stock: 2, min: 3 }, // Stock bajo
+            { id: '4', code: 'ANE-004', name: 'Atropina 1mg/ml', category: 'anesthesia', unit: 'amp', stock: 18, min: 5 },
+            { id: '5', code: 'ANE-005', name: 'Remifentanilo 2mg', category: 'anesthesia', unit: 'amp', stock: 0, min: 4 }, // Agotado
+            { id: '6', code: 'ANE-006', name: 'Midazolam 15mg/3ml', category: 'anesthesia', unit: 'amp', stock: 15, min: 6 },
+            { id: '7', code: 'ANE-007', name: 'Dipirona 1g x 2ml', category: 'anesthesia', unit: 'amp', stock: 35, min: 10 },
+            { id: '8', code: 'ANE-008', name: 'Adrenalina 1mg', category: 'anesthesia', unit: 'amp', stock: 9, min: 4 },
+
+            { id: '9', code: 'CIR-001', name: 'Suero Fisiológico 0.9% x 500ml', category: 'surgery', unit: 'sach', stock: 48, min: 15 },
+            { id: '10', code: 'CIR-002', name: 'Gasas Estériles 10x10 (paq x 10)', category: 'surgery', unit: 'paq', stock: 65, min: 20 },
+            { id: '11', code: 'CIR-003', name: 'Guantes Quirúrgicos 7.5', category: 'surgery', unit: 'par', stock: 80, min: 25 },
+            { id: '12', code: 'CIR-004', name: 'Vicryl 3-0 C-26 (Sutura)', category: 'surgery', unit: 'unidad', stock: 14, min: 10 },
+            { id: '13', code: 'CIR-005', name: 'Monocryl 4-0 (Sutura)', category: 'surgery', unit: 'unidad', stock: 3, min: 5 }, // Stock bajo
+            { id: '14', code: 'CIR-006', name: 'Pervinox Solución x 1000ml', category: 'surgery', unit: 'frasco', stock: 6, min: 2 },
+            { id: '15', code: 'CIR-007', name: 'Hoja de Bisturí N° 15', category: 'surgery', unit: 'unidad', stock: 40, min: 15 }
+        ];
+
+        // App state
+        let catalog = JSON.parse(localStorage.getItem('iteo_sandbox_catalog')) || DEFAULT_CATALOG;
+        let kardex = JSON.parse(localStorage.getItem('iteo_sandbox_kardex')) || [];
+        
+        // Active surgery form items state:
+        // Each item: { id, catalogId, name, quantity, unit, type, shouldDiscount, wasDiscounted }
+        let surgeryItems = [
+            { id: 'f-1', catalogId: '1', name: 'Propofol 1% x 20ml', quantity: 1, unit: 'amp', type: 'anesthesia', shouldDiscount: true, wasDiscounted: false },
+            { id: 'f-2', catalogId: '2', name: 'Fentanilo 0.05mg x 5ml', quantity: 1, unit: 'amp', type: 'anesthesia', shouldDiscount: false, wasDiscounted: false }, // Destildado por ser parcial!
+            { id: 'f-3', catalogId: '9', name: 'Suero Fisiológico 0.9% x 500ml', quantity: 2, unit: 'sach', type: 'surgery', shouldDiscount: true, wasDiscounted: false },
+            { id: 'f-4', catalogId: '10', name: 'Gasas Estériles 10x10 (paq x 10)', quantity: 3, unit: 'paq', type: 'surgery', shouldDiscount: true, wasDiscounted: false }
+        ];
+
+        let activeCategorySelection = 'anesthesia';
+        let stockFilterCategory = 'all';
+
+        // -------------------------------------------------------------
+        // NAVIGATION
+        // -------------------------------------------------------------
+        function switchView(view) {
+            document.getElementById('view-surgery').classList.toggle('hidden', view !== 'surgery');
+            document.getElementById('view-stock').classList.toggle('hidden', view !== 'stock');
+
+            const btnSurg = document.getElementById('btn-tab-surgery');
+            const btnStock = document.getElementById('btn-tab-stock');
+
+            if (view === 'surgery') {
+                btnSurg.className = 'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all bg-indigo-600 text-white shadow-sm';
+                btnStock.className = 'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-white';
+            } else {
+                btnStock.className = 'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all bg-indigo-600 text-white shadow-sm';
+                btnSurg.className = 'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-white';
+                renderStockMetrics();
+                renderStockTable();
+                populateEntryDropdown();
+                populateExitDropdown();
+            }
+        }
+
+        function switchStockSubTab(tab) {
+            ['inventory', 'entry', 'exit', 'import', 'kardex'].forEach(t => {
+                const el = document.getElementById(`subtab-${t}`);
+                if (el) el.classList.toggle('hidden', t !== tab);
+                const btn = document.getElementById(`tab-btn-${t}`);
+                if (btn) {
+                    if (t === tab) {
+                        btn.className = 'px-4 py-2.5 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-2';
+                    } else {
+                        btn.className = 'px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center gap-2';
+                    }
+                }
+            });
+
+            if (tab === 'entry') populateEntryDropdown();
+            if (tab === 'exit') populateExitDropdown();
+            if (tab === 'kardex') renderKardexTable();
+        }
+
+        // -------------------------------------------------------------
+        // SURGERY FORM LOGIC
+        // -------------------------------------------------------------
+        function selectFormCategory(cat) {
+            activeCategorySelection = cat;
+            const btnAnest = document.getElementById('btn-cat-anest');
+            const btnSurg = document.getElementById('btn-cat-surg');
+
+            if (cat === 'anesthesia') {
+                btnAnest.className = 'flex-1 py-1.5 text-[10px] font-black uppercase rounded bg-indigo-600 text-white transition-all';
+                btnSurg.className = 'flex-1 py-1.5 text-[10px] font-black uppercase rounded text-slate-500 hover:text-emerald-700 transition-all';
+            } else {
+                btnSurg.className = 'flex-1 py-1.5 text-[10px] font-black uppercase rounded bg-emerald-600 text-white transition-all';
+                btnAnest.className = 'flex-1 py-1.5 text-[10px] font-black uppercase rounded text-slate-500 hover:text-indigo-700 transition-all';
+            }
+        }
+
+        function showItemDropdown(show) {
+            const dd = document.getElementById('items-dropdown');
+            if (show) {
+                filterItemDropdown(document.getElementById('input-search-item').value);
+                dd.classList.remove('hidden');
+            } else {
+                setTimeout(() => dd.classList.add('hidden'), 250);
+            }
+        }
+
+        function filterItemDropdown(query) {
+            const dd = document.getElementById('items-dropdown');
+            const filtered = catalog.filter(c => 
+                c.name.toLowerCase().includes(query.toLowerCase()) || 
+                (c.code && c.code.toLowerCase().includes(query.toLowerCase()))
+            );
+
+            if (filtered.length === 0) {
+                dd.innerHTML = `<div class="p-3 text-xs text-slate-400 italic text-center">No se encontraron insumos</div>`;
+                return;
+            }
+
+            dd.innerHTML = filtered.map(item => {
+                const isAnest = item.category === 'anesthesia';
+                const stockColor = item.stock <= 0 ? 'text-rose-600 bg-rose-50' : (item.stock <= item.min ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50');
+                return `
+                    <div class="p-2.5 hover:bg-slate-50 cursor-pointer flex items-center justify-between gap-2"
+                         onmousedown="selectItemForForm('${item.id}')">
+                        <div>
+                            <span class="text-xs font-bold text-slate-800">${item.name}</span>
+                            <span class="text-[10px] font-mono text-slate-400 block">${item.code || 'SIN CÓDIGO'}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${isAnest ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}">
+                                ${isAnest ? 'Anestesia' : 'Cirugía'}
+                            </span>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${stockColor}">
+                                Stock: ${item.stock} ${item.unit}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        let currentSelectedCatalogItem = null;
+        function selectItemForForm(id) {
+            const item = catalog.find(c => c.id === id);
+            if (!item) return;
+            currentSelectedCatalogItem = item;
+            document.getElementById('input-search-item').value = item.name;
+            document.getElementById('input-item-unit').value = item.unit;
+            selectFormCategory(item.category);
+            document.getElementById('items-dropdown').classList.add('hidden');
+        }
+
+        function addItemToForm() {
+            const name = document.getElementById('input-search-item').value.trim();
+            const qty = parseInt(document.getElementById('input-item-qty').value) || 1;
+            const unit = document.getElementById('input-item-unit').value;
+            const type = activeCategorySelection;
+
+            if (!name) {
+                showToast('Por favor seleccione o escriba un insumo', 'warning');
+                return;
+            }
+
+            // Find in catalog or null
+            const catItem = currentSelectedCatalogItem || catalog.find(c => c.name.toLowerCase() === name.toLowerCase());
+
+            surgeryItems.push({
+                id: 'f-' + Date.now(),
+                catalogId: catItem ? catItem.id : null,
+                name: name,
+                quantity: qty,
+                unit: unit,
+                type: type,
+                shouldDiscount: true, // Checkbox checked by default!
+                wasDiscounted: false
+            });
+
+            // Reset inputs
+            document.getElementById('input-search-item').value = '';
+            document.getElementById('input-item-qty').value = 1;
+            currentSelectedCatalogItem = null;
+
+            document.getElementById('form-sync-status').innerHTML = '<span class="text-amber-600 font-bold">Cambios sin guardar (pendiente de sincronizar)</span>';
+            renderSurgeryTables();
+            showToast(`"${name}" agregado a la tabla de ${type === 'anesthesia' ? 'Anestesia' : 'Cirugía'}`);
+        }
+
+        function toggleItemDiscount(id) {
+            const item = surgeryItems.find(i => i.id === id);
+            if (!item) return;
+            item.shouldDiscount = !item.shouldDiscount;
+            document.getElementById('form-sync-status').innerHTML = '<span class="text-amber-600 font-bold">Cambios sin guardar (ajuste en descuento)</span>';
+            renderSurgeryTables();
+        }
+
+        function removeSurgeryItem(id) {
+            const item = surgeryItems.find(i => i.id === id);
+            if (!item) return;
+            surgeryItems = surgeryItems.filter(i => i.id !== id);
+            document.getElementById('form-sync-status').innerHTML = '<span class="text-amber-600 font-bold">Cambios sin guardar</span>';
+            renderSurgeryTables();
+            showToast(`"${item.name}" eliminado de la ficha`);
+        }
+
+        function renderSurgeryTables() {
+            const tbodyAnest = document.getElementById('tbody-anesthesia');
+            const tbodySurg = document.getElementById('tbody-surgery');
+
+            const anestItems = surgeryItems.filter(i => i.type === 'anesthesia');
+            const surgItems = surgeryItems.filter(i => i.type === 'surgery');
+
+            document.getElementById('count-anesthesia').textContent = `${anestItems.length} ítems`;
+            document.getElementById('count-surgery').textContent = `${surgItems.length} ítems`;
+
+            // Helper to render rows
+            const renderRows = (items, isAnest) => {
+                if (items.length === 0) {
+                    return `<tr><td colspan="4" class="py-6 text-center text-slate-400 italic text-[11px]">No hay registros cargados</td></tr>`;
+                }
+
+                return items.map(item => {
+                    const catItem = catalog.find(c => c.id === item.catalogId);
+                    const stockDisplay = catItem ? `(Stock: ${catItem.stock} ${catItem.unit})` : '<span class="text-slate-400">(Manual)</span>';
+
+                    return `
+                        <tr class="hover:bg-slate-50/80 transition-colors">
+                            <td class="py-2.5 px-2">
+                                <div class="font-bold text-slate-800">${item.name}</div>
+                                <div class="text-[10px] text-slate-400">${stockDisplay}</div>
+                            </td>
+                            <td class="py-2.5 px-2 text-center font-bold text-slate-700">
+                                ${item.quantity} <span class="font-normal text-slate-400">${item.unit}</span>
+                            </td>
+                            <td class="py-2.5 px-2 text-center ${isAnest ? 'bg-indigo-50/30' : 'bg-emerald-50/30'}">
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                                    <input type="checkbox" ${item.shouldDiscount ? 'checked' : ''} onchange="toggleItemDiscount('${item.id}')"
+                                        class="size-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300" />
+                                    <span class="text-[10px] font-bold ${item.shouldDiscount ? 'text-slate-800' : 'text-slate-400 line-through'}">
+                                        ${item.shouldDiscount ? 'Descontar' : 'No descontar'}
+                                    </span>
+                                </label>
+                                <span class="block text-[8px] text-slate-400">
+                                    ${item.shouldDiscount ? 'Consumo total' : 'Uso parcial/remanente'}
+                                </span>
+                            </td>
+                            <td class="py-2.5 px-1 text-right">
+                                <button onclick="removeSurgeryItem('${item.id}')" class="text-slate-300 hover:text-rose-500 p-1" title="Eliminar ítem">
+                                    <span class="material-symbols-outlined text-sm">delete</span>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            };
+
+            tbodyAnest.innerHTML = renderRows(anestItems, true);
+            tbodySurg.innerHTML = renderRows(surgItems, false);
+        }
+
+        // -------------------------------------------------------------
+        // SAVE & STOCK DEDUCTION / REVERSION ENGINE
+        // -------------------------------------------------------------
+        function saveSurgeryForm() {
+            let deductedCount = 0;
+            let revertedCount = 0;
+            const nowStr = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) + ' hs';
+
+            // 1. Check existing items
+            surgeryItems.forEach(item => {
+                if (!item.catalogId) return; // Custom item not in catalog
+                const catItem = catalog.find(c => c.id === item.catalogId);
+                if (!catItem) return;
+
+                // Case A: Was NOT discounted previously, but now has shouldDiscount = true -> DEDUCT
+                if (item.shouldDiscount && !item.wasDiscounted) {
+                    const prev = catItem.stock;
+                    catItem.stock = Math.max(-99, catItem.stock - item.quantity); // Allows negative with warning
+                    item.wasDiscounted = true;
+                    deductedCount++;
+
+                    kardex.unshift({
+                        id: 'k-' + Date.now() + Math.random(),
+                        time: nowStr,
+                        type: 'CONSUMO_CIRUGIA',
+                        item: catItem.name,
+                        qty: -item.quantity,
+                        unit: catItem.unit,
+                        prevStock: prev,
+                        newStock: catItem.stock,
+                        ref: 'Qx Marcelo González (Rodilla)',
+                        user: 'Técnico Quirófano'
+                    });
+                }
+
+                // Case B: WAS discounted previously, but user UNCHECKED shouldDiscount = false -> REVERT!
+                else if (!item.shouldDiscount && item.wasDiscounted) {
+                    const prev = catItem.stock;
+                    catItem.stock += item.quantity;
+                    item.wasDiscounted = false;
+                    revertedCount++;
+
+                    kardex.unshift({
+                        id: 'k-' + Date.now() + Math.random(),
+                        time: nowStr,
+                        type: 'REINTEGRO_CIRUGIA',
+                        item: catItem.name,
+                        qty: +item.quantity,
+                        unit: catItem.unit,
+                        prevStock: prev,
+                        newStock: catItem.stock,
+                        ref: 'Reversión: Qx Marcelo González',
+                        user: 'Técnico Quirófano'
+                    });
+                }
+            });
+
+            saveToStorage();
+            document.getElementById('form-sync-status').innerHTML = `<span class="text-emerald-600 font-bold">✓ Sincronizado a las ${nowStr}</span>`;
+            
+            let message = 'Ficha técnica guardada.';
+            if (deductedCount > 0 && revertedCount > 0) {
+                message = `Ficha guardada: ${deductedCount} insumos descontados y ${revertedCount} reincorporados al stock.`;
+            } else if (deductedCount > 0) {
+                message = `Ficha guardada: ${deductedCount} insumos descontados de stock físico.`;
+            } else if (revertedCount > 0) {
+                message = `Ficha guardada: ${revertedCount} unidades reintegradas al stock por destildar checkbox.`;
+            } else {
+                message = 'Ficha guardada (sin cambios en inventario).';
+            }
+
+            renderSurgeryTables();
+            renderStockMetrics();
+            renderStockTable();
+            showToast(message, 'check_circle');
+        }
+
+        // -------------------------------------------------------------
+        // STOCK VIEW LOGIC
+        // -------------------------------------------------------------
+        function setCategoryFilter(cat) {
+            stockFilterCategory = cat;
+            ['all', 'anesthesia', 'surgery', 'alert'].forEach(c => {
+                const btn = document.getElementById(`filter-${c}`);
+                if (c === cat) {
+                    btn.className = 'px-3 py-1 rounded-lg font-bold bg-white text-slate-800 shadow-2xs';
+                } else {
+                    btn.className = 'px-3 py-1 rounded-lg font-bold text-slate-500 hover:text-slate-800';
+                }
+            });
+            renderStockTable();
+        }
+
+        function renderStockMetrics() {
+            const total = catalog.length;
+            const agotado = catalog.filter(c => c.stock <= 0).length;
+            const bajo = catalog.filter(c => c.stock > 0 && c.stock <= c.min).length;
+            const optimo = total - agotado - bajo;
+
+            document.getElementById('metric-total').textContent = total;
+            document.getElementById('metric-optimo').textContent = optimo;
+            document.getElementById('metric-bajo').textContent = bajo;
+            document.getElementById('metric-agotado').textContent = agotado;
+            document.getElementById('badge-stock-count').textContent = total;
+            document.getElementById('header-kardex-count').textContent = kardex.length;
+            document.getElementById('badge-kardex-count').textContent = kardex.length;
+        }
+
+        function renderStockTable() {
+            const tbody = document.getElementById('tbody-stock');
+            const search = document.getElementById('input-search-stock').value.toLowerCase();
+
+            let items = catalog.filter(item => {
+                const matchSearch = item.name.toLowerCase().includes(search) || (item.code && item.code.toLowerCase().includes(search));
+                if (!matchSearch) return false;
+
+                if (stockFilterCategory === 'anesthesia') return item.category === 'anesthesia';
+                if (stockFilterCategory === 'surgery') return item.category === 'surgery';
+                if (stockFilterCategory === 'alert') return item.stock <= item.min;
+                return true;
+            });
+
+            if (items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400 italic text-xs">No se encontraron insumos</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = items.map(item => {
+                const isAnest = item.category === 'anesthesia';
+                let statusBadge = '';
+                if (item.stock <= 0) {
+                    statusBadge = `<span class="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full">AGOTADO</span>`;
+                } else if (item.stock <= item.min) {
+                    statusBadge = `<span class="bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-0.5 rounded-full">STOCK BAJO</span>`;
+                } else {
+                    statusBadge = `<span class="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full">ÓPTIMO</span>`;
+                }
+
+                return `
+                    <tr class="hover:bg-slate-50/80 transition-colors">
+                        <td class="px-4 py-3 font-mono font-bold text-slate-500 text-[11px]">${item.code || '-'}</td>
+                        <td class="px-4 py-3">
+                            <span class="font-bold text-slate-800">${item.name}</span>
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded ${isAnest ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}">
+                                ${isAnest ? 'Anestesia' : 'Cirugía'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-center text-slate-500 font-bold">${item.unit}</td>
+                        <td class="px-4 py-3 text-right">
+                            <span class="font-mono text-sm font-black ${item.stock <= 0 ? 'text-rose-600' : (item.stock <= item.min ? 'text-amber-600' : 'text-slate-800')}">
+                                ${item.stock}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-right text-slate-400 font-mono">${item.min}</td>
+                        <td class="px-4 py-3 text-center">${statusBadge}</td>
+                        <td class="px-4 py-3 text-right">
+                            <div class="flex items-center justify-end gap-1">
+                                <button onclick="goToEntryWithItem('${item.id}')" class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-bold transition-colors" title="Registrar Entrada">
+                                    + Entrada
+                                </button>
+                                <button onclick="goToExitWithItem('${item.id}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-[10px] font-bold transition-colors" title="Registrar Egreso / Salida">
+                                    − Salida
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function goToEntryWithItem(id) {
+            switchStockSubTab('entry');
+            populateEntryDropdown();
+            document.getElementById('entry-item-id').value = id;
+            document.getElementById('entry-qty').focus();
+        }
+
+        function goToExitWithItem(id) {
+            switchStockSubTab('exit');
+            populateExitDropdown();
+            document.getElementById('exit-item-id').value = id;
+            document.getElementById('exit-qty').focus();
+        }
+
+        function populateEntryDropdown() {
+            const sel = document.getElementById('entry-item-id');
+            if (!sel) return;
+            sel.innerHTML = catalog.map(c => `
+                <option value="${c.id}">${c.name} (${c.code || 'S/C'}) - Stock Actual: ${c.stock} ${c.unit}</option>
+            `).join('');
+        }
+
+        function populateExitDropdown() {
+            const sel = document.getElementById('exit-item-id');
+            if (!sel) return;
+            sel.innerHTML = catalog.map(c => `
+                <option value="${c.id}">${c.name} (${c.code || 'S/C'}) - Stock Disponible: ${c.stock} ${c.unit}</option>
+            `).join('');
+        }
+
+        function submitStockEntry() {
+            const itemId = document.getElementById('entry-item-id').value;
+            const qty = parseInt(document.getElementById('entry-qty').value);
+            const doc = document.getElementById('entry-doc').value.trim();
+            const notes = document.getElementById('entry-notes').value.trim();
+
+            const item = catalog.find(c => c.id === itemId);
+            if (!item || !qty || qty <= 0) return;
+
+            const prev = item.stock;
+            item.stock += qty;
+
+            kardex.unshift({
+                id: 'k-' + Date.now(),
+                time: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) + ' hs',
+                type: 'INGRESO',
+                item: item.name,
+                qty: +qty,
+                unit: item.unit,
+                prevStock: prev,
+                newStock: item.stock,
+                ref: doc ? `Remito: ${doc} ${notes ? '(' + notes + ')' : ''}` : (notes || 'Ingreso Regular de Stock'),
+                user: 'Técnico de Quirófano'
+            });
+
+            saveToStorage();
+            renderStockMetrics();
+            renderStockTable();
+            switchStockSubTab('inventory');
+            showToast(`Ingreso registrado: +${qty} ${item.unit} de "${item.name}"`, 'check_circle');
+        }
+
+        function submitStockExit() {
+            const itemId = document.getElementById('exit-item-id').value;
+            const qty = parseInt(document.getElementById('exit-qty').value);
+            const reason = document.getElementById('exit-reason').value;
+            const auth = document.getElementById('exit-auth').value.trim();
+            const doc = document.getElementById('exit-doc').value.trim();
+            const notes = document.getElementById('exit-notes').value.trim();
+
+            const item = catalog.find(c => c.id === itemId);
+            if (!item || !qty || qty <= 0) return;
+
+            const prev = item.stock;
+            item.stock -= qty;
+
+            kardex.unshift({
+                id: 'k-' + Date.now(),
+                time: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) + ' hs',
+                type: 'EGRESO_MANUAL',
+                item: item.name,
+                qty: -qty,
+                unit: item.unit,
+                prevStock: prev,
+                newStock: item.stock,
+                ref: `${reason} (Aut: ${auth})${doc ? ' - Vale: ' + doc : ''}${notes ? ' - ' + notes : ''}`,
+                user: 'Técnico de Quirófano'
+            });
+
+            saveToStorage();
+            renderStockMetrics();
+            renderStockTable();
+            switchStockSubTab('inventory');
+            showToast(`Egreso registrado: -${qty} ${item.unit} de "${item.name}" (${reason})`, 'indeterminate_check_box');
+        }
+
+        // -------------------------------------------------------------
+        // EXCEL IMPORTER SIMULATION
+        // -------------------------------------------------------------
+        const SAMPLE_EXCEL_DATA = [
+            { code: 'ANE-009', name: 'Neostigmina 0.5mg/ml', category: 'anesthesia', unit: 'amp', stock: 20, min: 5 },
+            { code: 'ANE-010', name: 'Sevoflurano Líquido x 250ml', category: 'anesthesia', unit: 'frasco', stock: 6, min: 2 },
+            { code: 'CIR-008', name: 'Drenaje Hemovac 1/8', category: 'surgery', unit: 'unidad', stock: 15, min: 4 },
+            { code: 'CIR-009', name: 'Aguja Espinal 27G Whitacre', category: 'surgery', unit: 'unidad', stock: 30, min: 10 },
+            { code: 'CIR-010', name: 'Bolsa Colectora de Orina 2000ml', category: 'surgery', unit: 'unidad', stock: 25, min: 8 }
+        ];
+
+        function simulateLoadExcel() {
+            const area = document.getElementById('import-preview-area');
+            const tbody = document.getElementById('tbody-import-preview');
+
+            tbody.innerHTML = SAMPLE_EXCEL_DATA.map(row => `
+                <tr class="hover:bg-slate-50">
+                    <td class="px-3 py-2 font-mono text-[11px] font-bold text-slate-600">${row.code}</td>
+                    <td class="px-3 py-2 font-bold text-slate-800">${row.name}</td>
+                    <td class="px-3 py-2 text-[10px] font-bold uppercase ${row.category === 'anesthesia' ? 'text-indigo-600' : 'text-emerald-600'}">${row.category === 'anesthesia' ? 'Anestesia' : 'Cirugía'}</td>
+                    <td class="px-3 py-2 text-slate-500">${row.unit}</td>
+                    <td class="px-3 py-2 text-right font-mono font-bold text-emerald-600">+${row.stock}</td>
+                    <td class="px-3 py-2 text-right font-mono text-slate-400">${row.min}</td>
+                </tr>
+            `).join('');
+
+            area.classList.remove('hidden');
+            showToast('Archivo Excel procesado: 5 insumos listos para importar');
+        }
+
+        function confirmExcelImport() {
+            SAMPLE_EXCEL_DATA.forEach(row => {
+                const existing = catalog.find(c => c.name.toLowerCase() === row.name.toLowerCase());
+                if (existing) {
+                    existing.stock += row.stock;
+                    existing.min = row.min;
+                    existing.code = row.code;
+                } else {
+                    catalog.push({
+                        id: 'item-' + Date.now() + Math.random(),
+                        ...row
+                    });
+                }
+
+                kardex.unshift({
+                    id: 'k-' + Date.now() + Math.random(),
+                    time: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) + ' hs',
+                    type: 'INGRESO_EXCEL',
+                    item: row.name,
+                    qty: +row.stock,
+                    unit: row.unit,
+                    prevStock: 0,
+                    newStock: row.stock,
+                    ref: 'Carga Masiva Excel',
+                    user: 'Técnico'
+                });
+            });
+
+            saveToStorage();
+            renderStockMetrics();
+            renderStockTable();
+            document.getElementById('import-preview-area').classList.add('hidden');
+            switchStockSubTab('inventory');
+            showToast('¡Importación completada con éxito!', 'cloud_done');
+        }
+
+        function downloadSampleTemplate() {
+            const csvContent = "data:text/csv;charset=utf-8," 
+                + "Codigo,Nombre,Categoria,Unidad,StockInicial,StockMinimo\n"
+                + "ANE-011,Ketamina 50mg/ml,anesthesia,amp,10,3\n"
+                + "CIR-011,Venda Elastica 10cm,surgery,unidad,25,5\n";
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "plantilla_insumos_iteo.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('Plantilla CSV descargada');
+        }
+
+        // -------------------------------------------------------------
+        // KARDEX RENDER
+        // -------------------------------------------------------------
+        function renderKardexTable() {
+            const tbody = document.getElementById('tbody-kardex');
+            if (kardex.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400 italic text-xs">No hay movimientos registrados en la sesión actual. Pruebe guardar una cirugía o ingresar mercadería.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = kardex.map(k => {
+                let badge = '';
+                if (k.type === 'CONSUMO_CIRUGIA') {
+                    badge = `<span class="bg-rose-100 text-rose-700 text-[9px] font-black px-2 py-0.5 rounded-full">CONSUMO QX</span>`;
+                } else if (k.type === 'REINTEGRO_CIRUGIA') {
+                    badge = `<span class="bg-blue-100 text-blue-700 text-[9px] font-black px-2 py-0.5 rounded-full">REINTEGRO QX</span>`;
+                } else if (k.type === 'EGRESO_MANUAL') {
+                    badge = `<span class="bg-amber-100 text-amber-800 text-[9px] font-black px-2 py-0.5 rounded-full">SALIDA MANUAL</span>`;
+                } else {
+                    badge = `<span class="bg-emerald-100 text-emerald-700 text-[9px] font-black px-2 py-0.5 rounded-full">ENTRADA</span>`;
+                }
+
+                return `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-4 py-2.5 font-mono text-[11px] text-slate-500">${k.time}</td>
+                        <td class="px-4 py-2.5 text-center">${badge}</td>
+                        <td class="px-4 py-2.5 font-bold text-slate-800">${k.item}</td>
+                        <td class="px-4 py-2.5 text-center font-mono font-bold ${k.qty < 0 ? 'text-rose-600' : 'text-emerald-600'}">
+                            ${k.qty > 0 ? '+' + k.qty : k.qty} ${k.unit}
+                        </td>
+                        <td class="px-4 py-2.5 text-right font-mono font-bold text-slate-700">${k.newStock}</td>
+                        <td class="px-4 py-2.5 text-slate-600 text-xs">${k.ref}</td>
+                        <td class="px-4 py-2.5 text-slate-500 text-[11px]">${k.user}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function clearKardexHistory() {
+            if (confirm('¿Desea vaciar el historial de movimientos de prueba?')) {
+                kardex = [];
+                saveToStorage();
+                renderKardexTable();
+                renderStockMetrics();
+                showToast('Historial de movimientos limpiado');
+            }
+        }
+
+        // -------------------------------------------------------------
+        // PRINT MODAL (CLEAN VIEW WITHOUT CHECKBOXES)
+        // -------------------------------------------------------------
+        function openPrintModal() {
+            const tAnest = document.getElementById('print-tbody-anesthesia');
+            const tSurg = document.getElementById('print-tbody-surgery');
+
+            const anest = surgeryItems.filter(i => i.type === 'anesthesia');
+            const surg = surgeryItems.filter(i => i.type === 'surgery');
+
+            tAnest.innerHTML = anest.length === 0 ? `<tr><td colspan="3" class="border border-slate-300 px-2 py-2 text-center text-slate-400 italic">Sin registros</td></tr>` :
+                anest.map(i => `
+                    <tr>
+                        <td class="border border-slate-300 px-3 py-1.5 font-bold">${i.name}</td>
+                        <td class="border border-slate-300 px-3 py-1.5 text-center font-bold">${i.quantity}</td>
+                        <td class="border border-slate-300 px-3 py-1.5 text-center text-slate-600">${i.unit}</td>
+                    </tr>
+                `).join('');
+
+            tSurg.innerHTML = surg.length === 0 ? `<tr><td colspan="3" class="border border-slate-300 px-2 py-2 text-center text-slate-400 italic">Sin registros</td></tr>` :
+                surg.map(i => `
+                    <tr>
+                        <td class="border border-slate-300 px-3 py-1.5 font-bold">${i.name}</td>
+                        <td class="border border-slate-300 px-3 py-1.5 text-center font-bold">${i.quantity}</td>
+                        <td class="border border-slate-300 px-3 py-1.5 text-center text-slate-600">${i.unit}</td>
+                    </tr>
+                `).join('');
+
+            document.getElementById('modal-print').classList.remove('hidden');
+        }
+
+        function closePrintModal() {
+            document.getElementById('modal-print').classList.add('hidden');
+        }
+
+        // -------------------------------------------------------------
+        // NEW ITEM MODAL
+        // -------------------------------------------------------------
+        function openNewItemModal() {
+            document.getElementById('modal-new-item').classList.remove('hidden');
+        }
+
+        function closeNewItemModal() {
+            document.getElementById('modal-new-item').classList.add('hidden');
+        }
+
+        function saveNewItemCatalog() {
+            const name = document.getElementById('modal-item-name').value.trim();
+            const code = document.getElementById('modal-item-code').value.trim();
+            const cat = document.getElementById('modal-item-cat').value;
+            const unit = document.getElementById('modal-item-unit').value;
+            const stock = parseInt(document.getElementById('modal-item-stock').value) || 0;
+            const min = parseInt(document.getElementById('modal-item-min').value) || 5;
+
+            catalog.push({
+                id: 'item-' + Date.now(),
+                code: code,
+                name: name,
+                category: cat,
+                unit: unit,
+                stock: stock,
+                min: min
+            });
+
+            if (stock > 0) {
+                kardex.unshift({
+                    id: 'k-' + Date.now(),
+                    time: new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) + ' hs',
+                    type: 'INGRESO',
+                    item: name,
+                    qty: +stock,
+                    unit: unit,
+                    prevStock: 0,
+                    newStock: stock,
+                    ref: 'Alta inicial de catálogo',
+                    user: 'Técnico'
+                });
+            }
+
+            saveToStorage();
+            closeNewItemModal();
+            renderStockMetrics();
+            renderStockTable();
+            showToast(`Insumo "${name}" agregado al catálogo`);
+        }
+
+        // -------------------------------------------------------------
+        // STORAGE & UTILS
+        // -------------------------------------------------------------
+        function saveToStorage() {
+            localStorage.setItem('iteo_sandbox_catalog', JSON.stringify(catalog));
+            localStorage.setItem('iteo_sandbox_kardex', JSON.stringify(kardex));
+        }
+
+        function resetData() {
+            if (confirm('¿Restablecer todo el sandbox a los valores iniciales de fábrica?')) {
+                localStorage.removeItem('iteo_sandbox_catalog');
+                localStorage.removeItem('iteo_sandbox_kardex');
+                catalog = [...DEFAULT_CATALOG];
+                kardex = [];
+                surgeryItems.forEach(i => i.wasDiscounted = false);
+                renderSurgeryTables();
+                renderStockMetrics();
+                renderStockTable();
+                showToast('Datos del sandbox restablecidos');
+            }
+        }
+
+        function showToast(msg, icon = 'check_circle') {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            document.getElementById('toast-icon').textContent = icon;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3500);
+        }
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', () => {
+            renderSurgeryTables();
+            renderStockMetrics();
+            renderStockTable();
+        });
+    </script>
+</body>
+</html>

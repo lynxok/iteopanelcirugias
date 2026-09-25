@@ -7,6 +7,7 @@ import { UserRole, SurgeryMaterial, SurgeryDocument, parseCoverageNomencladores 
 import { generateUUID } from '../../../src/lib/uuid';
 import { DOCUMENT_CATEGORIES, FALLBACK_DOCTORS, FALLBACK_VENDORS, FALLBACK_COVERAGES } from '../constants';
 import { checkAccess, checkFieldPermission, LEGACY_PERMISSIONS } from '../../../src/lib/permissions';
+import { loadPermissionsFromDB } from '../../../src/lib/useRolePermissions';
 
 interface UseSurgeryDetailProps {
     id?: string;
@@ -829,10 +830,18 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
 
             // Validation for ART users
             const isArtUser = user?.role?.toLowerCase() === 'oficina art' || user?.role?.toLowerCase() === 'art';
-            if (isArtUser && (!medicalCoverage || !medicalCoverage.trim())) {
-                alert('⚠️ Como usuario de ROL ART, debe seleccionar o asignar obligatoriamente una cobertura médica para poder crear/guardar la cirugía.');
-                setSaving(false);
-                return;
+            if (isArtUser) {
+                if (!medicalCoverage || !medicalCoverage.trim()) {
+                    alert('⚠️ Como usuario de ROL ART, debe seleccionar obligatoriamente una aseguradora (ART) para poder crear/guardar la cirugía.');
+                    setSaving(false);
+                    return;
+                }
+                const selectedCovObj = availableCoverages.find(c => c.name?.toLowerCase() === medicalCoverage?.toLowerCase());
+                if (selectedCovObj && selectedCovObj.type !== 'ART') {
+                    alert('⚠️ El rol Oficina ART únicamente tiene permitido cargar o gestionar cirugías asociadas a aseguradoras de ART.');
+                    setSaving(false);
+                    return;
+                }
             }
 
             const isADefinir = selectedProcedures.length === 0 || selectedProcedures.some(p => p.toUpperCase().includes('A DEFINIR') || p.includes('00.00.00'));
@@ -1117,21 +1126,15 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
     const [rolePermissions, setRolePermissions] = useState<any>(null);
 
     useEffect(() => {
-        const fetchPermissions = async () => {
-            try {
-                const { data } = await supabase
-                    .from('admin_settings')
-                    .select('value')
-                    .eq('key', 'role_permissions')
-                    .maybeSingle();
-                if (data?.value) {
-                    setRolePermissions(JSON.parse(data.value));
-                }
-            } catch (err) {
-                console.error('Error fetching role permissions in useSurgeryDetail:', err);
+        let isMounted = true;
+        loadPermissionsFromDB().then((perms) => {
+            if (isMounted && perms) {
+                setRolePermissions(perms);
             }
+        });
+        return () => {
+            isMounted = false;
         };
-        fetchPermissions();
     }, []);
 
     const hasEditAccess = checkAccess(rolePermissions || LEGACY_PERMISSIONS, currentUserRole, 'surgeries', 'edit');

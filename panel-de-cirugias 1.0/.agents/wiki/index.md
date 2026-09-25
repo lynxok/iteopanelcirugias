@@ -18,10 +18,18 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
-*   `[2026-09-25]`: **Estadísticas de Internación: Visualización Completa de Habitaciones y Categorización (v3.12.8)**:
+*   `[2026-09-25]`: **Habilitación de Creación de Cirugías de ART para Rol Oficina ART**:
+    *   **Permiso de Edición en Cirugías**: Se actualizó la matriz base en `permissions.ts` otorgándole `access: 'edit'` en `surgeries` al rol `Oficina ART`, permitiendo a usuarios como Paula (`iaps@iteosrl.com.ar`) acceder a `#/nueva-cirugia` sin bloqueo en modo lectura (`isReadOnly = false`).
+    *   **Restricción Estricta a Coberturas ART**:
+        *   En `PatientSection.tsx`, el selector desplegable de Prestador filtra y muestra únicamente aseguradoras de la categoría **Aseguradoras (ART)** cuando el usuario logueado es `Oficina ART` o `ART`.
+        *   En `useSurgeryDetail.ts`, se incorporó validación estricta al guardar que rechaza cualquier intento de guardar una cirugía cuya cobertura médica no corresponda a una aseguradora de ART (`coverage.type === 'ART'`).
+    *   **Sincronización de Permisos**: En `useSurgeryDetail.ts`, se unificó la carga de permisos con `loadPermissionsFromDB()` asegurando reactividad inmediata con la caché central del sistema.
+*   `[2026-09-25]`: **Estadísticas de Internación: Métricas Separadas, Habitaciones Completas y Claridad de Admisiones (v3.12.8)**:
+    *   **Separación de KPIs (Internaciones Reales vs Rotaciones de Cama)**: Incorporada la métrica `"Internaciones Reales"` (conteo de pacientes únicos en el período, eliminando distorsiones por reasignación de cama) junto a `"Rotaciones de Cama"` (total de movimientos y pases de cama registrados para auditoría operativa).
     *   **Todas las Habitaciones Visibles**: Se removió el filtro `slice(0, 5)` del gráfico de ocupación en `HospitalizationStats.tsx`, permitiendo listar la totalidad de habitaciones del centro médico incluyendo la Habitación 2 (Suite).
     *   **Identificación Clínica sin Cama**: Se renombró la categoría genérica `"Desconocida"` por `"Sin Cama Asignada"`.
-    *   **Release y Binarios**: Compilado nuevo bundle `dist/` e instaladores NSIS para Windows (`PanelCirugias_ITEO_Setup.exe`) y subidos al release `v3.12.8` de GitHub.
+    *   **Gráfico Mensual y Leyenda**: Se renombró el gráfico a `"Rotaciones de Camas por Mes"` con subtítulos y tooltips explícitos (`X movimientos / rotaciones`).
+    *   **Distribución y Releases**: Compilado nuevo bundle `dist/` e instaladores NSIS para Windows (`PanelCirugias_ITEO_Setup.exe`) y subidos al release `v3.12.8` de GitHub.
 *   `[2026-09-24]`: **Catálogos Dinámicos de Nomencladores y Soporte Multi-Nomenclador por Cobertura (v3.12.4 - v3.12.7)**:
     *   **Gestión Dinámica de Nomencladores**: Se incorporó en `Configuración > Nomencladores` la capacidad para que el `SuperAdmin` cree, edite y elimine catálogos de nomencladores personalizados (además de los estándar `AOTER`, `OSER`, `NN`), con paleta de color distintiva y descripción.
     *   **Asociación Masiva e Individual No Destructiva**: Desde el modal `Gestionar Nomencladores`, se permite asociar el nomenclador en 1 clic a "Todas las coberturas", "Ninguna" o mediante selección individual interactiva con buscador en vivo, sumando el nuevo nomenclador sin desasociar ni sobrescribir los catálogos previos.
