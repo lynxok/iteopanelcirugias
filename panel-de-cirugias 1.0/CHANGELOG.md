@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v3.12.8 (2026-09-25)
+- **Estadísticas de Internación y Ocupación de Habitaciones (`HospitalizationStats.tsx`)**:
+    * **Visualización Completa de Habitaciones**: Se removió el recorte de top 5 en el gráfico de torta de "Habitaciones más utilizadas", garantizando que todas las habitaciones de la clínica (incluida la Habitación 2 / Suite) aparezcan listadas.
+    * **Claridad en Registros sin Cama**: Se renombró la categoría `"Desconocida"` por `"Sin Cama Asignada"` para reflejar con precisión clínica aquellas admisiones sin cama asignada.
+    * **Mejora en Leyenda Visual**: Se optimizó el ancho máximo de las etiquetas en la leyenda para evitar truncamientos y permitir lectura fluida de cada sala.
+
 ## v3.12.7 (2026-09-24)
 - **Normalización de Formato y Persistencia Multi-Nomenclador**:
     * Saneamiento y estandarización del almacenamiento delimitado por comas (`AOTER,NEUROCIRUG_A`) para máxima compatibilidad con Supabase y PostgREST.

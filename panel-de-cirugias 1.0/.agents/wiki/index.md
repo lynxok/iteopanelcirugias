@@ -18,7 +18,11 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
-*   `[2026-09-24]`: **Catálogos Dinámicos de Nomencladores y Soporte Multi-Nomenclador por Cobertura (v3.12.4 - v3.12.6)**:
+*   `[2026-09-25]`: **Estadísticas de Internación: Visualización Completa de Habitaciones y Categorización (v3.12.8)**:
+    *   **Todas las Habitaciones Visibles**: Se removió el filtro `slice(0, 5)` del gráfico de ocupación en `HospitalizationStats.tsx`, permitiendo listar la totalidad de habitaciones del centro médico incluyendo la Habitación 2 (Suite).
+    *   **Identificación Clínica sin Cama**: Se renombró la categoría genérica `"Desconocida"` por `"Sin Cama Asignada"`.
+    *   **Release y Binarios**: Compilado nuevo bundle `dist/` e instaladores NSIS para Windows (`PanelCirugias_ITEO_Setup.exe`) y subidos al release `v3.12.8` de GitHub.
+*   `[2026-09-24]`: **Catálogos Dinámicos de Nomencladores y Soporte Multi-Nomenclador por Cobertura (v3.12.4 - v3.12.7)**:
     *   **Gestión Dinámica de Nomencladores**: Se incorporó en `Configuración > Nomencladores` la capacidad para que el `SuperAdmin` cree, edite y elimine catálogos de nomencladores personalizados (además de los estándar `AOTER`, `OSER`, `NN`), con paleta de color distintiva y descripción.
     *   **Asociación Masiva e Individual No Destructiva**: Desde el modal `Gestionar Nomencladores`, se permite asociar el nomenclador en 1 clic a "Todas las coberturas", "Ninguna" o mediante selección individual interactiva con buscador en vivo, sumando el nuevo nomenclador sin desasociar ni sobrescribir los catálogos previos.
     *   **Multi-Nomenclador Simultáneo**: Cada cobertura puede tener múltiples catálogos asignados (ej. `AOTER + NEUROCIRUGÍA`, `OSER + NEUROCIRUGÍA`), con casillas de selección múltiple interactivas en `CoverageModal`.

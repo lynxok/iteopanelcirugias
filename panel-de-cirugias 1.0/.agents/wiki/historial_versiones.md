@@ -2,7 +2,12 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
-*   **v3.12.5 [2026-09-24]**: Lanzada la versión **v3.12.5**.
+*   **v3.12.8 [2026-09-25]**: Lanzada la versión **v3.12.8**.
+    *   **Estadísticas de Internación y Ocupación de Habitaciones (`HospitalizationStats.tsx`)**:
+        *   **Visualización Completa de Habitaciones**: Eliminado el `.slice(0, 5)` que truncaba el gráfico de torta de "Habitaciones más utilizadas". Ahora se muestran todas las habitaciones del establecimiento clínico (incluyendo la Habitación 2 / Suite).
+        *   **Normalización de Casos sin Cama**: Sustituido el término `"Desconocida"` por `"Sin Cama Asignada"`.
+        *   **Leyenda Optimizada**: Mayor margen y ancho visual para evitar cortes en nombres de habitaciones y estados.
+*   **v3.12.7 [2026-09-24]**: Lanzada la versión **v3.12.7**.
     *   **Soporte de Múltiples Nomencladores Simultáneos por Cobertura**:
         *   Cada cobertura médica puede tener activos múltiples nomencladores en simultáneo (ej. `AOTER + Neurocirugía`, `OSER + Neurocirugía`).
         *   Sincronización no destructiva: vincular un catálogo nuevo preserva intactos los nomencladores preexistentes.
