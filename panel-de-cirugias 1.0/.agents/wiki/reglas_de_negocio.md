@@ -99,9 +99,10 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 
 *   **Sección Guardias (`on_duty`)**: Los usuarios con permiso `'view'` en la matriz de permisos pueden ver el drawer de guardias de la semana en modo solo lectura. Aquellos con `'edit'` pueden modificar el personal general y excepciones.
 *   **Guardias de Residentes (Edición de Turnos)**: Los residentes habilitados mediante el indicador `can_edit_shifts` (y usuarios con roles administrativos o SuperAdmin) pueden crear, modificar horarios (inicio, fin, fecha) y eliminar guardias asignadas tanto desde el calendario como desde el panel de "Mis Guardias" (`MyConsentsView` / `LogShiftModal`).
-*   **Modo Visor (Solo Lectura)**:
+*   **Modo Visor (Solo Lectura) y Restricciones Específicas**:
     *   Los roles `Medico` y `Enfermeria` tienen un modo visor estricto que bloquea la modificación de fichas de cirugía.
     *   El rol `Administrativo de Guardias` puede crear nuevas cirugías que se configuran por defecto como "Cirugía de Guardia" (`isGuardia = true`). Solo puede editar cirugías existentes si el rol que las creó es también `Administrativo de Guardias` (rastreado por la columna `created_by_role`).
+    *   **Gestión Operativa de Consultorios (`ConsultingRoomsPage`)**: El rol `Administrativo de Guardias` cuenta con permiso `edit` en `consulting_rooms` (`canEdit`), permitiéndole asignar turnos, editar y reorganizar agendas (drag & drop), gestionar excepciones de profesionales y salas en la pestaña *Gestión*. La pestaña ejecutiva *Tarifas y Finanzas* permanece estrictamente oculta e inaccesible para este rol (`isExecutive = false`).
     *   El rol `Mucama` tiene accesos base restringidos en el Mapa de Internación (sin asignación de camas, alta, o suministro de medicamentos).
 *   **Restricciones de Edición Dinámica (`system_fields`)**: La edición de inputs del formulario quirúrgico (Obra Social, Diagnóstico CIE-10, Quirófano, Materiales, Fecha) está regulada dinámicamente por rol según los registros leídos de la tabla `public.system_fields`.
 

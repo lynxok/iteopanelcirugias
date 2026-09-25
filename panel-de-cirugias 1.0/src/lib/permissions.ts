@@ -42,7 +42,7 @@ export const LEGACY_PERMISSIONS: Record<string, Record<string, PermissionConfig>
     'dashboard': { access: 'edit' },
     'alerts': { access: 'edit' },
     'calendar': { access: 'edit' },
-    'consulting_rooms': { access: 'view' },
+    'consulting_rooms': { access: 'edit' },
     'surgeries': { access: 'edit' }, // Controlado por creador de forma interna
     'monitor': { access: 'edit' },
     'hospitalization': { access: 'edit' },

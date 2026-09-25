@@ -18,6 +18,10 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-25]`: **Gestión de Consultorios para "Administrativo de Guardias" (v3.12.10)**:
+    *   **Edición y Asignación de Turnos**: Se confirió permiso `edit` en `consulting_rooms` en `permissions.ts` y se integró el rol `administrativo de guardias` dentro de la condición `canEdit` en `ConsultingRoomsPage.tsx`.
+    *   **Pestañas Habilitadas**: Acceso operativo a *Calendario Fechas*, *Grilla Base Semanal*, *Por Profesional*, *Ocupación* y *Gestión* (incluyendo drag & drop de turnos, reserva de paquetes y búsqueda inteligente).
+    *   **Restricción de Tarifas y Finanzas**: La pestaña y cálculos económicos de *Tarifas y Finanzas* continúan reservados exclusivamente para `SuperAdmin` y `Dirección` (`isExecutive`).
 *   `[2026-09-25]`: **Habilitación de Creación de Cirugías de ART para Rol Oficina ART**:
     *   **Permiso de Edición en Cirugías**: Se actualizó la matriz base en `permissions.ts` otorgándole `access: 'edit'` en `surgeries` al rol `Oficina ART`, permitiendo a usuarios como Paula (`iaps@iteosrl.com.ar`) acceder a `#/nueva-cirugia` sin bloqueo en modo lectura (`isReadOnly = false`).
     *   **Restricción Estricta a Coberturas ART**:

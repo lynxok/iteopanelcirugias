@@ -1,4 +1,4 @@
-import{D as w,y,w as k,s as c,o as e,u as j}from"./index-noNG6BcU.js";import{P as D}from"./ProgressBar-VUdRYmW4.js";const S=()=>{var h,g;const{id:i}=w(),x=y(),{user:m}=k(),[s,N]=c.useState(null),[_,b]=c.useState(!0),[p,d]=c.useState("");if(c.useEffect(()=>{(async()=>{if(!i)return;const r=i.trim().replace(/^ID:\s*/i,"").replace(/^#/,"");try{if(!m){d("Acceso denegado. Debe iniciar sesión."),b(!1);return}let a;r.length===36?a=j.from("surgeries").select(`
+import{D as w,y,w as k,s as c,o as e,u as j}from"./index-BTWuhPX8.js";import{P as D}from"./ProgressBar-DCvVlNcV.js";const S=()=>{var h,g;const{id:i}=w(),x=y(),{user:m}=k(),[s,N]=c.useState(null),[_,b]=c.useState(!0),[p,d]=c.useState("");if(c.useEffect(()=>{(async()=>{if(!i)return;const r=i.trim().replace(/^ID:\s*/i,"").replace(/^#/,"");try{if(!m){d("Acceso denegado. Debe iniciar sesión."),b(!1);return}let a;r.length===36?a=j.from("surgeries").select(`
                             *,
                             patients (full_name, document_number, allergies, birth_date, medical_record_number, phone),
                             doctors!surgeries_doctor_id_fkey(full_name, specialty),

@@ -2,6 +2,11 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.12.10 [2026-09-25]**: Lanzada la versión **v3.12.10**.
+    *   **Permisos de Gestión y Edición de Consultorios para "Administrativo de Guardias" (`permissions.ts`, `ConsultingRoomsPage.tsx`)**:
+        *   **Edición y Asignación de Turnos**: Se actualizó el permiso base en `permissions.ts` a `consulting_rooms: { access: 'edit' }` y se incorporó el rol `administrativo de guardias` dentro de la condición `canEdit` de `ConsultingRoomsPage.tsx`.
+        *   **Acceso Pleno Operativo**: Habilitada la asignación de turnos a consultorios, creación, modificación y eliminación de franjas horarias y profesionales, y acceso a la pestaña de "Gestión" de consultorios.
+        *   **Restricción de Tarifas y Finanzas**: La pestaña ejecutiva "Tarifas y Finanzas" se mantiene estrictamente bloqueada e invisible para este rol, requiriendo el privilegio `isExecutive` (`SuperAdmin` / `Dirección`).
 *   **v3.12.9 [2026-09-25]**: Lanzada la versión **v3.12.9**.
     *   **Habilitación de Creación de Cirugías de ART para Rol Oficina ART (`permissions.ts`, `useSurgeryDetail.ts`, `PatientSection.tsx`)**:
         *   **Permiso de Edición**: Asignado permiso `edit` en `surgeries` para el rol `Oficina ART` en `permissions.ts`, eliminando el bloqueo en solo lectura (`isReadOnly`) al ingresar en la pantalla de Nueva Cirugía.
