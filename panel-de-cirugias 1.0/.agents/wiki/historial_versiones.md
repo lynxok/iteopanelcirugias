@@ -2,6 +2,11 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.12.11 [2026-09-28]**: Lanzada la versión **v3.12.11**.
+    *   **Tablero Kanban (`Kanban.tsx`)**:
+        *   **Cálculo Único de Total Activos**: Se corrigió el cálculo de la métrica "Total Activos" para calcular directamente las cirugías activas únicas (`p.status !== 'suspended' && p.status !== 'cancelled' && p.status !== 'completed'`), eliminando la suma solapada de sublistas que provocaba duplicación de conteos.
+        *   **Nueva Sección "Cirugías con Fecha Asignada"**: Se implementó una sección dedicada en el tablero para visualizar todas las cirugías programadas activas, con ordenamiento cronológico por fecha y horario.
+        *   **Tarjeta KPI "Con Fecha Asignada"**: Incorporada la tarjeta métrica en el resumen superior de KPIs con icono interactivo y conteo en tiempo real.
 *   **v3.12.10 [2026-09-25]**: Lanzada la versión **v3.12.10**.
     *   **Permisos de Gestión y Edición de Consultorios para "Administrativo de Guardias" (`permissions.ts`, `ConsultingRoomsPage.tsx`)**:
         *   **Edición y Asignación de Turnos**: Se actualizó el permiso base en `permissions.ts` a `consulting_rooms: { access: 'edit' }` y se incorporó el rol `administrativo de guardias` dentro de la condición `canEdit` de `ConsultingRoomsPage.tsx`.

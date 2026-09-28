@@ -18,6 +18,11 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-28]`: **Corrección de Conteo "Total Activos" y Nueva Sección de Cirugías Programadas en Kanban**:
+    *   **Conteo Único en Total Activos**: Se corrigió el cálculo de la tarjeta KPI en `Kanban.tsx` para evitar solapamientos y duplicaciones de conteo entre listas. Ahora calcula estrictamente cirugías activas únicas (`status !== 'suspended' && status !== 'cancelled' && status !== 'completed'`).
+    *   **Nueva Sección "Cirugías con Fecha Asignada"**: Se incorporó en el tablero Kanban una sección colapsable dedicada a cirugías que ya poseen fecha programada (`p.surgeryDate`), ordenadas cronológicamente por fecha y hora.
+    *   **Tarjeta KPI "Con Fecha Asignada"**: Se agregó la tarjeta correspondiente en la barra de resumen superior de KPIs junto a "Falta Material", "Falta Exámenes" y "Total Activos".
+
 *   `[2026-09-25]`: **Gestión de Consultorios para "Administrativo de Guardias" (v3.12.10)**:
     *   **Edición y Asignación de Turnos**: Se confirió permiso `edit` en `consulting_rooms` en `permissions.ts` y se integró el rol `administrativo de guardias` dentro de la condición `canEdit` en `ConsultingRoomsPage.tsx`.
     *   **Pestañas Habilitadas**: Acceso operativo a *Calendario Fechas*, *Grilla Base Semanal*, *Por Profesional*, *Ocupación* y *Gestión* (incluyendo drag & drop de turnos, reserva de paquetes y búsqueda inteligente).
