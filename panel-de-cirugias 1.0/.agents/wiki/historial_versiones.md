@@ -2,6 +2,14 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.12.12 [2026-09-28]**: Lanzada la versión **v3.12.12**.
+    *   **Módulo Pre-Quirúrgico / Kanban (`Kanban.tsx`)**:
+        *   **Sección de Cirugías Suspendidas y Canceladas**: Pestaña dedicada con filtro y columnas independientes para pacientes fuera de la programación activa.
+        *   **Permisos Diferenciados de Gestión y Baja**:
+            *   *SuperAdmin*: Capacidad de reincorporar al flujo activo (`pending_validation`) o eliminar permanentemente de la base de datos con registro en `quirofano.audit_logs`.
+            *   *Personal Operativo (no admin)*: Capacidad de reincorporar al flujo o solicitar baja definitiva a través de un modal con motivo obligatorio, generando una alerta prioritaria en `quirofano.system_alerts` dirigida a `SuperAdmin`.
+        *   **Sección de Cirugías Pasadas sin Cerrar (Auditoría Quirúrgica)**: Pestaña para detectar cirugías con fecha previa a hoy que quedaron sin cerrar en el calendario. Permite cierre rápido con carga de horas reales de inicio y fin (`completed`), suspensión inmediata si no se realizaron, o reprogramación directa.
+        *   **Cruce Inteligente de Faltantes en Tarjetas**: Indicador en tarjetas de bloqueo de material si además adeudan exámenes pre-quirúrgicos, y viceversa.
 *   **v3.12.11 [2026-09-28]**: Lanzada la versión **v3.12.11**.
     *   **Tablero Kanban (`Kanban.tsx`)**:
         *   **Cálculo Único de Total Activos**: Se corrigió el cálculo de la métrica "Total Activos" para calcular directamente las cirugías activas únicas (`p.status !== 'suspended' && p.status !== 'cancelled' && p.status !== 'completed'`), eliminando la suma solapada de sublistas que provocaba duplicación de conteos.
