@@ -1146,7 +1146,7 @@ ipcMain.handle('select-directory', async () => {
 // --- RECOLECTOR DE PREQUIRÚRGICOS ---
 let activePrequirurgicosProcess = null;
 
-ipcMain.handle('run-prequirurgicos-collector', async (event, patientName, labDate, ecgDate, outputDir) => {
+ipcMain.handle('run-prequirurgicos-collector', async (event, patientName, labDate, ecgDate, outputDir, showBrowser = false) => {
     return new Promise((resolve) => {
         if (activePrequirurgicosProcess) {
             try {
@@ -1159,6 +1159,7 @@ ipcMain.handle('run-prequirurgicos-collector', async (event, patientName, labDat
         const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
         const args = [scriptPath, patientName, labDate, ecgDate];
         if (outputDir) args.push(outputDir);
+        if (showBrowser) args.push('--show');
 
         event.sender.send('prequirurgicos-log', `[Sistema] Iniciando recolección para ${patientName}...`);
 
@@ -1177,9 +1178,18 @@ ipcMain.handle('run-prequirurgicos-collector', async (event, patientName, labDat
                 const lines = text.split('\n');
                 lines.forEach(l => {
                     const clean = l.trim();
-                    if (clean && !clean.startsWith('===RESULT_JSON')) {
-                        event.sender.send('prequirurgicos-log', clean);
+                    if (!clean || clean.startsWith('===RESULT_JSON')) return;
+                    
+                    if (clean.startsWith('[PROGRESS:')) {
+                        const match = clean.match(/^\[PROGRESS:(\d+)\]\s*(.*)$/);
+                        if (match) {
+                            event.sender.send('prequirurgicos-progress', {
+                                percent: parseInt(match[1], 10),
+                                message: match[2]
+                            });
+                        }
                     }
+                    event.sender.send('prequirurgicos-log', clean);
                 });
             });
 

@@ -54,6 +54,9 @@ export const Prequirurgicos: React.FC = () => {
 
     // Estado de ejecución
     const [isRunning, setIsRunning] = useState(false);
+    const [showBrowser, setShowBrowser] = useState(false);
+    const [progressPercent, setProgressPercent] = useState(0);
+    const [progressStatusText, setProgressStatusText] = useState('');
     const [logs, setLogs] = useState<string[]>([]);
     const [result, setResult] = useState<CollectionResult | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -67,25 +70,38 @@ export const Prequirurgicos: React.FC = () => {
         }
     }, [logs]);
 
-    // Cargar carpeta por defecto desde preferencias de app o fallback
+    // Cargar carpeta y preferencia de navegador desde preferencias de app o fallback
     useEffect(() => {
         const initDir = async () => {
             if ((window as any).electronAPI?.getAppPreference) {
                 const saved = await (window as any).electronAPI.getAppPreference('prequirurgicos_output_dir');
                 if (saved) {
                     setOutputDir(saved);
-                    return;
+                }
+                const savedShowBrowser = await (window as any).electronAPI.getAppPreference('prequirurgicos_show_browser');
+                if (savedShowBrowser !== undefined && savedShowBrowser !== null) {
+                    setShowBrowser(!!savedShowBrowser);
                 }
             }
         };
         initDir();
     }, []);
 
-    // Escuchar logs en vivo de Electron
+    // Escuchar logs y progreso en vivo de Electron
     useEffect(() => {
         if ((window as any).electronAPI?.onPrequirurgicosLog) {
             (window as any).electronAPI.onPrequirurgicosLog((msg: string) => {
                 setLogs(prev => [...prev, msg]);
+            });
+        }
+        if ((window as any).electronAPI?.onPrequirurgicosProgress) {
+            (window as any).electronAPI.onPrequirurgicosProgress((prog: { percent: number; message: string }) => {
+                if (typeof prog.percent === 'number') {
+                    setProgressPercent(prog.percent);
+                }
+                if (prog.message) {
+                    setProgressStatusText(prog.message);
+                }
             });
         }
     }, []);
@@ -100,7 +116,7 @@ export const Prequirurgicos: React.FC = () => {
         }
     }, [location.state]);
 
-    // Búsqueda en Supabase de pacientes activos
+    // Búsqueda en Supabase de pacientes activos (unificando con relación patients)
     useEffect(() => {
         const timer = setTimeout(async () => {
             if (!searchQuery || searchQuery.trim().length < 2) {
@@ -112,13 +128,30 @@ export const Prequirurgicos: React.FC = () => {
                 setSearchingPatients(true);
                 const { data, error } = await supabase
                     .from('surgeries')
-                    .select('id, patient_name, patient_document, surgery_date, doctor_name')
-                    .ilike('patient_name', `%${searchQuery.trim()}%`)
+                    .select(`
+                        id,
+                        surgery_date,
+                        patients!inner (
+                            full_name,
+                            document_number
+                        ),
+                        doctors!doctor_id (
+                            full_name
+                        )
+                    `)
+                    .ilike('patients.full_name', `%${searchQuery.trim()}%`)
                     .order('created_at', { ascending: false })
                     .limit(6);
 
                 if (!error && data) {
-                    setPatientSuggestions(data);
+                    const formatted = data.map((s: any) => ({
+                        id: s.id,
+                        patient_name: s.patients?.full_name || '',
+                        patient_document: s.patients?.document_number || '',
+                        surgery_date: s.surgery_date,
+                        doctor_name: s.doctors?.full_name || ''
+                    }));
+                    setPatientSuggestions(formatted);
                 }
             } catch (err) {
                 console.error('Error buscando pacientes:', err);
@@ -132,6 +165,12 @@ export const Prequirurgicos: React.FC = () => {
 
     const handleSelectPatient = (p: any) => {
         setPatientName(p.patient_name || '');
+        if (p.surgery_date) {
+            setLabDate(p.surgery_date);
+            const d = new Date(p.surgery_date);
+            d.setDate(d.getDate() - 30);
+            setEcgDate(d.toISOString().split('T')[0]);
+        }
         setSearchQuery('');
         setShowSuggestions(false);
     };
@@ -165,6 +204,8 @@ export const Prequirurgicos: React.FC = () => {
         setIsRunning(true);
         setResult(null);
         setErrorMessage(null);
+        setProgressPercent(5);
+        setProgressStatusText('Iniciando robots...');
         setLogs([`Iniciando recolección de prequirúrgicos para: ${patientName.trim().toUpperCase()}...`]);
 
         try {
@@ -172,17 +213,22 @@ export const Prequirurgicos: React.FC = () => {
                 patientName.trim(),
                 labDate,
                 ecgDate,
-                outputDir || undefined
+                outputDir || undefined,
+                showBrowser
             );
 
             if (resp.success && resp.data) {
                 setResult(resp.data);
+                setProgressPercent(100);
+                setProgressStatusText('Recolección completada con éxito.');
             } else {
                 setErrorMessage(resp.error || 'Ocurrió un error durante la ejecución del proceso.');
+                setProgressStatusText('Finalizado con advertencias o error.');
             }
         } catch (err: any) {
             console.error('Error al ejecutar recolector:', err);
             setErrorMessage(err.message || 'Error inesperado al ejecutar el recolector.');
+            setProgressStatusText('Error en la ejecución.');
         } finally {
             setIsRunning(false);
         }
@@ -366,7 +412,36 @@ export const Prequirurgicos: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="pt-3">
+                                {/* CHECKBOX: MOSTRAR NAVEGADOR EN VIVO */}
+                                <div className="bg-slate-50 hover:bg-blue-50/50 p-3 rounded-xl border border-slate-200/80 transition-colors">
+                                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={showBrowser}
+                                            onChange={async (e) => {
+                                                const checked = e.target.checked;
+                                                setShowBrowser(checked);
+                                                if ((window as any).electronAPI?.setAppPreference) {
+                                                    await (window as any).electronAPI.setAppPreference('prequirurgicos_show_browser', checked);
+                                                }
+                                            }}
+                                            className="size-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                                        />
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="material-symbols-outlined text-sm text-blue-600">visibility</span>
+                                                <span className="text-xs font-bold text-slate-800">
+                                                    Mostrar navegador en vivo (robot visual)
+                                                </span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
+                                                Abre la ventana de Chromium para observar en tiempo real cómo busca en Nanni e IPHH.
+                                            </p>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                <div className="pt-2">
                                     {!isRunning ? (
                                         <button
                                             type="submit"
@@ -464,21 +539,57 @@ export const Prequirurgicos: React.FC = () => {
 
                     {/* COLUMNA DERECHA: CONSOLA DE PROGRESO Y LOGS */}
                     <div className="lg:col-span-7">
-                        <div className="bg-slate-900 text-slate-200 p-6 rounded-2xl shadow-xl border border-slate-800 flex flex-col h-[580px]">
-                            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                        <div className="bg-slate-900 text-slate-200 p-6 rounded-2xl shadow-xl border border-slate-800 flex flex-col h-[620px]">
+                            {/* CABECERA CONSOLA */}
+                            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                                 <div className="flex items-center gap-2.5">
                                     <div className={`size-3 rounded-full ${isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`}></div>
                                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
                                         Consola de Recolección en Vivo
                                     </h3>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setLogs([])}
-                                    className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors font-mono"
-                                >
-                                    Limpiar
-                                </button>
+                                <div className="flex items-center gap-3">
+                                    {isRunning && (
+                                        <span className="text-[11px] font-mono font-bold text-blue-400">
+                                            {progressPercent}%
+                                        </span>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setLogs([])}
+                                        className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors font-mono"
+                                    >
+                                        Limpiar
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* BARRA DE PROGRESO ACTIVA */}
+                            <div className="py-2.5 border-b border-slate-800/80">
+                                <div className="flex items-center justify-between text-[11px] font-mono mb-1.5">
+                                    <span className="text-slate-400 truncate mr-2">
+                                        {isRunning
+                                            ? (progressStatusText || 'Recolectando prequirúrgicos...')
+                                            : result
+                                                ? 'Proceso finalizado'
+                                                : 'Listo para iniciar'}
+                                    </span>
+                                    <span className={`font-bold ${isRunning ? 'text-blue-400' : result ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                        {isRunning ? `${progressPercent}%` : result ? '100%' : '0%'}
+                                    </span>
+                                </div>
+                                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
+                                    <div
+                                        className={`h-full rounded-full transition-all duration-500 ease-out ${
+                                            isRunning
+                                                ? 'bg-gradient-to-r from-blue-500 to-indigo-500 shadow-sm shadow-blue-500/50 animate-pulse'
+                                                : result
+                                                    ? 'bg-emerald-500'
+                                                    : 'bg-slate-700'
+                                        }`}
+                                        style={{ width: `${isRunning ? Math.max(progressPercent, 5) : result ? 100 : 0}%` }}
+                                    ></div>
+                                </div>
                             </div>
 
                             <div

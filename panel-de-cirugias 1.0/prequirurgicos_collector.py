@@ -47,10 +47,15 @@ def is_name_matching(target_name, test_string):
         return True
     return False
 
+def report_progress(percent, stage_text):
+    """Emite un evento de progreso parseable por la interfaz"""
+    print(f"[PROGRESS:{percent}] {stage_text}", flush=True)
+
 def collect_ecg(patient_name, ecg_date_str, output_dir):
     """
     Descarga los ECGs desde prequirurgico@iteosrl.com.ar via IMAP
     """
+    report_progress(10, "Conectando al correo para buscar ECG...")
     log(f"Iniciando búsqueda de ECG para: '{patient_name}' desde {ecg_date_str}...")
     downloaded_files = []
     
@@ -63,6 +68,7 @@ def collect_ecg(patient_name, ecg_date_str, output_dir):
         M = imaplib.IMAP4_SSL("200.58.110.166", 993, ssl_context=ctx)
         M.login("prequirurgico@iteosrl.com.ar", "@C8y6H@6fZ")
         M.select("INBOX", readonly=True)
+        report_progress(18, "Buscando correos en el período seleccionado...")
         
         # Formatear fecha para filtro IMAP SINCE
         search_criteria = "ALL"
@@ -82,10 +88,12 @@ def collect_ecg(patient_name, ecg_date_str, output_dir):
             log("No se encontraron correos en el período especificado.")
             M.close()
             M.logout()
+            report_progress(35, "Búsqueda de ECG finalizada (no disponible).")
             return {"success": False, "files": [], "message": "El informe del ECG aún no se encuentra disponible, comunicarse con el cardiólogo que lo realizó."}
         
         msg_ids = data[0].split()
         log(f"Analizando {len(msg_ids)} correos dentro del rango de fechas...")
+        report_progress(25, f"Analizando {len(msg_ids)} correos...")
         
         # Recorrer del más reciente al más antiguo
         for mid in reversed(msg_ids):
@@ -114,6 +122,7 @@ def collect_ecg(patient_name, ecg_date_str, output_dir):
                     
                     if matching_attachments:
                         log(f"¡Correo encontrado! Asunto: '{subject}' | Fecha: {date_val}")
+                        report_progress(30, "Informe ECG encontrado, descargando...")
                         for fname, content in matching_attachments:
                             # Asegurar nombre limpio y único
                             safe_name = f"ECG_{re.sub(r'[^a-zA-Z0-9_-]', '_', patient_name)}_{fname}"
@@ -125,6 +134,7 @@ def collect_ecg(patient_name, ecg_date_str, output_dir):
                             
         M.close()
         M.logout()
+        report_progress(35, "Búsqueda de ECG finalizada.")
         
         if downloaded_files:
             return {"success": True, "files": downloaded_files, "message": f"Se descargaron {len(downloaded_files)} archivo(s) de ECG con éxito."}
@@ -133,20 +143,23 @@ def collect_ecg(patient_name, ecg_date_str, output_dir):
 
     except Exception as e:
         log(f"Error procesando correo ECG: {e}")
+        report_progress(35, "Aviso en búsqueda de ECG.")
         return {"success": False, "files": [], "error": str(e), "message": "El informe del ECG aún no se encuentra disponible, comunicarse con el cardiólogo que lo realizó."}
 
-def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir):
+def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir, show_browser=False):
     """
     Intenta buscar y descargar el laboratorio desde Lab Nanni
     """
-    log("Intentando buscar en Lab Nanni...")
+    report_progress(40, "Abriendo navegador para consultar Lab Nanni...")
+    log(f"Intentando buscar en Lab Nanni (Visual: {show_browser})...")
     try:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(headless=not show_browser)
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
         
         url = "https://resultados.labnanni.com.ar/shift/lis/nanni/elis/s01.iu.web.Login.cls?config=IBP"
         page.goto(url, timeout=30000)
+        report_progress(45, "Iniciando sesión en portal Nanni...")
         
         # Login
         user_inp = page.locator("input#control_42")
@@ -157,6 +170,7 @@ def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir):
         
         page.wait_for_load_state("networkidle", timeout=15000)
         log("Sesión iniciada en Lab Nanni. Buscando fechas y paciente...")
+        report_progress(55, "Buscando protocolos por fecha y paciente en Nanni...")
         
         # Formatear fecha para el período
         # Esperado habitual en Nanni: dd/mm/yyyy
@@ -194,9 +208,11 @@ def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir):
                 
         if not matched_row:
             log(f"Paciente '{patient_name}' no encontrado en resultados de Nanni.")
+            report_progress(65, "Paciente no encontrado en Nanni.")
             browser.close()
             return {"success": False, "file": None}
             
+        report_progress(60, "Fila de paciente hallada en Nanni. Abriendo detalle...")
         # Clic en la lupa de la fila
         lupa = matched_row.locator("img, a, input[type='image'], [title*='Visualizar'], [title*='Ver'], .lupa").first
         if lupa.count():
@@ -207,6 +223,7 @@ def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir):
         page.wait_for_timeout(3000)
         
         # Clic en 'Imprimir resultado'
+        report_progress(65, "Descargando PDF de resultados desde Nanni...")
         btn_imprimir = page.locator("text='Imprimir resultado', text='Imprimir', [title*='Imprimir']").first
         if btn_imprimir.count():
             with page.expect_download(timeout=15000) as download_info:
@@ -216,31 +233,36 @@ def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir):
             dest_file = os.path.join(output_dir, clean_name)
             download.save_as(dest_file)
             log(f"¡Laboratorio Nanni descargado con éxito!: {dest_file}")
+            report_progress(70, "Laboratorio descargado exitosamente desde Nanni.")
             browser.close()
             return {"success": True, "file": dest_file, "source": "Lab Nanni"}
             
         browser.close()
+        report_progress(70, "Búsqueda en Nanni finalizada.")
         return {"success": False, "file": None}
     except Exception as e:
         log(f"Aviso durante búsqueda en Nanni: {e}")
+        report_progress(70, "Aviso en portal Nanni, continuando...")
         try:
             browser.close()
         except:
             pass
         return {"success": False, "file": None, "error": str(e)}
 
-def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir):
+def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir, show_browser=False):
     """
     Fallback: Búsqueda y descarga desde iphhconsultorio.dynu.net
     """
-    log("Iniciando búsqueda en portal secundario IPHH (dynu.net)...")
+    report_progress(75, "Abriendo navegador para consultar portal secundario IPHH...")
+    log(f"Iniciando búsqueda en portal secundario IPHH (Visual: {show_browser})...")
     try:
-        browser = playwright.chromium.launch(headless=True)
+        browser = playwright.chromium.launch(headless=not show_browser)
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
         
         url = "https://iphhconsultorio.dynu.net/portal/login"
         page.goto(url, timeout=30000)
+        report_progress(80, "Iniciando sesión en portal IPHH...")
         
         # Perfil: Institución
         page.locator("select").first.select_option("institucion")
@@ -253,6 +275,7 @@ def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir):
         page.locator("button, input[type='submit']").first.click()
         page.wait_for_load_state("networkidle", timeout=15000)
         log("Sesión iniciada en portal IPHH.")
+        report_progress(85, "Filtrando por fecha en IPHH...")
         
         # Formatear fecha
         if "-" in lab_date_str:
@@ -282,6 +305,7 @@ def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir):
             page.wait_for_timeout(3000)
             
         # Buscar al paciente en la lista/tabla
+        report_progress(88, "Buscando paciente en resultados de IPHH...")
         rows = page.locator("tr, .card, .paciente-row").all()
         matched_elem = None
         for r in rows:
@@ -293,10 +317,12 @@ def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir):
                 
         if not matched_elem:
             log(f"Paciente '{patient_name}' no encontrado en resultados de IPHH.")
+            report_progress(95, "Paciente no encontrado en IPHH.")
             browser.close()
             return {"success": False, "file": None}
             
         # Clic sobre el paciente
+        report_progress(90, "Paciente hallado en IPHH. Abriendo descarga...")
         matched_elem.click()
         page.wait_for_timeout(2000)
         
@@ -310,13 +336,16 @@ def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir):
             dest_file = os.path.join(output_dir, clean_name)
             download.save_as(dest_file)
             log(f"¡Laboratorio IPHH descargado con éxito!: {dest_file}")
+            report_progress(95, "Laboratorio descargado exitosamente desde IPHH.")
             browser.close()
             return {"success": True, "file": dest_file, "source": "IPHH"}
             
         browser.close()
+        report_progress(95, "Búsqueda en IPHH finalizada.")
         return {"success": False, "file": None}
     except Exception as e:
         log(f"Aviso durante búsqueda en IPHH: {e}")
+        report_progress(95, "Aviso durante búsqueda en IPHH.")
         try:
             browser.close()
         except:
@@ -327,7 +356,7 @@ def main():
     if len(sys.argv) < 4:
         print(json.dumps({
             "success": False, 
-            "error": "Parámetros insuficientes. Uso: python prequirurgicos_collector.py <paciente> <fecha_lab> <fecha_ecg> [output_dir]"
+            "error": "Parámetros insuficientes. Uso: python prequirurgicos_collector.py <paciente> <fecha_lab> <fecha_ecg> [output_dir] [--show]"
         }))
         sys.exit(1)
         
@@ -335,11 +364,17 @@ def main():
     lab_date = sys.argv[2].strip()
     ecg_date = sys.argv[3].strip()
     
-    # Directorio de salida por defecto o provisto
-    if len(sys.argv) >= 5 and sys.argv[4].strip():
-        output_dir = sys.argv[4].strip()
-    else:
-        # Ruta estándar sugerida o en OneDrive de ITEO / Documentos
+    # Procesar argumentos opcionales: output_dir y --show
+    output_dir = ""
+    show_browser = False
+    
+    for arg in sys.argv[4:]:
+        if arg == "--show":
+            show_browser = True
+        elif not arg.startswith("--") and not output_dir:
+            output_dir = arg.strip()
+            
+    if not output_dir:
         home = os.path.expanduser("~")
         preferred_path = os.path.join(home, "OneDrive - Instituto de Traumatologia y Enfermedades Oseas", "Archivos de Juan simon Astudilla - ITEO", "7 - PREQUIRÚRGICOS")
         if os.path.exists(os.path.dirname(preferred_path)):
@@ -348,7 +383,8 @@ def main():
             output_dir = os.path.join(home, "Documents", "ITEO_Prequirurgicos")
             
     os.makedirs(output_dir, exist_ok=True)
-    log(f"Directorio de destino configurado: {output_dir}")
+    report_progress(5, f"Directorio de destino configurado: {output_dir}")
+    log(f"Directorio de destino configurado: {output_dir} | Visual: {show_browser}")
     
     results = {
         "timestamp": datetime.now().isoformat(),
@@ -370,19 +406,21 @@ def main():
     # 2. Búsqueda y Descarga de Laboratorio (Nanni -> Fallback IPHH)
     try:
         with sync_playwright() as playwright:
-            lab_res = collect_lab_nanni(playwright, patient_name, lab_date, output_dir)
+            lab_res = collect_lab_nanni(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
             if not lab_res.get("success"):
                 log("Laboratorio no encontrado en Nanni. Intentando con IPHH...")
-                lab_res = collect_lab_iphh(playwright, patient_name, lab_date, output_dir)
+                lab_res = collect_lab_iphh(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
                 
             results["laboratory"] = lab_res
             if lab_res.get("file"):
                 results["downloaded_files"].append(lab_res["file"])
     except Exception as e:
         log(f"Error en navegador Playwright para laboratorio: {e}")
+        report_progress(95, "Error en Playwright al buscar laboratorios.")
         results["laboratory"] = {"success": False, "error": str(e), "message": "No se pudo acceder a los portales de laboratorio."}
 
     # Salida final JSON
+    report_progress(100, "Proceso de recolección de prequirúrgicos completado.")
     log("Proceso de recolección de prequirúrgicos finalizado.")
     print("===RESULT_JSON_START===")
     print(json.dumps(results, ensure_ascii=False, indent=2))

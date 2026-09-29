@@ -2,6 +2,11 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.1 [2026-09-29]**: Lanzada la versión **v3.13.1**.
+    *   **Mejoras en Recolector de Prequirúrgicos (`pages/Prequirurgicos.tsx`, `prequirurgicos_collector.py`)**:
+        *   **Corrección de Error 400 en Búsqueda de Pacientes**: Corregido el query de autocompletado en Supabase utilizando la relación `patients!inner(full_name, document_number)` y `doctors!doctor_id(full_name)`. Al seleccionar un paciente, autocompleta el nombre y fecha de laboratorio y calcula la fecha sugerida de ECG (-30 días).
+        *   **Modo Visual de Navegador (Robot en Vivo)**: Agregado checkbox interactivo *"Mostrar navegador en vivo (robot visual)"* con persistencia de preferencia local (`prequirurgicos_show_browser`), pasando el argumento `--show` al ejecutable de Playwright para ver en tiempo real cómo interactúa con los portales de Nanni e IPHH.
+        *   **Barra de Progreso y Estados en Vivo**: Implementado protocolo de eventos `[PROGRESS:X%]` transmitido por IPC para mostrar el porcentaje de avance animado y los hitos descriptivos (conexión correo, análisis de mensajes, apertura de portales, descarga de informes).
 *   **v3.13.0 [2026-09-29]**: Lanzada la versión **v3.13.0**.
     *   **Nuevo Módulo de Recolección de Prequirúrgicos (`pages/Prequirurgicos.tsx`)**:
         *   **Descarga Silenciosa de ECG**: Conexión directa mediante **IMAP SSL** a la casilla `prequirurgico@iteosrl.com.ar` en host Ferozo (`200.58.110.166:993`). Búsqueda desde la fecha del estudio con coincidencia en asunto (`ECG [Apellido y Nombre]`) y en el nombre de archivos PDF adjuntos. Descarga inmediata de todos los adjuntos o reporte automático de advertencia si no está disponible aún.

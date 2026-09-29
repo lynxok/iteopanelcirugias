@@ -18,7 +18,12 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
-*   `[2026-09-29]`: **Nuevo Módulo de Recolección de Prequirúrgicos (Laboratorio Nanni/IPHH y ECG Ferozo)**:
+*   `[2026-09-29]`: **Mejoras en Recolector de Prequirúrgicos (v3.13.1)**:
+    *   **Corrección de Error 400 en Búsqueda de Pacientes**: Corregido el query de autocompletado en Supabase utilizando la relación `patients!inner(full_name, document_number)` y `doctors!doctor_id(full_name)`. Al seleccionar un paciente, autocompleta el nombre y fecha de laboratorio y calcula la fecha sugerida de ECG (-30 días).
+    *   **Modo Visual de Navegador (Robot en Vivo)**: Agregado checkbox interactivo *"Mostrar navegador en vivo (robot visual)"* con persistencia de preferencia local (`prequirurgicos_show_browser`), pasando el argumento `--show` al ejecutable de Playwright para ver en tiempo real cómo interactúa con los portales de Nanni e IPHH.
+    *   **Barra de Progreso y Estados en Vivo**: Implementado protocolo de eventos `[PROGRESS:X%]` transmitido por IPC para mostrar el porcentaje de avance animado y los hitos descriptivos (conexión correo, análisis de mensajes, apertura de portales, descarga de informes).
+
+*   `[2026-09-29]`: **Nuevo Módulo de Recolección de Prequirúrgicos (Laboratorio Nanni/IPHH y ECG Ferozo) (v3.13.0)**:
     *   **Arquitectura de Automatización**: Implementado el script `prequirurgicos_collector.py` ejecutado desde Electron vía IPC (`run-prequirurgicos-collector`).
         *   **Descarga de ECG**: Conexión directa mediante protocolo **IMAP SSL** (`prequirurgico@iteosrl.com.ar` en host Ferozo `200.58.110.166:993`). Filtra por fecha `SINCE` y coincidencia en asunto (`ECG [Apellido y Nombre]`) y en nombres de adjuntos PDF, descargando de forma instantánea todos los archivos adjuntos. Si no hay coincidencia, reporta la advertencia reglamentaria: *"El informe del ECG aún no se encuentra disponible, comunicarse con el cardiólogo que lo realizó"*.
         *   **Descarga de Laboratorio**: Navegación headless mediante **Playwright**. Inicia sesión en **Lab Nanni** (`resultados.labnanni.com.ar`), filtra por período y busca al paciente para descargar el PDF ("Imprimir resultado"). Si no se encuentra, activa automáticamente el fallback al portal secundario **IPHH** (`iphhconsultorio.dynu.net`), busca por fecha y paciente, y descarga el resultado.
