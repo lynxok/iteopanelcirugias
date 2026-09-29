@@ -30,5 +30,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     obsSaveScreenshot: (filePath, base64Data) => ipcRenderer.invoke('obs:save-screenshot', filePath, base64Data),
     selectDirectory: () => ipcRenderer.invoke('select-directory'),
     setAppPreference: (key, value) => ipcRenderer.invoke('set-app-preference', key, value),
-    getAppPreference: (key) => ipcRenderer.invoke('get-app-preference', key)
+    getAppPreference: (key) => ipcRenderer.invoke('get-app-preference', key),
+    runPrequirurgicosCollector: (patientName, labDate, ecgDate, outputDir) => ipcRenderer.invoke('run-prequirurgicos-collector', patientName, labDate, ecgDate, outputDir),
+    stopPrequirurgicosCollector: () => ipcRenderer.invoke('stop-prequirurgicos-collector'),
+    onPrequirurgicosLog: (callback) => ipcRenderer.on('prequirurgicos-log', (_event, message) => callback(message)),
+    openPath: (targetPath) => ipcRenderer.invoke('open-path', targetPath),
+    showItemInFolder: (fullPath) => ipcRenderer.invoke('show-item-in-folder', fullPath)
 });

@@ -1,7 +1,7 @@
 {
   "name": "panel-de-cirugias",
   "private": true,
-  "version": "3.12.14",
+  "version": "3.13.0",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
@@ -74,6 +74,7 @@
       "main.cjs",
       "preload.cjs",
       "package.json",
+      "prequirurgicos_collector.py",
       "node_modules/**/*",
       "CONFIGURAR_SINCRONIZADOR.bat"
     ],

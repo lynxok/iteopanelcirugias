@@ -18,6 +18,28 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-29]`: **Nuevo Módulo de Recolección de Prequirúrgicos (Laboratorio Nanni/IPHH y ECG Ferozo)**:
+    *   **Arquitectura de Automatización**: Implementado el script `prequirurgicos_collector.py` ejecutado desde Electron vía IPC (`run-prequirurgicos-collector`).
+        *   **Descarga de ECG**: Conexión directa mediante protocolo **IMAP SSL** (`prequirurgico@iteosrl.com.ar` en host Ferozo `200.58.110.166:993`). Filtra por fecha `SINCE` y coincidencia en asunto (`ECG [Apellido y Nombre]`) y en nombres de adjuntos PDF, descargando de forma instantánea todos los archivos adjuntos. Si no hay coincidencia, reporta la advertencia reglamentaria: *"El informe del ECG aún no se encuentra disponible, comunicarse con el cardiólogo que lo realizó"*.
+        *   **Descarga de Laboratorio**: Navegación headless mediante **Playwright**. Inicia sesión en **Lab Nanni** (`resultados.labnanni.com.ar`), filtra por período y busca al paciente para descargar el PDF ("Imprimir resultado"). Si no se encuentra, activa automáticamente el fallback al portal secundario **IPHH** (`iphhconsultorio.dynu.net`), busca por fecha y paciente, y descarga el resultado.
+    *   **Pantalla Dedicada (`pages/Prequirurgicos.tsx`)**:
+        *   Buscador interactivo con autocompletado desde la base de datos de cirugías activas (`quirofano.surgeries`), además de carga manual de campos (*Apellido y Nombre*, *Fecha Laboratorio*, *Fecha ECG*).
+        *   Selector de carpeta de destino en Windows persistida en preferencias de Electron (`prequirurgicos_output_dir`).
+        *   Consola de logs en vivo en tiempo real, resumen de resultados y botones para abrir directamente cada PDF descargado o abrir la carpeta en el Explorador de Windows (`shell.openPath`).
+    *   **Accesos Rápidos Contextuales**:
+        *   Botón *"Prequirúrgicos"* en la barra de acciones rápidas de la cabecera de [SurgeryHeader.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/surgery-detail/SurgeryHeader.tsx).
+        *   Ícono de acceso directo en las tarjetas de pacientes del tablero [Kanban.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Kanban.tsx).
+        *   Ruta `/prequirurgicos` registrada en `App.tsx` y enlace dedicado en `Sidebar.tsx`.
+
+*   `[2026-09-29]`: **Contador de Espera desde Ingreso y Demora Post-Autorización de Ortopedia (v3.12.13 - v3.12.14)**:
+    *   **Contador 'Esperando ortopedia: X días'**: Se modificó el cálculo en `Kanban.tsx` para contar estrictamente los días corridos acumulados desde el ingreso de la solicitud al sistema (`created_at`) en lugar de tomar la fecha de autorización, reflejando el tiempo total de espera del paciente.
+    *   **Badge de Demora Post-Autorización**: Se implementó un cartel de alerta animado en color rosa/rojo (`Demora post-autorización: X días`) para cirugías que ya tienen fecha de autorización médica (`authorization_date`) pero cuya ortopedia aún adeuda la validación de materiales (`materialStatus !== 'OK'`). Condicionado a mostrarse exclusivamente cuando la demora sea mayor a 0 días (`daysSinceAuth > 0`).
+    *   **Panel de Métricas y Promedios de Espera**: En la cabecera de la vista *Pendientes Ortopedia* se incorporaron tres indicadores analíticos de gestión:
+        1. *Demora Promedio Post-Autorización*: Días promedio transcurridos desde la autorización médica en pacientes activos a la espera de materiales.
+        2. *Espera Total Promedio (Ingreso)*: Días promedio de permanencia en el sistema desde el alta inicial.
+        3. *Histórico Respuesta Ortopedia*: Promedio de días que tardó la ortopedia en dar visto bueno tras la autorización médica en cirugías históricas ya validadas.
+    *   **Distribución y Releases**: Compilado bundle web y generados instaladores NSIS para Windows (`PanelCirugias_ITEO_Setup.exe`), blockmaps y manifiestos `latest.yml`, publicados exitosamente en los releases `v3.12.13` y `v3.12.14` de GitHub.
+
 *   `[2026-09-28]`: **Corrección de Conteo "Total Activos" y Nueva Sección de Cirugías Programadas en Kanban**:
     *   **Conteo Único en Total Activos**: Se corrigió el cálculo de la tarjeta KPI en `Kanban.tsx` para evitar solapamientos y duplicaciones de conteo entre listas. Ahora calcula estrictamente cirugías activas únicas (`status !== 'suspended' && status !== 'cancelled' && status !== 'completed'`).
     *   **Nueva Sección "Cirugías con Fecha Asignada"**: Se incorporó en el tablero Kanban una sección colapsable dedicada a cirugías que ya poseen fecha programada (`p.surgeryDate`), ordenadas cronológicamente por fecha y hora.

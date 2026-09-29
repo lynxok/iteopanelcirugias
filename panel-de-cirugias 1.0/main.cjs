@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, session, Menu, Tray } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, Menu, Tray, shell } = require('electron');
 const path = require('path');
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
@@ -1133,7 +1133,7 @@ ipcMain.handle('obs:save-screenshot', async (event, filePath, base64Data) => {
 ipcMain.handle('select-directory', async () => {
     try {
         const { filePaths } = await dialog.showOpenDialog(mainWindow, {
-            title: 'Seleccionar Carpeta de Destino de Grabaciones',
+            title: 'Seleccionar Carpeta de Destino',
             properties: ['openDirectory', 'createDirectory']
         });
         return filePaths[0] || null;
@@ -1142,5 +1142,127 @@ ipcMain.handle('select-directory', async () => {
         return null;
     }
 });
+
+// --- RECOLECTOR DE PREQUIRÚRGICOS ---
+let activePrequirurgicosProcess = null;
+
+ipcMain.handle('run-prequirurgicos-collector', async (event, patientName, labDate, ecgDate, outputDir) => {
+    return new Promise((resolve) => {
+        if (activePrequirurgicosProcess) {
+            try {
+                activePrequirurgicosProcess.kill();
+            } catch (e) {}
+            activePrequirurgicosProcess = null;
+        }
+
+        const scriptPath = path.join(__dirname, 'prequirurgicos_collector.py');
+        const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+        const args = [scriptPath, patientName, labDate, ecgDate];
+        if (outputDir) args.push(outputDir);
+
+        event.sender.send('prequirurgicos-log', `[Sistema] Iniciando recolección para ${patientName}...`);
+
+        let stdoutAcc = '';
+        let stderrAcc = '';
+
+        try {
+            activePrequirurgicosProcess = spawn(pythonCommand, args, {
+                cwd: __dirname,
+                env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
+            });
+
+            activePrequirurgicosProcess.stdout.on('data', (data) => {
+                const text = data.toString('utf8');
+                stdoutAcc += text;
+                const lines = text.split('\n');
+                lines.forEach(l => {
+                    const clean = l.trim();
+                    if (clean && !clean.startsWith('===RESULT_JSON')) {
+                        event.sender.send('prequirurgicos-log', clean);
+                    }
+                });
+            });
+
+            activePrequirurgicosProcess.stderr.on('data', (data) => {
+                const text = data.toString('utf8');
+                stderrAcc += text;
+                const lines = text.split('\n');
+                lines.forEach(l => {
+                    const clean = l.trim();
+                    if (clean) {
+                        event.sender.send('prequirurgicos-log', `[Error] ${clean}`);
+                    }
+                });
+            });
+
+            activePrequirurgicosProcess.on('close', (code) => {
+                activePrequirurgicosProcess = null;
+                try {
+                    const startMarker = '===RESULT_JSON_START===';
+                    const endMarker = '===RESULT_JSON_END===';
+                    if (stdoutAcc.includes(startMarker) && stdoutAcc.includes(endMarker)) {
+                        const jsonPart = stdoutAcc.split(startMarker)[1].split(endMarker)[0].trim();
+                        const result = JSON.parse(jsonPart);
+                        resolve({ success: true, data: result });
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Error parseando JSON de prequirurgicos:', e);
+                }
+
+                if (code === 0) {
+                    resolve({ success: true, message: 'Proceso finalizado.' });
+                } else {
+                    resolve({ success: false, error: stderrAcc || `Proceso terminado con código ${code}` });
+                }
+            });
+
+            activePrequirurgicosProcess.on('error', (err) => {
+                activePrequirurgicosProcess = null;
+                resolve({ success: false, error: err.message });
+            });
+        } catch (err) {
+            resolve({ success: false, error: err.message });
+        }
+    });
+});
+
+ipcMain.handle('stop-prequirurgicos-collector', () => {
+    if (activePrequirurgicosProcess) {
+        try {
+            activePrequirurgicosProcess.kill();
+            activePrequirurgicosProcess = null;
+            return { success: true };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    return { success: true };
+});
+
+ipcMain.handle('open-path', async (event, targetPath) => {
+    try {
+        if (!targetPath || !fs.existsSync(targetPath)) {
+            return { success: false, error: 'La ruta especificada no existe.' };
+        }
+        await shell.openPath(targetPath);
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('show-item-in-folder', async (event, fullPath) => {
+    try {
+        if (!fullPath || !fs.existsSync(fullPath)) {
+            return { success: false, error: 'El archivo no existe.' };
+        }
+        shell.showItemInFolder(fullPath);
+        return { success: true };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
 
 

@@ -2,6 +2,19 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.0 [2026-09-29]**: Lanzada la versión **v3.13.0**.
+    *   **Nuevo Módulo de Recolección de Prequirúrgicos (`pages/Prequirurgicos.tsx`)**:
+        *   **Descarga Silenciosa de ECG**: Conexión directa mediante **IMAP SSL** a la casilla `prequirurgico@iteosrl.com.ar` en host Ferozo (`200.58.110.166:993`). Búsqueda desde la fecha del estudio con coincidencia en asunto (`ECG [Apellido y Nombre]`) y en el nombre de archivos PDF adjuntos. Descarga inmediata de todos los adjuntos o reporte automático de advertencia si no está disponible aún.
+        *   **Descarga de Laboratorio (Nanni + Fallback IPHH)**: Navegación automatizada con **Playwright**. Inicia sesión en **Lab Nanni**, busca por período y paciente y descarga el resultado. Si no se encuentra, conmuta de forma transparente al portal secundario **IPHH** (`iphhconsultorio.dynu.net`) y descarga el informe.
+        *   **Pantalla y Consola en Vivo**:
+            *   Buscador interactivo con autocompletado desde pacientes en cirugías activas (`quirofano.surgeries`) o carga manual completa.
+            *   Selector de carpeta de destino en Windows persistida en configuración.
+            *   Consola de eventos en vivo con botones para abrir cada PDF descargado o abrir el directorio contenedor.
+        *   **Accesos Rápidos**: Botón de un clic en la cabecera de cirugía ([SurgeryHeader.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/surgery-detail/SurgeryHeader.tsx)) y en las tarjetas de pacientes de [Kanban.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/pages/Kanban.tsx) para saltar con el paciente precargado.
+        *   **Navegación**: Incorporada ruta `/prequirurgicos` en `App.tsx` y acceso en menú lateral ([Sidebar.tsx](file:///c:/Users/ignac/OneDrive/ITEO%20-%20Personal/Desarrollos/Coordinacion%20quirofano%20-%20capital%20-%20internaciones/panel-de-cirugias%201.0/components/Sidebar.tsx)).
+*   **v3.12.14 [2026-09-29]**: Lanzada la versión **v3.12.14**.
+    *   **Ajuste de Visualización en Demora Post-Autorización (`Kanban.tsx`)**:
+        *   Se condicionó el renderizado del badge de advertencia `Demora post-autorización: X días` para que se visualice **exclusivamente cuando la demora sea estrictamente mayor a 0 días** (`daysSinceAuth > 0`). Si la cirugía fue autorizada en el día en curso (demora = 0 días), el cartel no se renderiza.
 *   **v3.12.13 [2026-09-29]**: Lanzada la versión **v3.12.13**.
     *   **Contador y Auditoría de Espera con Ortopedia (`Kanban.tsx`)**:
         *   **Contador de Espera desde Ingreso**: El badge `Esperando ortopedia: X días` ahora calcula con precisión los días corridos transcurridos desde que se dio de alta la solicitud quirúrgica al sistema (`created_at`).

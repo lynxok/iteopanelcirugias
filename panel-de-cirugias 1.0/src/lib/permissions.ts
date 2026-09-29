@@ -348,7 +348,14 @@ export const checkAccess = (
   // 2. Caso Estilo Nuevo: Objeto estructurado
   if (typeof perms === 'object') {
     const config = perms[sectionId];
-    if (!config) return false;
+    if (!config) {
+      if (sectionId === 'prequirurgicos') {
+        const canSurgeries = checkAccess(rolePermissions, role, 'surgeries', requiredLevel);
+        const canKanban = checkAccess(rolePermissions, role, 'kanban', requiredLevel);
+        return canSurgeries || canKanban;
+      }
+      return false;
+    }
     
     if (requiredLevel === 'view') {
       return config.access === 'view' || config.access === 'edit';
