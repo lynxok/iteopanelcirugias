@@ -37,7 +37,13 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
         1. **Cirugías Activas Pendientes de Aprobación**: Solicitudes activas/programadas/en espera ordenadas de mayor a menor según los días en espera.
         2. **Cirugías Suspendidas Pendientes de Aprobación**: Subsección independiente destacada en tono ámbar para cirugías suspendidas.
         3. **Cirugías Canceladas**: Subsección independiente destacada en tono rojo para cirugías canceladas con material pendiente.
-    *   **Contador / Badge de Días en Espera**: En las tarjetas de paciente de estas cirugías se renderiza un badge violeta animado que calcula y muestra dinámicamente la cantidad de días transcurridos desde que se dio de alta la solicitud (`created_at`). Ejemplo: `Esperando ortopedia: X días`.
+    *   **Contadores y Badges de Días en Espera de Ortopedia**: En las tarjetas de paciente de estas cirugías se renderizan badges dinámicos animados:
+        - `Esperando ortopedia: X días`: Cuenta de forma estricta los días transcurridos desde que se ingresó la solicitud al sistema (`created_at`), reflejando el tiempo acumulado de espera del paciente.
+        - `Demora post-autorización: X días`: Badge de advertencia en color rosa/rojo (`bg-rose-600`) que aparece automáticamente cuando la cirugía ya cuenta con fecha de autorización médica (`authorization_date`) y la ortopedia todavía adeuda el visto bueno de materiales (`materialStatus !== 'OK'`).
+    *   **Métricas y Promedios de Tiempos de Espera con Ortopedia**: En la cabecera de la pestaña "Pendientes Ortopedia" se computan y presentan tres indicadores analíticos clave:
+        1. **Demora Promedio Post-Autorización**: Promedio de días transcurridos desde la fecha de autorización médica en las cirugías que aún esperan validación de materiales.
+        2. **Espera Total Promedio (Ingreso)**: Promedio de días desde la creación/ingreso de la solicitud de las cirugías en espera de ortopedia.
+        3. **Histórico Respuesta Ortopedia**: Promedio de días reales que demoró la ortopedia en dar el visto bueno tras la autorización médica en cirugías históricas ya validadas (`ortho_validation_date` - `authorization_date`).
 *   **Prioridad en OSER y Prepagas**: 1° Autorizadas con material OK / No requiere material, 2° Autorizadas con material pendiente, 3° No Autorizadas.
     *   **Desempate de prioridad**: Se ordena cronológicamente por fecha de creación de la solicitud (`created_at` ascendente, las solicitudes más antiguas arriba de todo).
     *   **Orden en ART y Particulares**: Directo por fecha de creación (`created_at` ascendente).

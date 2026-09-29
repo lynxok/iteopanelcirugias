@@ -2,6 +2,11 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.12.13 [2026-09-29]**: Lanzada la versión **v3.12.13**.
+    *   **Contador y Auditoría de Espera con Ortopedia (`Kanban.tsx`)**:
+        *   **Contador de Espera desde Ingreso**: El badge `Esperando ortopedia: X días` ahora calcula con precisión los días corridos transcurridos desde que se dio de alta la solicitud quirúrgica al sistema (`created_at`).
+        *   **Badge de Demora Post-Autorización**: Se incorporó un badge de alerta de alto contraste (`Demora post-autorización: X días`) en color rosa/rojo (`bg-rose-600`) que se activa automáticamente en cirugías que ya cuentan con fecha de autorización médica (`authorization_date`) pero cuya ortopedia aún adeuda la validación de materiales.
+        *   **Métricas y Promedios en Cabecera**: En la vista de *Pendientes Ortopedia* se implementaron 3 indicadores de demora y tiempo de respuesta: Demora Promedio Post-Autorización, Espera Total Promedio (Ingreso) e Histórico de Respuesta de Ortopedia (días de respuesta tras autorización en cirugías resueltas).
 *   **v3.12.12 [2026-09-28]**: Lanzada la versión **v3.12.12**.
     *   **Módulo Pre-Quirúrgico / Kanban (`Kanban.tsx`)**:
         *   **Sección de Cirugías Suspendidas y Canceladas**: Pestaña dedicada con filtro y columnas independientes para pacientes fuera de la programación activa.
