@@ -1155,21 +1155,34 @@ ipcMain.handle('run-prequirurgicos-collector', async (event, patientName, labDat
             activePrequirurgicosProcess = null;
         }
 
-        const scriptPath = path.join(__dirname, 'prequirurgicos_collector.py');
+        let scriptPath = path.join(__dirname, 'prequirurgicos_collector.py');
+        if (!fs.existsSync(scriptPath) && process.resourcesPath) {
+            const resPath = path.join(process.resourcesPath, 'prequirurgicos_collector.py');
+            if (fs.existsSync(resPath)) {
+                scriptPath = resPath;
+            } else {
+                const appAsarUnpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'prequirurgicos_collector.py');
+                if (fs.existsSync(appAsarUnpacked)) {
+                    scriptPath = appAsarUnpacked;
+                }
+            }
+        }
+
         const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
-        const args = [scriptPath, patientName, labDate, ecgDate];
+        const args = ['-u', scriptPath, patientName, labDate, ecgDate];
         if (outputDir) args.push(outputDir);
         if (showBrowser) args.push('--show');
 
         event.sender.send('prequirurgicos-log', `[Sistema] Iniciando recolección para ${patientName}...`);
+        event.sender.send('prequirurgicos-log', `[Sistema] Ejecutando: ${pythonCommand} con script en ${scriptPath}`);
 
         let stdoutAcc = '';
         let stderrAcc = '';
 
         try {
             activePrequirurgicosProcess = spawn(pythonCommand, args, {
-                cwd: __dirname,
-                env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
+                cwd: path.dirname(scriptPath),
+                env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUNBUFFERED: '1' }
             });
 
             activePrequirurgicosProcess.stdout.on('data', (data) => {

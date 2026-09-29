@@ -35,16 +35,64 @@ def normalize_text(text):
     t = t.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ñ", "n")
     return re.sub(r'[^a-z0-9]', '', t)
 
+def levenshtein_distance(s1, s2):
+    if len(s1) > len(s2):
+        s1, s2 = s2, s1
+    distances = range(len(s1) + 1)
+    for i2, c2 in enumerate(s2):
+        distances_ = [i2+1]
+        for i1, c1 in enumerate(s1):
+            if c1 == c2:
+                distances_.append(distances[i1])
+            else:
+                distances_.append(1 + min((distances[i1], distances[i1 + 1], distances_[-1])))
+        distances = distances_
+    return distances[-1]
+
 def is_name_matching(target_name, test_string):
-    """Verifica si los componentes del nombre y apellido se encuentran en la cadena"""
+    """
+    Verificación flexible y tolerante a faltantes, tildes o pequeñas discrepancias:
+    1. Coincidencia directa normalizada
+    2. Coincidencia de tokens (si al menos el apellido o la mayoría de palabras coinciden)
+    3. Similitud aproximada por distancia de Levenshtein
+    """
     norm_target = normalize_text(target_name)
     norm_test = normalize_text(test_string)
-    if norm_target in norm_test:
+    if not norm_target or not norm_test:
+        return False
+    if norm_target in norm_test or norm_test in norm_target:
         return True
-    # Evaluar tokens individuales (ej: apellido y nombre por separado)
-    tokens = [normalize_text(w) for w in re.split(r'\s+|,', target_name) if len(w) > 2]
-    if tokens and all(tok in norm_test for tok in tokens):
+        
+    tokens_target = [normalize_text(w) for w in re.split(r'\s+|,', target_name) if len(w) >= 2]
+    tokens_test = [normalize_text(w) for w in re.split(r'\s+|,', test_string) if len(w) >= 2]
+    
+    if not tokens_target or not tokens_test:
+        return False
+        
+    # Verificar cuántos tokens del paciente objetivo coinciden o son cuasi-idénticos (distancia <= 1 o 2)
+    matched_count = 0
+    for t_tar in tokens_target:
+        found = False
+        for t_tes in tokens_test:
+            if t_tar in t_tes or t_tes in t_tar:
+                found = True
+                break
+            # Si el token tiene más de 4 letras, tolerar 1 o 2 errores tipográficos
+            if len(t_tar) >= 4 and len(t_tes) >= 4:
+                max_dist = 1 if len(t_tar) <= 5 else 2
+                if levenshtein_distance(t_tar, t_tes) <= max_dist:
+                    found = True
+                    break
+        if found:
+            matched_count += 1
+            
+    # Si tiene 1 solo token (ej: solo apellido) y coincide
+    if len(tokens_target) == 1 and matched_count == 1:
         return True
+    # Si tiene 2 o más tokens y coincide al menos el 50% de las palabras (ej: coincidió el apellido o nombre principal)
+    if len(tokens_target) >= 2 and matched_count >= max(1, len(tokens_target) - 1):
+        return True
+
     return False
 
 def report_progress(percent, stage_text):
@@ -150,8 +198,9 @@ def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir, show_b
     """
     Intenta buscar y descargar el laboratorio desde Lab Nanni
     """
-    report_progress(40, "Abriendo navegador para consultar Lab Nanni...")
+    report_progress(10 if show_browser else 40, "Abriendo navegador para consultar Lab Nanni...")
     log(f"Intentando buscar en Lab Nanni (Visual: {show_browser})...")
+    browser = None
     try:
         browser = playwright.chromium.launch(headless=not show_browser)
         context = browser.new_context(accept_downloads=True)
@@ -159,7 +208,7 @@ def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir, show_b
         
         url = "https://resultados.labnanni.com.ar/shift/lis/nanni/elis/s01.iu.web.Login.cls?config=IBP"
         page.goto(url, timeout=30000)
-        report_progress(45, "Iniciando sesión en portal Nanni...")
+        report_progress(15 if show_browser else 45, "Iniciando sesión en portal Nanni...")
         
         # Login
         user_inp = page.locator("input#control_42")
@@ -170,7 +219,7 @@ def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir, show_b
         
         page.wait_for_load_state("networkidle", timeout=15000)
         log("Sesión iniciada en Lab Nanni. Buscando fechas y paciente...")
-        report_progress(55, "Buscando protocolos por fecha y paciente en Nanni...")
+        report_progress(20 if show_browser else 55, "Buscando protocolos por fecha y paciente en Nanni...")
         
         # Formatear fecha para el período
         # Esperado habitual en Nanni: dd/mm/yyyy
@@ -180,73 +229,97 @@ def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir, show_b
         else:
             formatted_date = lab_date_str.strip()
             
-        # Buscar inputs de fecha de período
-        date_inputs = page.locator("input[type='text']:visible").all()
-        for dinp in date_inputs:
-            # Los dos primeros suelen ser De / Hasta
-            val = dinp.get_attribute("value") or ""
-            if len(val) >= 8 or dinp.get_attribute("id") in ["control_68", "control_69"]:
-                dinp.fill(formatted_date)
-                
-        # Clic en Pesquisar / Buscar
-        btn_buscar = page.locator("input[value*='Pesquisar'], input[value*='Buscar'], #control_73").first
-        if btn_buscar.count():
-            btn_buscar.click()
-            page.wait_for_timeout(3000)
+        # Setear fecha 'De' y 'Hasta' en los inputs y disparar evento Zen
+        try:
+            page.evaluate(f"""() => {{
+                const inp68 = document.getElementById('control_68');
+                const inp69 = document.getElementById('control_69');
+                if (inp68) {{ inp68.value = '{formatted_date}'; inp68.dispatchEvent(new Event('change')); }}
+                if (inp69) {{ inp69.value = '{formatted_date}'; inp69.dispatchEvent(new Event('change')); }}
+                if (typeof zenPage !== 'undefined' && zenPage.pesquisar) {{ zenPage.pesquisar(); }}
+            }}""")
+        except Exception as e_fill:
+            log(f"Aviso al setear fechas en Nanni: {e_fill}")
             
-        # Buscar al paciente en la tabla de resultados
-        norm_target = normalize_text(patient_name)
-        rows = page.locator("tr").all()
-        matched_row = None
+        page.wait_for_timeout(4000)
+            
+        # Extraer filas con O.S. y nombres de pacientes
+        orders = page.evaluate("""() => {
+            const rows = Array.from(document.querySelectorAll('table.tpTable tr'));
+            const res = [];
+            rows.forEach(r => {
+                const link = r.querySelector("a[onclick*='apresentarOS']");
+                if (link) {
+                    const match = link.getAttribute('onclick').match(/apresentarOS\\('(\\d+)'\\)/);
+                    res.push({
+                        text: r.innerText.trim(),
+                        osId: match ? match[1] : null
+                    });
+                }
+            });
+            return res;
+        }""")
         
-        for r in rows:
-            txt = r.inner_text()
+        matched_os_id = None
+        for order in orders:
+            txt = order.get("text", "")
             if is_name_matching(patient_name, txt):
-                matched_row = r
-                log(f"Fila encontrada en Nanni: {txt[:80]}...")
+                matched_os_id = order.get("osId")
+                log(f"Protocolo O.S. encontrado en Nanni: {txt[:80]} (OS ID: {matched_os_id})")
                 break
                 
-        if not matched_row:
+        if not matched_os_id:
             log(f"Paciente '{patient_name}' no encontrado en resultados de Nanni.")
-            report_progress(65, "Paciente no encontrado en Nanni.")
+            report_progress(25 if show_browser else 65, "Paciente no encontrado en Nanni.")
             browser.close()
             return {"success": False, "file": None}
             
-        report_progress(60, "Fila de paciente hallada en Nanni. Abriendo detalle...")
-        # Clic en la lupa de la fila
-        lupa = matched_row.locator("img, a, input[type='image'], [title*='Visualizar'], [title*='Ver'], .lupa").first
-        if lupa.count():
-            lupa.click()
-        else:
-            matched_row.click()
-            
-        page.wait_for_timeout(3000)
+        report_progress(30 if show_browser else 60, "Protocolo hallado en Nanni. Abriendo detalle...")
+        # Navegar a la OS seleccionada
+        page.evaluate(f"zenPage.apresentarOS('{matched_os_id}');")
+        page.wait_for_load_state("networkidle", timeout=15000)
+        page.wait_for_timeout(2500)
         
-        # Clic en 'Imprimir resultado'
-        report_progress(65, "Descargando PDF de resultados desde Nanni...")
-        btn_imprimir = page.locator("text='Imprimir resultado', text='Imprimir', [title*='Imprimir']").first
-        if btn_imprimir.count():
-            with page.expect_download(timeout=15000) as download_info:
-                btn_imprimir.click()
-            download = download_info.value
-            clean_name = f"LAB_NANNI_{re.sub(r'[^a-zA-Z0-9_-]', '_', patient_name)}.pdf"
-            dest_file = os.path.join(output_dir, clean_name)
-            download.save_as(dest_file)
+        # Abrir reporte / laudo y generar PDF
+        report_progress(35 if show_browser else 65, "Generando PDF de resultados desde Nanni...")
+        clean_name = f"LAB_NANNI_{re.sub(r'[^a-zA-Z0-9_-]', '_', patient_name)}.pdf"
+        dest_file = os.path.join(output_dir, clean_name)
+        
+        try:
+            with page.expect_popup(timeout=15000) as laudo_popup_info:
+                page.evaluate("zenPage.imprimirLaudo(false);")
+            laudo_page = laudo_popup_info.value
+            laudo_page.wait_for_load_state("networkidle", timeout=15000)
+            laudo_page.wait_for_timeout(2000)
+            laudo_page.pdf(path=dest_file)
             log(f"¡Laboratorio Nanni descargado con éxito!: {dest_file}")
-            report_progress(70, "Laboratorio descargado exitosamente desde Nanni.")
+            report_progress(40 if show_browser else 70, "Laboratorio descargado exitosamente desde Nanni.")
             browser.close()
             return {"success": True, "file": dest_file, "source": "Lab Nanni"}
-            
+        except Exception as e_laudo:
+            log(f"Aviso al generar PDF en ventana emergente: {e_laudo}. Intentando descarga estándar...")
+            btn_imprimir = page.locator("text='Imprimir resultado', text='Imprimir', [title*='Imprimir']").first
+            if btn_imprimir.count():
+                with page.expect_download(timeout=10000) as download_info:
+                    btn_imprimir.click()
+                download = download_info.value
+                download.save_as(dest_file)
+                log(f"¡Laboratorio Nanni descargado con éxito!: {dest_file}")
+                report_progress(40 if show_browser else 70, "Laboratorio descargado exitosamente desde Nanni.")
+                browser.close()
+                return {"success": True, "file": dest_file, "source": "Lab Nanni"}
+                
         browser.close()
-        report_progress(70, "Búsqueda en Nanni finalizada.")
+        report_progress(40 if show_browser else 70, "Búsqueda en Nanni finalizada.")
         return {"success": False, "file": None}
     except Exception as e:
         log(f"Aviso durante búsqueda en Nanni: {e}")
-        report_progress(70, "Aviso en portal Nanni, continuando...")
-        try:
-            browser.close()
-        except:
-            pass
+        report_progress(40 if show_browser else 70, "Aviso en portal Nanni, continuando...")
+        if browser:
+            try:
+                browser.close()
+            except:
+                pass
         return {"success": False, "file": None, "error": str(e)}
 
 def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir, show_browser=False):
@@ -397,27 +470,50 @@ def main():
         "downloaded_files": []
     }
     
-    # 1. Búsqueda y Descarga de ECG
-    ecg_res = collect_ecg(patient_name, ecg_date, output_dir)
-    results["ecg"] = ecg_res
-    if ecg_res.get("files"):
-        results["downloaded_files"].extend(ecg_res["files"])
-        
-    # 2. Búsqueda y Descarga de Laboratorio (Nanni -> Fallback IPHH)
-    try:
-        with sync_playwright() as playwright:
-            lab_res = collect_lab_nanni(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
-            if not lab_res.get("success"):
-                log("Laboratorio no encontrado en Nanni. Intentando con IPHH...")
-                lab_res = collect_lab_iphh(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
-                
-            results["laboratory"] = lab_res
-            if lab_res.get("file"):
-                results["downloaded_files"].append(lab_res["file"])
-    except Exception as e:
-        log(f"Error en navegador Playwright para laboratorio: {e}")
-        report_progress(95, "Error en Playwright al buscar laboratorios.")
-        results["laboratory"] = {"success": False, "error": str(e), "message": "No se pudo acceder a los portales de laboratorio."}
+    # Si show_browser está activado, ejecutar laboratorios web PRIMERO para que el usuario observe el navegador de inmediato
+    if show_browser:
+        try:
+            with sync_playwright() as playwright:
+                lab_res = collect_lab_nanni(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
+                if not lab_res.get("success"):
+                    log("Laboratorio no encontrado en Nanni. Intentando con IPHH...")
+                    lab_res = collect_lab_iphh(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
+                    
+                results["laboratory"] = lab_res
+                if lab_res.get("file"):
+                    results["downloaded_files"].append(lab_res["file"])
+        except Exception as e:
+            log(f"Error en navegador Playwright para laboratorio: {e}")
+            report_progress(70, "Error en Playwright al buscar laboratorios.")
+            results["laboratory"] = {"success": False, "error": str(e), "message": "No se pudo acceder a los portales de laboratorio."}
+
+        # 2. Búsqueda y Descarga de ECG
+        report_progress(75, "Conectando al correo para buscar ECG...")
+        ecg_res = collect_ecg(patient_name, ecg_date, output_dir)
+        results["ecg"] = ecg_res
+        if ecg_res.get("files"):
+            results["downloaded_files"].extend(ecg_res["files"])
+    else:
+        # Modo estándar en background: ECG primero y luego laboratorios
+        ecg_res = collect_ecg(patient_name, ecg_date, output_dir)
+        results["ecg"] = ecg_res
+        if ecg_res.get("files"):
+            results["downloaded_files"].extend(ecg_res["files"])
+            
+        try:
+            with sync_playwright() as playwright:
+                lab_res = collect_lab_nanni(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
+                if not lab_res.get("success"):
+                    log("Laboratorio no encontrado en Nanni. Intentando con IPHH...")
+                    lab_res = collect_lab_iphh(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
+                    
+                results["laboratory"] = lab_res
+                if lab_res.get("file"):
+                    results["downloaded_files"].append(lab_res["file"])
+        except Exception as e:
+            log(f"Error en navegador Playwright para laboratorio: {e}")
+            report_progress(95, "Error en Playwright al buscar laboratorios.")
+            results["laboratory"] = {"success": False, "error": str(e), "message": "No se pudo acceder a los portales de laboratorio."}
 
     # Salida final JSON
     report_progress(100, "Proceso de recolección de prequirúrgicos completado.")

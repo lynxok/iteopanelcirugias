@@ -18,6 +18,11 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-29]`: **Corrección de Congelamiento en Prequirúrgicos y Búsqueda Difusa (v3.13.2)**:
+    *   **Solución al Bloqueo en Nanni e Intercepción de Puntero**: Resuelto el falso positivo en la tabla de Nanni donde el selector detectaba filas de encabezado y quedaba interceptado por `<div id="setaConsulta">`. Ahora se extraen las órdenes activas directamente por enlaces de protocolo `apresentarOS(id)` y se genera el PDF oficial mediante la ventana emergente de laudo (`zenPage.imprimirLaudo(false)`).
+    *   **Apertura Inmediata del Navegador Visual**: Si el usuario activa el checkbox de *"Mostrar navegador en vivo (robot visual)"*, la recolección web de laboratorios (Nanni e IPHH) se prioriza en primer lugar para que la ventana de Chromium aparezca inmediatamente en pantalla sin demoras por consultas de correo.
+    *   **Búsqueda Difusa Inteligente (Fuzzy Search & Levenshtein)**: Búsqueda por múltiples tokens, tolerancia a nombres invertidos y errores de tipeo con distancia de Levenshtein, y dropdown enriquecido con ranking de relevancia para que el usuario seleccione la coincidencia deseada.
+
 *   `[2026-09-29]`: **Mejoras en Recolector de Prequirúrgicos (v3.13.1)**:
     *   **Corrección de Error 400 en Búsqueda de Pacientes**: Corregido el query de autocompletado en Supabase utilizando la relación `patients!inner(full_name, document_number)` y `doctors!doctor_id(full_name)`. Al seleccionar un paciente, autocompleta el nombre y fecha de laboratorio y calcula la fecha sugerida de ECG (-30 días).
     *   **Modo Visual de Navegador (Robot en Vivo)**: Agregado checkbox interactivo *"Mostrar navegador en vivo (robot visual)"* con persistencia de preferencia local (`prequirurgicos_show_browser`), pasando el argumento `--show` al ejecutable de Playwright para ver en tiempo real cómo interactúa con los portales de Nanni e IPHH.

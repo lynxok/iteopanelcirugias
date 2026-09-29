@@ -2,6 +2,14 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.2 [2026-09-29]**: Lanzada la versión **v3.13.2**.
+    *   **Corrección de Congelamiento en Prequirúrgicos y Búsqueda Difusa (`pages/Prequirurgicos.tsx`, `prequirurgicos_collector.py`)**:
+        *   **Solución al Bloqueo en Nanni e Intercepción de Puntero**: Resuelto el falso positivo en la tabla de Nanni donde el selector detectaba filas de encabezado y quedaba interceptado por `<div id="setaConsulta">`. Ahora se extraen las órdenes activas directamente por enlaces de protocolo `apresentarOS(id)` y se genera el PDF oficial mediante la ventana emergente de laudo (`zenPage.imprimirLaudo(false)`).
+        *   **Apertura Inmediata del Navegador Visual**: Si el usuario activa el checkbox de *"Mostrar navegador en vivo (robot visual)"*, la recolección web de laboratorios (Nanni e IPHH) se prioriza en primer lugar para que la ventana de Chromium aparezca inmediatamente en pantalla sin demoras por consultas de correo.
+        *   **Búsqueda Difusa Inteligente (Fuzzy Search & Levenshtein)**:
+            *   Búsqueda por múltiples tokens y tolerancia a nombres invertidos (ej. *"LUIS MIGNOLA"* encuentra *"MIGNOLA LUIS"*).
+            *   Tolerancia a errores tipográficos y discrepancias ortográficas (distancia de Levenshtein de 1 a 2 letras).
+            *   Desplegable con ranking de relevancia y sugerencias para que el usuario seleccione con certeza la cirugía correspondiente.
 *   **v3.13.1 [2026-09-29]**: Lanzada la versión **v3.13.1**.
     *   **Mejoras en Recolector de Prequirúrgicos (`pages/Prequirurgicos.tsx`, `prequirurgicos_collector.py`)**:
         *   **Corrección de Error 400 en Búsqueda de Pacientes**: Corregido el query de autocompletado en Supabase utilizando la relación `patients!inner(full_name, document_number)` y `doctors!doctor_id(full_name)`. Al seleccionar un paciente, autocompleta el nombre y fecha de laboratorio y calcula la fecha sugerida de ECG (-30 días).

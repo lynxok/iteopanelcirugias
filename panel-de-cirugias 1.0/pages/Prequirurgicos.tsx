@@ -116,16 +116,28 @@ export const Prequirurgicos: React.FC = () => {
         }
     }, [location.state]);
 
-    // Búsqueda en Supabase de pacientes activos (unificando con relación patients)
+    // Búsqueda inteligente, flexible y tolerante a errores / faltantes en cirugías programadas
     useEffect(() => {
         const timer = setTimeout(async () => {
-            if (!searchQuery || searchQuery.trim().length < 2) {
+            const rawQuery = searchQuery.trim();
+            if (!rawQuery || rawQuery.length < 2) {
                 setPatientSuggestions([]);
                 return;
             }
 
             try {
                 setSearchingPatients(true);
+                // Dividir en palabras clave para buscar por tokens individuales
+                const tokens = rawQuery
+                    .toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .split(/\s+/)
+                    .filter(t => t.length >= 2);
+
+                const primaryToken = tokens[0] || rawQuery;
+
+                // Buscar en Supabase por el primer término o término general
                 const { data, error } = await supabase
                     .from('surgeries')
                     .select(`
@@ -139,20 +151,111 @@ export const Prequirurgicos: React.FC = () => {
                             full_name
                         )
                     `)
-                    .ilike('patients.full_name', `%${searchQuery.trim()}%`)
+                    .or(`full_name.ilike.%${primaryToken}%,document_number.ilike.%${primaryToken}%`, { foreignTable: 'patients' })
                     .order('created_at', { ascending: false })
-                    .limit(6);
+                    .limit(25);
 
+                let candidates: any[] = [];
                 if (!error && data) {
-                    const formatted = data.map((s: any) => ({
+                    candidates = data;
+                }
+
+                // Si son pocas o ninguna coincidencia directa, traer últimas cirugías recientes para filtrado difuso
+                if (candidates.length < 3) {
+                    const { data: recentData } = await supabase
+                        .from('surgeries')
+                        .select(`
+                            id,
+                            surgery_date,
+                            patients!inner (
+                                full_name,
+                                document_number
+                            ),
+                            doctors!doctor_id (
+                                full_name
+                            )
+                        `)
+                        .order('created_at', { ascending: false })
+                        .limit(40);
+
+                    if (recentData) {
+                        const existingIds = new Set(candidates.map(c => c.id));
+                        recentData.forEach(r => {
+                            if (!existingIds.has(r.id)) candidates.push(r);
+                        });
+                    }
+                }
+
+                // Función de distancia de Levenshtein para tolerancia a errores ortográficos
+                const levDist = (s1: string, s2: string): number => {
+                    let a = s1, b = s2;
+                    if (a.length > b.length) { [a, b] = [b, a]; }
+                    const d: number[] = Array.from({ length: a.length + 1 }, (_, i) => i);
+                    for (let j = 1; j <= b.length; j++) {
+                        let prev = d[0];
+                        d[0] = j;
+                        for (let i = 1; i <= a.length; i++) {
+                            const temp = d[i];
+                            d[i] = a[i - 1] === b[j - 1] ? prev : Math.min(prev, d[i - 1], d[i]) + 1;
+                            prev = temp;
+                        }
+                    }
+                    return d[a.length];
+                };
+
+                // Normalización sin tildes ni caracteres extra
+                const clean = (str: string) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+                // Filtrar y rankear coincidencias
+                const scoredList = candidates.map(s => {
+                    const fullName = clean(s.patients?.full_name || '');
+                    const docNum = clean(s.patients?.document_number || '');
+                    const patientTokens = fullName.split(/\s+/).filter(Boolean);
+
+                    let score = 0;
+                    // Coincidencia exacta o contenida
+                    if (fullName.includes(clean(rawQuery))) score += 50;
+                    if (docNum.includes(clean(rawQuery))) score += 40;
+
+                    // Evaluar coincidencia de tokens
+                    tokens.forEach(tok => {
+                        let tokMatched = false;
+                        if (fullName.includes(tok) || docNum.includes(tok)) {
+                            score += 20;
+                            tokMatched = true;
+                        } else {
+                            // Comparar contra cada palabra del paciente por similitud de Levenshtein
+                            for (const pTok of patientTokens) {
+                                if (pTok.length >= 3 && tok.length >= 3) {
+                                    const maxAllowed = tok.length <= 4 ? 1 : 2;
+                                    const dist = levDist(tok, pTok);
+                                    if (dist <= maxAllowed) {
+                                        score += Math.max(5, 15 - dist * 3);
+                                        tokMatched = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    return {
                         id: s.id,
                         patient_name: s.patients?.full_name || '',
                         patient_document: s.patients?.document_number || '',
                         surgery_date: s.surgery_date,
-                        doctor_name: s.doctors?.full_name || ''
-                    }));
-                    setPatientSuggestions(formatted);
-                }
+                        doctor_name: s.doctors?.full_name || '',
+                        score
+                    };
+                });
+
+                // Filtrar los que tengan algún puntaje relevante y ordenar de mayor a menor
+                const filtered = scoredList
+                    .filter(item => item.score > 0)
+                    .sort((a, b) => b.score - a.score)
+                    .slice(0, 8);
+
+                setPatientSuggestions(filtered);
             } catch (err) {
                 console.error('Error buscando pacientes:', err);
             } finally {
@@ -327,20 +430,39 @@ export const Prequirurgicos: React.FC = () => {
                                     )}
                                 </div>
 
-                                {showSuggestions && patientSuggestions.length > 0 && (
+                                {showSuggestions && searchQuery.trim().length >= 2 && (
                                     <div className="absolute z-30 mt-1 w-full bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden divide-y divide-slate-100 animate-fadeIn">
-                                        {patientSuggestions.map(p => (
-                                            <div
-                                                key={p.id}
-                                                onClick={() => handleSelectPatient(p)}
-                                                className="p-3 hover:bg-blue-50/70 cursor-pointer transition-colors text-left"
-                                            >
-                                                <p className="text-xs font-bold text-slate-900">{p.patient_name}</p>
-                                                <p className="text-[11px] text-slate-500 font-mono">
-                                                    DNI: {p.patient_document || 'S/D'} • Dr: {p.doctor_name || 'S/A'}
-                                                </p>
+                                        {patientSuggestions.length > 0 ? (
+                                            <>
+                                                <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                                                    <span>Coincidencias aproximadas</span>
+                                                    <span>{patientSuggestions.length} encontradas</span>
+                                                </div>
+                                                {patientSuggestions.map(p => (
+                                                    <div
+                                                        key={p.id}
+                                                        onClick={() => handleSelectPatient(p)}
+                                                        className="p-3 hover:bg-blue-50/70 cursor-pointer transition-colors text-left group"
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <p className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                                                                {p.patient_name}
+                                                            </p>
+                                                            <span className="text-[10px] font-medium text-slate-400">
+                                                                {p.surgery_date ? new Date(p.surgery_date + 'T00:00:00').toLocaleDateString() : ''}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                                                            DNI: {p.patient_document || 'S/D'} • Dr: {p.doctor_name || 'S/A'}
+                                                        </p>
+                                                    </div>
+                                                ))}
+                                            </>
+                                        ) : !searchingPatients ? (
+                                            <div className="p-3 text-center text-xs text-slate-500">
+                                                No se encontraron coincidencias exactas ni aproximadas. Podés escribir el nombre manualmente abajo.
                                             </div>
-                                        ))}
+                                        ) : null}
                                     </div>
                                 )}
                             </div>

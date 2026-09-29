@@ -1,7 +1,7 @@
 {
   "name": "panel-de-cirugias",
   "private": true,
-  "version": "3.13.1",
+  "version": "3.13.2",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
@@ -79,6 +79,10 @@
       "CONFIGURAR_SINCRONIZADOR.bat"
     ],
     "extraResources": [
+      {
+        "from": "prequirurgicos_collector.py",
+        "to": "prequirurgicos_collector.py"
+      },
       {
         "from": "sai-scraper/sai-scraper",
         "to": ".",
