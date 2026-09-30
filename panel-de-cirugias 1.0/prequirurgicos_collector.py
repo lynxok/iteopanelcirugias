@@ -287,6 +287,13 @@ def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir, show_b
                 
         if not matched_os_id:
             log(f"Paciente '{patient_name}' no encontrado en resultados de Nanni.")
+            if orders:
+                log(f"[Nanni] Filas/protocolos listados ({len(orders)}):")
+                for i, ord_item in enumerate(orders[:10], 1):
+                    row_txt = " ".join(ord_item.get("text", "").split())
+                    log(f"  -> Fila #{i}: {row_txt[:100]}")
+            else:
+                log("[Nanni] No se listó ningún protocolo para esa fecha.")
             report_progress(25 if show_browser else 65, "Paciente no encontrado en Nanni.")
             browser.close()
             return {"success": False, "file": None}
@@ -373,7 +380,8 @@ def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir, patient
         if clean_dni:
             report_progress(83, f"Buscando por documento DNI {clean_dni} en IPHH...")
             log(f"Intentando búsqueda por DNI '{clean_dni}'...")
-            doc_input = page.locator("input.input-shell, input[placeholder*='Número'], input[placeholder*='documento'], input[aria-label*='documento']").first
+            # Asegurar que se seleccione el input de texto/documento y NO un input tipo date
+            doc_input = page.locator("input[placeholder*='Número'], input[placeholder*='documento'], input[aria-label*='documento'], input.input-shell:not([type='date'])").first
             if doc_input.count():
                 try:
                     doc_input.fill(clean_dni)
@@ -428,35 +436,45 @@ def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir, patient
         log(f"Se encontraron {len(cards)} tarjeta(s)/botón(es) de paciente en IPHH.")
         
         matched_elem = None
+        detected_cards_info = []
         
-        # Si hay múltiples botones, buscar cuál coincide estrictamente con el paciente (y/o DNI)
-        for card in cards:
+        # Evaluar cada tarjeta y registrar su contenido
+        for idx, card in enumerate(cards, 1):
             try:
                 card_text = card.inner_text().strip()
                 if not card_text:
                     continue
                 
+                clean_single_line = " ".join(card_text.split())
+                detected_cards_info.append(clean_single_line)
+                
                 # Si coincide por DNI directamente
                 if clean_dni and clean_dni in re.sub(r'[^0-9]', '', card_text):
-                    log(f"Coincidencia exacta por DNI en botón: {card_text.replace(chr(10), ' ')}")
+                    log(f"Coincidencia exacta por DNI en botón #{idx}: {clean_single_line}")
                     matched_elem = card
                     break
                     
                 # Si coincide por nombre
                 if is_name_matching(patient_name, card_text):
-                    log(f"Coincidencia por nombre en botón: {card_text.replace(chr(10), ' ')}")
+                    log(f"Coincidencia por nombre en botón #{idx}: {clean_single_line}")
                     matched_elem = card
                     break
             except Exception as e_card:
-                log(f"Aviso al evaluar tarjeta: {e_card}")
+                log(f"Aviso al evaluar tarjeta #{idx}: {e_card}")
 
         if not matched_elem:
             # Si solo hay 1 tarjeta disponible y coincide mínimamente o se buscó por DNI
             if len(cards) == 1 and searched_by_dni:
                 matched_elem = cards[0]
-                log("Utilizando la única tarjeta arrojada por la búsqueda de DNI.")
+                log(f"Utilizando la única tarjeta arrojada por la búsqueda de DNI: {detected_cards_info[0] if detected_cards_info else 'N/A'}")
             else:
                 log(f"Paciente '{patient_name}' (DNI: {clean_dni or 'N/A'}) no coincide con las tarjetas listadas.")
+                if detected_cards_info:
+                    log(f"[IPHH] Tarjetas encontradas ({len(detected_cards_info)}):")
+                    for i, info in enumerate(detected_cards_info, 1):
+                        log(f"  -> Tarjeta #{i}: {info}")
+                else:
+                    log("[IPHH] No se pudo extraer texto visible de las tarjetas.")
                 report_progress(95, "Paciente no encontrado en IPHH.")
                 browser.close()
                 return {"success": False, "file": None}

@@ -2,6 +2,10 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.5 [2026-09-30]**: Lanzada la versión **v3.13.5**.
+    *   **Registro de Tarjetas y Corrección de Selector DNI en IPHH (`prequirurgicos_collector.py`)**:
+        *   **Log Exhaustivo de Tarjetas**: Cuando no se produce coincidencia automática por nombre o DNI con un paciente en IPHH o Nanni, el robot ahora lista en la consola de eventos todas las tarjetas o protocolos visibles detectados (con índice y texto completo), facilitando la verificación humana.
+        *   **Corrección de Selector DNI**: Se excluyó explícitamente `input[type='date']` del selector del campo de documento en IPHH para evitar el error `Locator.fill: Malformed value`, asegurando que el DNI se ingrese en el campo de texto correspondiente.
 *   **v3.13.4 [2026-09-30]**: Lanzada la versión **v3.13.4**.
     *   **Modal de Previsualización y Validación de Estudios (`pages/Prequirurgicos.tsx`, `main.cjs`, `preload.cjs`)**:
         *   **Modal Interactivo con Previsualizador PDF**: Al concluir la búsqueda de prequirúrgicos, se abre una ventana modal que lista todos los archivos recolectados y permite previsualizar cada PDF directamente en pantalla mediante un visor integrado embebido.

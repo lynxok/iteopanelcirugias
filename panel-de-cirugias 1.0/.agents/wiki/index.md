@@ -18,6 +18,10 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-30]`: **Registro de Tarjetas y Selector DNI en IPHH (v3.13.5)**:
+    *   **Visibilidad de Tarjetas en Log**: Cuando no coincide el paciente con las tarjetas encontradas en IPHH o con las filas de Nanni, se imprimen todas las tarjetas/filas detectadas con su texto completo en la consola en vivo.
+    *   **Corrección de Selector DNI en IPHH**: Exclusión de inputs de fecha en el selector del DNI para asegurar que se ingrese en el campo de texto de documento y no falle con `Malformed value`.
+
 *   `[2026-09-30]`: **Modal de Previsualización y Filtro Estricto de Apellido en ECG (v3.13.4)**:
     *   **Modal Interactivo de Previsualización**: Ventana modal en `Prequirurgicos.tsx` con visor embebido de PDF en Base64 para inspeccionar cada archivo recolectado antes de guardarlo en la carpeta definitiva.
     *   **Selección y Descarte Automático**: Casillas de verificación para marcar únicamente los estudios del paciente. Al confirmar, los archivos no seleccionados se eliminan físicamente de disco mediante `delete-file`.
