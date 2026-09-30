@@ -38,6 +38,7 @@ export const Prequirurgicos: React.FC = () => {
 
     // Estado del formulario
     const [patientName, setPatientName] = useState('');
+    const [patientDni, setPatientDni] = useState('');
     const [labDate, setLabDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [ecgDate, setEcgDate] = useState(() => {
         const d = new Date();
@@ -111,6 +112,7 @@ export const Prequirurgicos: React.FC = () => {
         const state = location.state as any;
         if (state?.patientName) {
             setPatientName(state.patientName);
+            if (state.patientDni || state.documentNumber) setPatientDni(state.patientDni || state.documentNumber);
             if (state.labDate) setLabDate(state.labDate);
             if (state.ecgDate) setEcgDate(state.ecgDate);
         }
@@ -268,6 +270,7 @@ export const Prequirurgicos: React.FC = () => {
 
     const handleSelectPatient = (p: any) => {
         setPatientName(p.patient_name || '');
+        setPatientDni(p.patient_document || '');
         if (p.surgery_date) {
             setLabDate(p.surgery_date);
             const d = new Date(p.surgery_date);
@@ -309,7 +312,7 @@ export const Prequirurgicos: React.FC = () => {
         setErrorMessage(null);
         setProgressPercent(5);
         setProgressStatusText('Iniciando robots...');
-        setLogs([`Iniciando recolección de prequirúrgicos para: ${patientName.trim().toUpperCase()}...`]);
+        setLogs([`Iniciando recolección de prequirúrgicos para: ${patientName.trim().toUpperCase()}${patientDni ? ` (DNI: ${patientDni.trim()})` : ''}...`]);
 
         try {
             const resp = await (window as any).electronAPI.runPrequirurgicosCollector(
@@ -317,7 +320,8 @@ export const Prequirurgicos: React.FC = () => {
                 labDate,
                 ecgDate,
                 outputDir || undefined,
-                showBrowser
+                showBrowser,
+                patientDni.trim() || undefined
             );
 
             if (resp.success && resp.data) {
@@ -468,19 +472,34 @@ export const Prequirurgicos: React.FC = () => {
                             </div>
 
                             <form onSubmit={handleStartCollection} className="space-y-4 pt-2 border-t border-slate-100">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                                        Apellido y Nombre <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={patientName}
-                                        onChange={(e) => setPatientName(e.target.value)}
-                                        placeholder="Ej: PEREZ JUAN IGNACIO"
-                                        className="w-full text-xs font-bold uppercase bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
-                                    />
-                                    <span className="text-[10px] text-slate-400">En ese orden exacto según el protocolo.</span>
+                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                                    <div className="sm:col-span-8">
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                                            Apellido y Nombre <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={patientName}
+                                            onChange={(e) => setPatientName(e.target.value)}
+                                            placeholder="Ej: PEREZ JUAN IGNACIO"
+                                            className="w-full text-xs font-bold uppercase bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+                                        />
+                                        <span className="text-[10px] text-slate-400">Orden del protocolo.</span>
+                                    </div>
+                                    <div className="sm:col-span-4">
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                                            DNI / Documento
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={patientDni}
+                                            onChange={(e) => setPatientDni(e.target.value)}
+                                            placeholder="Ej: 21530674"
+                                            className="w-full text-xs font-mono font-bold bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all"
+                                        />
+                                        <span className="text-[10px] text-slate-400">Para filtrar en IPHH.</span>
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

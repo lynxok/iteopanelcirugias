@@ -31,7 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectDirectory: () => ipcRenderer.invoke('select-directory'),
     setAppPreference: (key, value) => ipcRenderer.invoke('set-app-preference', key, value),
     getAppPreference: (key) => ipcRenderer.invoke('get-app-preference', key),
-    runPrequirurgicosCollector: (patientName, labDate, ecgDate, outputDir, showBrowser) => ipcRenderer.invoke('run-prequirurgicos-collector', patientName, labDate, ecgDate, outputDir, showBrowser),
+    runPrequirurgicosCollector: (patientName, labDate, ecgDate, outputDir, showBrowser, patientDni) => ipcRenderer.invoke('run-prequirurgicos-collector', patientName, labDate, ecgDate, outputDir, showBrowser, patientDni),
     stopPrequirurgicosCollector: () => ipcRenderer.invoke('stop-prequirurgicos-collector'),
     onPrequirurgicosLog: (callback) => ipcRenderer.on('prequirurgicos-log', (_event, message) => callback(message)),
     onPrequirurgicosProgress: (callback) => ipcRenderer.on('prequirurgicos-progress', (_event, progress) => callback(progress)),

@@ -322,12 +322,12 @@ def collect_lab_nanni(playwright, patient_name, lab_date_str, output_dir, show_b
                 pass
         return {"success": False, "file": None, "error": str(e)}
 
-def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir, show_browser=False):
+def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir, patient_dni="", show_browser=False):
     """
-    Fallback: Búsqueda y descarga desde iphhconsultorio.dynu.net
+    Fallback / Búsqueda y descarga desde portal IPHH (iphhconsultorio.dynu.net)
     """
     report_progress(75, "Abriendo navegador para consultar portal secundario IPHH...")
-    log(f"Iniciando búsqueda en portal secundario IPHH (Visual: {show_browser})...")
+    log(f"Iniciando búsqueda en portal secundario IPHH (Visual: {show_browser} | DNI: '{patient_dni}')...")
     try:
         browser = playwright.chromium.launch(headless=not show_browser)
         context = browser.new_context(accept_downloads=True)
@@ -348,73 +348,142 @@ def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir, show_br
         page.locator("button, input[type='submit']").first.click()
         page.wait_for_load_state("networkidle", timeout=15000)
         log("Sesión iniciada en portal IPHH.")
-        report_progress(85, "Filtrando por fecha en IPHH...")
         
-        # Formatear fecha
-        if "-" in lab_date_str:
-            d_parts = lab_date_str.strip().split("-")
-            formatted_date = f"{d_parts[2]}/{d_parts[1]}/{d_parts[0]}"
-        else:
-            formatted_date = lab_date_str.strip()
+        searched_by_dni = False
+        clean_dni = re.sub(r'[^0-9]', '', str(patient_dni or "")).strip()
+
+        # 1. Si tenemos DNI, intentar buscar directamente en el campo de documento
+        if clean_dni:
+            report_progress(83, f"Buscando por documento DNI {clean_dni} en IPHH...")
+            log(f"Intentando búsqueda por DNI '{clean_dni}'...")
+            doc_input = page.locator("input.input-shell, input[placeholder*='Número'], input[placeholder*='documento'], input[aria-label*='documento']").first
+            if doc_input.count():
+                try:
+                    doc_input.fill(clean_dni)
+                    btn_ir_ultimo = page.locator("button:has-text('Ir al último informe'), button:has-text('Buscar')").first
+                    if btn_ir_ultimo.count():
+                        btn_ir_ultimo.click()
+                    else:
+                        doc_input.press("Enter")
+                    page.wait_for_timeout(3500)
+                    searched_by_dni = True
+                except Exception as e_dni:
+                    log(f"Aviso al intentar buscar por DNI: {e_dni}")
+
+        # 2. Si no se buscó por DNI o no se cargaron resultados, buscar por fecha
+        cards = page.locator("button.selection-card, button[class*='selection-card']").all()
+        if not cards:
+            report_progress(85, "Filtrando por fecha en IPHH...")
+            log(f"Filtrando por fecha '{lab_date_str}' en IPHH...")
             
-        # Campo de Fecha
-        date_inp = page.locator("input[type='date'], input[placeholder*='Fecha'], input.fecha").first
-        if date_inp.count():
-            # Si es type="date" suele requerir YYYY-MM-DD
-            if date_inp.get_attribute("type") == "date":
-                if "/" in lab_date_str:
-                    dp = lab_date_str.strip().split("/")
-                    date_val = f"{dp[2]}-{dp[1]}-{dp[0]}"
-                else:
-                    date_val = lab_date_str.strip()
-                date_inp.fill(date_val)
+            # Formatear fecha
+            if "-" in lab_date_str:
+                d_parts = lab_date_str.strip().split("-")
+                formatted_date = f"{d_parts[2]}/{d_parts[1]}/{d_parts[0]}"
             else:
-                date_inp.fill(formatted_date)
+                formatted_date = lab_date_str.strip()
                 
-        # Clic Buscar
-        btn_buscar = page.locator("button:has-text('Buscar'), input[value*='Buscar']").first
-        if btn_buscar.count():
-            btn_buscar.click()
-            page.wait_for_timeout(3000)
-            
-        # Buscar al paciente en la lista/tabla
-        report_progress(88, "Buscando paciente en resultados de IPHH...")
-        rows = page.locator("tr, .card, .paciente-row").all()
-        matched_elem = None
-        for r in rows:
-            txt = r.inner_text()
-            if is_name_matching(patient_name, txt):
-                matched_elem = r
-                log(f"Fila encontrada en IPHH: {txt[:80]}...")
-                break
+            # Campo de Fecha
+            date_inp = page.locator("input[type='date'], input[placeholder*='Fecha'], input.fecha").first
+            if date_inp.count():
+                if date_inp.get_attribute("type") == "date":
+                    if "/" in lab_date_str:
+                        dp = lab_date_str.strip().split("/")
+                        date_val = f"{dp[2]}-{dp[1]}-{dp[0]}"
+                    else:
+                        date_val = lab_date_str.strip()
+                    date_inp.fill(date_val)
+                else:
+                    date_inp.fill(formatted_date)
+                    
+            btn_buscar = page.locator("button:has-text('Buscar'), input[value*='Buscar']").first
+            if btn_buscar.count():
+                btn_buscar.click()
+                page.wait_for_timeout(3000)
                 
-        if not matched_elem:
-            log(f"Paciente '{patient_name}' no encontrado en resultados de IPHH.")
-            report_progress(95, "Paciente no encontrado en IPHH.")
-            browser.close()
-            return {"success": False, "file": None}
-            
-        # Clic sobre el paciente
-        report_progress(90, "Paciente hallado en IPHH. Abriendo descarga...")
-        matched_elem.click()
-        page.wait_for_timeout(2000)
+            cards = page.locator("button.selection-card, button[class*='selection-card']").all()
+
+        # Si aún no hay tarjetas con .selection-card, buscar cualquier botón o fila de paciente
+        if not cards:
+            cards = page.locator("button:has-text('DNI'), button:has-text('ITEO'), .selection-card, tr, .card").all()
+
+        report_progress(88, f"Analizando {len(cards)} elemento(s) de pacientes encontrados...")
+        log(f"Se encontraron {len(cards)} tarjeta(s)/botón(es) de paciente en IPHH.")
         
-        # Clic en Descargar PDF
-        btn_descargar = page.locator("[title*='Descargar'], button:has-text('Descargar'), a:has-text('Descargar'), .fa-download").first
+        matched_elem = None
+        
+        # Si hay múltiples botones, buscar cuál coincide estrictamente con el paciente (y/o DNI)
+        for card in cards:
+            try:
+                card_text = card.inner_text().strip()
+                if not card_text:
+                    continue
+                
+                # Si coincide por DNI directamente
+                if clean_dni and clean_dni in re.sub(r'[^0-9]', '', card_text):
+                    log(f"Coincidencia exacta por DNI en botón: {card_text.replace(chr(10), ' ')}")
+                    matched_elem = card
+                    break
+                    
+                # Si coincide por nombre
+                if is_name_matching(patient_name, card_text):
+                    log(f"Coincidencia por nombre en botón: {card_text.replace(chr(10), ' ')}")
+                    matched_elem = card
+                    break
+            except Exception as e_card:
+                log(f"Aviso al evaluar tarjeta: {e_card}")
+
+        if not matched_elem:
+            # Si solo hay 1 tarjeta disponible y coincide mínimamente o se buscó por DNI
+            if len(cards) == 1 and searched_by_dni:
+                matched_elem = cards[0]
+                log("Utilizando la única tarjeta arrojada por la búsqueda de DNI.")
+            else:
+                log(f"Paciente '{patient_name}' (DNI: {clean_dni or 'N/A'}) no coincide con las tarjetas listadas.")
+                report_progress(95, "Paciente no encontrado en IPHH.")
+                browser.close()
+                return {"success": False, "file": None}
+                
+        # Hacer click en la tarjeta/botón del paciente seleccionado
+        report_progress(90, "Paciente seleccionado en IPHH. Abriendo previsualización...")
+        matched_elem.scroll_into_view_if_needed()
+        matched_elem.click()
+        page.wait_for_timeout(2500)
+        
+        # Clic en Descargar PDF desde la barra superior de la previsualización
+        report_progress(92, "Localizando botón de descarga en previsualización...")
+        
+        # Selectores del botón de descarga (icono SVG flecha abajo / circular / title)
+        btn_descargar = page.locator(
+            "button:has(svg path[d*='M3 16.5v2.25']), "
+            "button:has([data-icon*='download']), "
+            "button.rounded-full:has(svg), "
+            "button[title*='Descargar'], "
+            "button:has-text('Descargar'), "
+            "button:has(.fa-download)"
+        ).first
+        
+        if not btn_descargar.count():
+            # Fallback buscando botón redondo en el header de la previsualización
+            btn_descargar = page.locator("div.flex button.rounded-full").first
+
         if btn_descargar.count():
-            with page.expect_download(timeout=15000) as download_info:
-                btn_descargar.click()
-            download = download_info.value
             clean_name = f"LAB_IPHH_{re.sub(r'[^a-zA-Z0-9_-]', '_', patient_name)}.pdf"
             dest_file = os.path.join(output_dir, clean_name)
+            
+            with page.expect_download(timeout=20000) as download_info:
+                btn_descargar.click()
+            download = download_info.value
             download.save_as(dest_file)
             log(f"¡Laboratorio IPHH descargado con éxito!: {dest_file}")
             report_progress(95, "Laboratorio descargado exitosamente desde IPHH.")
             browser.close()
             return {"success": True, "file": dest_file, "source": "IPHH"}
+        else:
+            log("No se encontró el botón de descarga en la previsualización.")
             
         browser.close()
-        report_progress(95, "Búsqueda en IPHH finalizada.")
+        report_progress(95, "Búsqueda en IPHH finalizada sin descarga.")
         return {"success": False, "file": None}
     except Exception as e:
         log(f"Aviso durante búsqueda en IPHH: {e}")
@@ -429,7 +498,7 @@ def main():
     if len(sys.argv) < 4:
         print(json.dumps({
             "success": False, 
-            "error": "Parámetros insuficientes. Uso: python prequirurgicos_collector.py <paciente> <fecha_lab> <fecha_ecg> [output_dir] [--show]"
+            "error": "Parámetros insuficientes. Uso: python prequirurgicos_collector.py <paciente> <fecha_lab> <fecha_ecg> [output_dir] [--show] [--dni <dni>]"
         }))
         sys.exit(1)
         
@@ -437,15 +506,25 @@ def main():
     lab_date = sys.argv[2].strip()
     ecg_date = sys.argv[3].strip()
     
-    # Procesar argumentos opcionales: output_dir y --show
+    # Procesar argumentos opcionales: output_dir, --show y --dni
     output_dir = ""
+    patient_dni = ""
     show_browser = False
     
-    for arg in sys.argv[4:]:
+    i = 4
+    while i < len(sys.argv):
+        arg = sys.argv[i]
         if arg == "--show":
             show_browser = True
+            i += 1
+        elif arg == "--dni" and i + 1 < len(sys.argv):
+            patient_dni = sys.argv[i + 1].strip()
+            i += 2
         elif not arg.startswith("--") and not output_dir:
             output_dir = arg.strip()
+            i += 1
+        else:
+            i += 1
             
     if not output_dir:
         home = os.path.expanduser("~")
@@ -477,7 +556,7 @@ def main():
                 lab_res = collect_lab_nanni(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
                 if not lab_res.get("success"):
                     log("Laboratorio no encontrado en Nanni. Intentando con IPHH...")
-                    lab_res = collect_lab_iphh(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
+                    lab_res = collect_lab_iphh(playwright, patient_name, lab_date, output_dir, patient_dni=patient_dni, show_browser=show_browser)
                     
                 results["laboratory"] = lab_res
                 if lab_res.get("file"):
@@ -505,7 +584,7 @@ def main():
                 lab_res = collect_lab_nanni(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
                 if not lab_res.get("success"):
                     log("Laboratorio no encontrado en Nanni. Intentando con IPHH...")
-                    lab_res = collect_lab_iphh(playwright, patient_name, lab_date, output_dir, show_browser=show_browser)
+                    lab_res = collect_lab_iphh(playwright, patient_name, lab_date, output_dir, patient_dni=patient_dni, show_browser=show_browser)
                     
                 results["laboratory"] = lab_res
                 if lab_res.get("file"):

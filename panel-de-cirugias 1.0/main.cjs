@@ -1146,7 +1146,7 @@ ipcMain.handle('select-directory', async () => {
 // --- RECOLECTOR DE PREQUIRÚRGICOS ---
 let activePrequirurgicosProcess = null;
 
-ipcMain.handle('run-prequirurgicos-collector', async (event, patientName, labDate, ecgDate, outputDir, showBrowser = false) => {
+ipcMain.handle('run-prequirurgicos-collector', async (event, patientName, labDate, ecgDate, outputDir, showBrowser = false, patientDni = '') => {
     return new Promise((resolve) => {
         if (activePrequirurgicosProcess) {
             try {
@@ -1172,8 +1172,11 @@ ipcMain.handle('run-prequirurgicos-collector', async (event, patientName, labDat
         const args = ['-u', scriptPath, patientName, labDate, ecgDate];
         if (outputDir) args.push(outputDir);
         if (showBrowser) args.push('--show');
+        if (patientDni && patientDni.trim()) {
+            args.push('--dni', patientDni.trim());
+        }
 
-        event.sender.send('prequirurgicos-log', `[Sistema] Iniciando recolección para ${patientName}...`);
+        event.sender.send('prequirurgicos-log', `[Sistema] Iniciando recolección para ${patientName}${patientDni ? ` (DNI: ${patientDni})` : ''}...`);
         event.sender.send('prequirurgicos-log', `[Sistema] Ejecutando: ${pythonCommand} con script en ${scriptPath}`);
 
         let stdoutAcc = '';
