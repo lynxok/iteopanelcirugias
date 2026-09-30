@@ -2,6 +2,14 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.4 [2026-09-30]**: Lanzada la versión **v3.13.4**.
+    *   **Modal de Previsualización y Validación de Estudios (`pages/Prequirurgicos.tsx`, `main.cjs`, `preload.cjs`)**:
+        *   **Modal Interactivo con Previsualizador PDF**: Al concluir la búsqueda de prequirúrgicos, se abre una ventana modal que lista todos los archivos recolectados y permite previsualizar cada PDF directamente en pantalla mediante un visor integrado embebido.
+        *   **Selección y Descarte Automático de Archivos**: Casillas de verificación individuales para elegir qué archivos guardar. Al confirmar, los archivos no seleccionados se eliminan físicamente del disco local, manteniendo la carpeta limpia.
+        *   **Canales IPC Seguros**: Incorporados handlers `delete-file` y `read-file-base64` en Electron para la lectura y saneamiento de los informes.
+    *   **Filtro Estricto de Apellido y Parada Inmediata en ECG (`prequirurgicos_collector.py`)**:
+        *   **Coincidencia Obligatoria de Apellido**: Se exige estrictamente la presencia del apellido del paciente en el asunto del correo o en el nombre de los adjuntos PDF, previniendo falsos positivos por homónimos de nombre de pila (ej. descargar a *MILESI LUIS*, *OLIVO LUIS* o *MAZZEO LUISA* al buscar *MIGNOLA LUIS*).
+        *   **Parada Temprana**: Al localizar el correo coincidente con los informes del paciente, la búsqueda concluye inmediatamente sin continuar iterando innecesariamente el buzón.
 *   **v3.13.3 [2026-09-30]**: Lanzada la versión **v3.13.3**.
     *   **Filtro por DNI y Selección Precisa de Descarga en Portal IPHH (`pages/Prequirurgicos.tsx`, `prequirurgicos_collector.py`, `main.cjs`, `preload.cjs`)**:
         *   **Entrada de DNI en UI**: Incorporado campo `DNI / Documento` al formulario de Prequirúrgicos con autocompletado automático al seleccionar un paciente desde cirugías programadas.
