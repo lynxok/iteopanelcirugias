@@ -36,5 +36,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onPrequirurgicosLog: (callback) => ipcRenderer.on('prequirurgicos-log', (_event, message) => callback(message)),
     onPrequirurgicosProgress: (callback) => ipcRenderer.on('prequirurgicos-progress', (_event, progress) => callback(progress)),
     openPath: (targetPath) => ipcRenderer.invoke('open-path', targetPath),
-    showItemInFolder: (fullPath) => ipcRenderer.invoke('show-item-in-folder', fullPath)
+    showItemInFolder: (fullPath) => ipcRenderer.invoke('show-item-in-folder', fullPath),
+    deleteFile: (filePath) => ipcRenderer.invoke('delete-file', filePath),
+    readFileBase64: (filePath) => ipcRenderer.invoke('read-file-base64', filePath)
 });

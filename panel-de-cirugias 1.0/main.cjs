@@ -1278,13 +1278,25 @@ ipcMain.handle('open-path', async (event, targetPath) => {
     }
 });
 
-ipcMain.handle('show-item-in-folder', async (event, fullPath) => {
+ipcMain.handle('delete-file', async (event, filePath) => {
     try {
-        if (!fullPath || !fs.existsSync(fullPath)) {
-            return { success: false, error: 'El archivo no existe.' };
+        if (filePath && fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            return { success: true };
         }
-        shell.showItemInFolder(fullPath);
-        return { success: true };
+        return { success: false, error: 'El archivo no existe.' };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('read-file-base64', async (event, filePath) => {
+    try {
+        if (!filePath || !fs.existsSync(filePath)) {
+            return { success: false, error: 'Archivo no encontrado' };
+        }
+        const data = fs.readFileSync(filePath);
+        return { success: true, base64: data.toString('base64'), mime: 'application/pdf' };
     } catch (err) {
         return { success: false, error: err.message };
     }

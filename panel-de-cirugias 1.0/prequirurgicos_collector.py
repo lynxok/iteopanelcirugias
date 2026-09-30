@@ -51,49 +51,59 @@ def levenshtein_distance(s1, s2):
 
 def is_name_matching(target_name, test_string):
     """
-    Verificación flexible y tolerante a faltantes, tildes o pequeñas discrepancias:
-    1. Coincidencia directa normalizada
-    2. Coincidencia de tokens (si al menos el apellido o la mayoría de palabras coinciden)
-    3. Similitud aproximada por distancia de Levenshtein
+    Verificación estricta del apellido y nombres:
+    - Obliga a que el apellido (primer token) coincida plenamente.
+    - Si target_name tiene 2 o más palabras (ej: Mignola Luis), requiere que AMBAS
+      coincidan (o al menos apellido obligatorio + 1 nombre).
+    - Evita falsos positivos como descargar a 'MILESI LUIS', 'OLIVO LUIS', 'MAZZEO LUISA'
+      cuando se busca 'MIGNOLA LUIS'.
     """
     norm_target = normalize_text(target_name)
     norm_test = normalize_text(test_string)
     if not norm_target or not norm_test:
         return False
-    if norm_target in norm_test or norm_test in norm_target:
+    if norm_target in norm_test:
         return True
         
-    tokens_target = [normalize_text(w) for w in re.split(r'\s+|,', target_name) if len(w) >= 2]
-    tokens_test = [normalize_text(w) for w in re.split(r'\s+|,', test_string) if len(w) >= 2]
+    tokens_target = [normalize_text(w) for w in re.split(r'\s+|,', target_name) if len(w) >= 3]
+    tokens_test = [normalize_text(w) for w in re.split(r'\s+|,', test_string) if len(w) >= 3]
     
     if not tokens_target or not tokens_test:
         return False
-        
-    # Verificar cuántos tokens del paciente objetivo coinciden o son cuasi-idénticos (distancia <= 1 o 2)
-    matched_count = 0
-    for t_tar in tokens_target:
-        found = False
-        for t_tes in tokens_test:
-            if t_tar in t_tes or t_tes in t_tar:
-                found = True
-                break
-            # Si el token tiene más de 4 letras, tolerar 1 o 2 errores tipográficos
-            if len(t_tar) >= 4 and len(t_tes) >= 4:
-                max_dist = 1 if len(t_tar) <= 5 else 2
-                if levenshtein_distance(t_tar, t_tes) <= max_dist:
-                    found = True
-                    break
-        if found:
-            matched_count += 1
-            
-    # Si tiene 1 solo token (ej: solo apellido) y coincide
-    if len(tokens_target) == 1 and matched_count == 1:
-        return True
-    # Si tiene 2 o más tokens y coincide al menos el 50% de las palabras (ej: coincidió el apellido o nombre principal)
-    if len(tokens_target) >= 2 and matched_count >= max(1, len(tokens_target) - 1):
+
+    # El primer token siempre representa el Apellido del paciente
+    surname = tokens_target[0]
+    surname_found = False
+    for t in tokens_test:
+        if surname in t or t in surname:
+            surname_found = True
+            break
+        if len(surname) >= 5 and len(t) >= 5 and levenshtein_distance(surname, t) <= 1:
+            surname_found = True
+            break
+
+    if not surname_found:
+        return False
+
+    # Si solo tiene apellido, con hallarlo alcanza
+    if len(tokens_target) == 1:
         return True
 
-    return False
+    # Si tiene nombre(s) adicional(es), requerir que al menos 1 nombre también coincida
+    name_tokens = tokens_target[1:]
+    name_matched = False
+    for n_tok in name_tokens:
+        for t in tokens_test:
+            if n_tok in t or t in n_tok:
+                name_matched = True
+                break
+            if len(n_tok) >= 4 and len(t) >= 4 and levenshtein_distance(n_tok, t) <= 1:
+                name_matched = True
+                break
+        if name_matched:
+            break
+
+    return name_matched
 
 def report_progress(percent, stage_text):
     """Emite un evento de progreso parseable por la interfaz"""
@@ -143,8 +153,13 @@ def collect_ecg(patient_name, ecg_date_str, output_dir):
         log(f"Analizando {len(msg_ids)} correos dentro del rango de fechas...")
         report_progress(25, f"Analizando {len(msg_ids)} correos...")
         
+        found_target_email = False
+
         # Recorrer del más reciente al más antiguo
         for mid in reversed(msg_ids):
+            if found_target_email:
+                break
+
             status, msg_data = M.fetch(mid, "(RFC822)")
             if status != "OK" or not msg_data:
                 continue
@@ -155,7 +170,7 @@ def collect_ecg(patient_name, ecg_date_str, output_dir):
                     subject = decode_mime_words(msg.get("Subject", ""))
                     date_val = msg.get("Date", "")
                     
-                    # Chequear asunto o adjuntos
+                    # Chequear si el asunto coincide estrictamente con el paciente
                     has_subject_match = is_name_matching(patient_name, subject)
                     
                     matching_attachments = []
@@ -169,16 +184,18 @@ def collect_ecg(patient_name, ecg_date_str, output_dir):
                                     matching_attachments.append((decoded_filename, subpart.get_payload(decode=True)))
                     
                     if matching_attachments:
-                        log(f"¡Correo encontrado! Asunto: '{subject}' | Fecha: {date_val}")
-                        report_progress(30, "Informe ECG encontrado, descargando...")
+                        log(f"¡Correo exacto encontrado! Asunto: '{subject}' | Fecha: {date_val}")
+                        report_progress(30, f"Informe ECG encontrado ({len(matching_attachments)} archivo/s), descargando...")
                         for fname, content in matching_attachments:
-                            # Asegurar nombre limpio y único
                             safe_name = f"ECG_{re.sub(r'[^a-zA-Z0-9_-]', '_', patient_name)}_{fname}"
                             dest_path = os.path.join(output_dir, safe_name)
                             with open(dest_path, "wb") as f:
                                 f.write(content)
                             downloaded_files.append(dest_path)
                             log(f"Guardado adjunto ECG: {safe_name}")
+                        
+                        found_target_email = True
+                        break
                             
         M.close()
         M.logout()

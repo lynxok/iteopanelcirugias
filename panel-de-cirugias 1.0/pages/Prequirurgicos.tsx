@@ -62,6 +62,13 @@ export const Prequirurgicos: React.FC = () => {
     const [result, setResult] = useState<CollectionResult | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+    // Modal de Confirmación y Previsualización
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [selectedFilesToKeep, setSelectedFilesToKeep] = useState<string[]>([]);
+    const [previewPdfPath, setPreviewPdfPath] = useState<string | null>(null);
+    const [previewPdfBase64, setPreviewPdfBase64] = useState<string | null>(null);
+    const [loadingPdfPreview, setLoadingPdfPreview] = useState(false);
+
     const logContainerRef = useRef<HTMLDivElement>(null);
 
     // Autoscroll para logs
@@ -328,6 +335,13 @@ export const Prequirurgicos: React.FC = () => {
                 setResult(resp.data);
                 setProgressPercent(100);
                 setProgressStatusText('Recolección completada con éxito.');
+
+                const files = resp.data.downloaded_files || [];
+                if (files.length > 0) {
+                    setSelectedFilesToKeep([...files]);
+                    setShowConfirmModal(true);
+                    loadPreview(files[0]);
+                }
             } else {
                 setErrorMessage(resp.error || 'Ocurrió un error durante la ejecución del proceso.');
                 setProgressStatusText('Finalizado con advertencias o error.');
@@ -339,6 +353,59 @@ export const Prequirurgicos: React.FC = () => {
         } finally {
             setIsRunning(false);
         }
+    };
+
+    const loadPreview = async (filePath: string) => {
+        setPreviewPdfPath(filePath);
+        setLoadingPdfPreview(true);
+        try {
+            if ((window as any).electronAPI?.readFileBase64) {
+                const res = await (window as any).electronAPI.readFileBase64(filePath);
+                if (res.success && res.base64) {
+                    setPreviewPdfBase64(`data:application/pdf;base64,${res.base64}`);
+                } else {
+                    setPreviewPdfBase64(null);
+                }
+            }
+        } catch (e) {
+            console.error('Error cargando preview de PDF:', e);
+            setPreviewPdfBase64(null);
+        } finally {
+            setLoadingPdfPreview(false);
+        }
+    };
+
+    const toggleFileKeep = (filePath: string) => {
+        setSelectedFilesToKeep(prev => 
+            prev.includes(filePath) ? prev.filter(f => f !== filePath) : [...prev, filePath]
+        );
+    };
+
+    const handleConfirmSelection = async () => {
+        if (!result) return;
+        
+        // Descartar/eliminar de disco los archivos desmarcados
+        const allFiles = result.downloaded_files || [];
+        const discarded = allFiles.filter(f => !selectedFilesToKeep.includes(f));
+
+        for (const file of discarded) {
+            if ((window as any).electronAPI?.deleteFile) {
+                try {
+                    await (window as any).electronAPI.deleteFile(file);
+                } catch (e) {
+                    console.error('Error al eliminar archivo descartado:', e);
+                }
+            }
+        }
+
+        // Actualizar el resultado local solo con los conservados
+        setResult({
+            ...result,
+            downloaded_files: selectedFilesToKeep
+        });
+        setShowConfirmModal(false);
+        setPreviewPdfBase64(null);
+        setPreviewPdfPath(null);
     };
 
     const handleStop = async () => {
@@ -774,6 +841,172 @@ export const Prequirurgicos: React.FC = () => {
                 </div>
 
             </div>
+
+            {/* MODAL DE CONFIRMACIÓN Y PREVISUALIZACIÓN */}
+            {showConfirmModal && result && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
+                    <div className="bg-white w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-scaleIn">
+                        {/* HEADER DEL MODAL */}
+                        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+                            <div className="flex items-center gap-3">
+                                <div className="size-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md">
+                                    <span className="material-symbols-outlined text-xl">verified</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black uppercase tracking-wider text-white">
+                                        Validación y Previsualización de Estudios
+                                    </h3>
+                                    <p className="text-xs text-slate-400">
+                                        Paciente: <strong className="text-white font-mono">{patientName}</strong> {patientDni && `(DNI: ${patientDni})`}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowConfirmModal(false)}
+                                className="size-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-lg">close</span>
+                            </button>
+                        </div>
+
+                        {/* CUERPO DEL MODAL (SPLIT: LISTA + PREVISUALIZADOR) */}
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-12 min-h-0 overflow-hidden">
+                            {/* COLUMNA IZQUIERDA: LISTA DE ARCHIVOS CON CHECKBOX */}
+                            <div className="md:col-span-5 border-r border-slate-200 bg-slate-50/70 p-4 flex flex-col min-h-0">
+                                <div className="mb-3">
+                                    <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                                        Informes Descargados ({result.downloaded_files.length})
+                                    </p>
+                                    <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                                        Seleccioná con la casilla de verificación solo los estudios que correspondan al paciente. Los desmarcados se descartarán automáticamente.
+                                    </p>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                                    {result.downloaded_files.map((file, idx) => {
+                                        const fname = file.split(/[\\/]/).pop() || '';
+                                        const isSelected = selectedFilesToKeep.includes(file);
+                                        const isCurrentPreview = previewPdfPath === file;
+                                        const isEcg = fname.toUpperCase().startsWith('ECG_');
+                                        const isLab = fname.toUpperCase().startsWith('LAB_');
+
+                                        return (
+                                            <div
+                                                key={idx}
+                                                onClick={() => loadPreview(file)}
+                                                className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
+                                                    isCurrentPreview
+                                                        ? 'bg-blue-50/90 border-blue-400 shadow-sm ring-1 ring-blue-400'
+                                                        : 'bg-white border-slate-200 hover:border-slate-300'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleFileKeep(file);
+                                                    }}
+                                                    className="size-4 mt-0.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shrink-0"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5 mb-1">
+                                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                                            isLab ? 'bg-purple-100 text-purple-700' : isEcg ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
+                                                        }`}>
+                                                            {isLab ? 'Laboratorio' : isEcg ? 'ECG' : 'Estudio'}
+                                                        </span>
+                                                        {isCurrentPreview && (
+                                                            <span className="text-[10px] font-bold text-blue-600 flex items-center gap-0.5">
+                                                                <span className="material-symbols-outlined text-xs">visibility</span>
+                                                                Viendo
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs font-mono font-medium text-slate-800 break-words line-clamp-2" title={fname}>
+                                                        {fname}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="pt-3 border-t border-slate-200 flex items-center justify-between text-xs font-bold text-slate-600">
+                                    <span>Conservar:</span>
+                                    <span className="text-blue-600 font-mono">
+                                        {selectedFilesToKeep.length} de {result.downloaded_files.length} archivos
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* COLUMNA DERECHA: PREVISUALIZADOR DE PDF */}
+                            <div className="md:col-span-7 bg-slate-900/5 p-4 flex flex-col min-h-0">
+                                <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
+                                    <div className="flex items-center gap-2 truncate mr-2">
+                                        <span className="material-symbols-outlined text-blue-600 text-lg">preview</span>
+                                        <span className="text-xs font-bold text-slate-800 truncate font-mono">
+                                            {previewPdfPath ? previewPdfPath.split(/[\\/]/).pop() : 'Seleccione un archivo'}
+                                        </span>
+                                    </div>
+                                    {previewPdfPath && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleOpenFile(previewPdfPath)}
+                                            className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-blue-600 transition-colors shrink-0 flex items-center gap-1 shadow-sm"
+                                        >
+                                            <span className="material-symbols-outlined text-sm">open_in_new</span>
+                                            Abrir con Visor Externo
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="flex-1 bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-inner flex items-center justify-center relative">
+                                    {loadingPdfPreview ? (
+                                        <div className="flex flex-col items-center gap-2 text-slate-500">
+                                            <div className="size-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                            <p className="text-xs font-medium">Cargando previsualización...</p>
+                                        </div>
+                                    ) : previewPdfBase64 ? (
+                                        <embed
+                                            src={previewPdfBase64}
+                                            type="application/pdf"
+                                            className="w-full h-full"
+                                        />
+                                    ) : (
+                                        <div className="text-center p-6 text-slate-400">
+                                            <span className="material-symbols-outlined text-4xl mb-2 text-slate-300">description</span>
+                                            <p className="text-xs font-medium">Hacé clic en cualquier archivo de la izquierda para ver su contenido aquí.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* FOOTER ACCIONES DEL MODAL */}
+                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                            <button
+                                type="button"
+                                onClick={() => handleConfirmSelection()}
+                                className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-colors"
+                            >
+                                Descartar no seleccionados y cerrar
+                            </button>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => handleConfirmSelection()}
+                                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg shadow-blue-500/25 flex items-center gap-2 transition-all"
+                                >
+                                    <span className="material-symbols-outlined text-base">check_circle</span>
+                                    Confirmar y Guardar ({selectedFilesToKeep.length})
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
