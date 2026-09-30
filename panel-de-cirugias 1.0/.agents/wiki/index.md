@@ -18,6 +18,16 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-09-30]`: **Modal de Previsualización y Filtro Estricto de Apellido en ECG (v3.13.4)**:
+    *   **Modal Interactivo de Previsualización**: Ventana modal en `Prequirurgicos.tsx` con visor embebido de PDF en Base64 para inspeccionar cada archivo recolectado antes de guardarlo en la carpeta definitiva.
+    *   **Selección y Descarte Automático**: Casillas de verificación para marcar únicamente los estudios del paciente. Al confirmar, los archivos no seleccionados se eliminan físicamente de disco mediante `delete-file`.
+    *   **Filtro Estricto de Apellido en ECG**: Requerimiento obligatorio de coincidencia del apellido en el asunto y archivos de correo IMAP Ferozo, evitando falsos positivos por homónimos de pila (ej. *Milesi Luis*, *Mazzeo Luisa* al buscar *Mignola Luis*). Parada inmediata de búsqueda al localizar el correo del paciente.
+
+*   `[2026-09-30]`: **Búsqueda por DNI y Selección de Paciente en IPHH (v3.13.3)**:
+    *   **Campo DNI en Formulario**: Entrada de DNI en UI con autocompletado desde cirugías programadas.
+    *   **Búsqueda en IPHH**: Ingreso automático en el campo `input.input-shell` (*Buscar por documento / Número*) y consulta directa (*Ir al último informe*).
+    *   **Selección Precisa de Tarjetas**: Detección de botones `button.selection-card` asegurando hacer click únicamente en el paciente coincidente, y click automático en el botón de descarga del panel de previsualización.
+
 *   `[2026-09-29]`: **Corrección de Congelamiento en Prequirúrgicos y Búsqueda Difusa (v3.13.2)**:
     *   **Solución al Bloqueo en Nanni e Intercepción de Puntero**: Resuelto el falso positivo en la tabla de Nanni donde el selector detectaba filas de encabezado y quedaba interceptado por `<div id="setaConsulta">`. Ahora se extraen las órdenes activas directamente por enlaces de protocolo `apresentarOS(id)` y se genera el PDF oficial mediante la ventana emergente de laudo (`zenPage.imprimirLaudo(false)`).
     *   **Apertura Inmediata del Navegador Visual**: Si el usuario activa el checkbox de *"Mostrar navegador en vivo (robot visual)"*, la recolección web de laboratorios (Nanni e IPHH) se prioriza en primer lugar para que la ventana de Chromium aparezca inmediatamente en pantalla sin demoras por consultas de correo.
