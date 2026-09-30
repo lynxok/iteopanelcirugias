@@ -2,6 +2,12 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.3 [2026-09-30]**: Lanzada la versión **v3.13.3**.
+    *   **Filtro por DNI y Selección Precisa de Descarga en Portal IPHH (`pages/Prequirurgicos.tsx`, `prequirurgicos_collector.py`, `main.cjs`, `preload.cjs`)**:
+        *   **Entrada de DNI en UI**: Incorporado campo `DNI / Documento` al formulario de Prequirúrgicos con autocompletado automático al seleccionar un paciente desde cirugías programadas.
+        *   **Búsqueda Directa por DNI en IPHH**: Si se cuenta con el DNI, el robot completa el campo `input.input-shell` (*Buscar por documento / Número*) y ejecuta la búsqueda directa (*Ir al último informe*).
+        *   **Filtro de Coincidencia de Tarjetas**: Se evalúan todos los botones `button.selection-card` asegurando seleccionar únicamente el que coincida con el paciente y/o DNI, evitando clicks incorrectos si hay múltiples resultados bajo una misma fecha o filtro.
+        *   **Descarga Directa desde Previsualización**: Click automático sobre el botón de descarga del informe en el panel de previsualización y guardado del archivo PDF normalizado en la carpeta de destino.
 *   **v3.13.2 [2026-09-29]**: Lanzada la versión **v3.13.2**.
     *   **Corrección de Congelamiento en Prequirúrgicos y Búsqueda Difusa (`pages/Prequirurgicos.tsx`, `prequirurgicos_collector.py`)**:
         *   **Solución al Bloqueo en Nanni e Intercepción de Puntero**: Resuelto el falso positivo en la tabla de Nanni donde el selector detectaba filas de encabezado y quedaba interceptado por `<div id="setaConsulta">`. Ahora se extraen las órdenes activas directamente por enlaces de protocolo `apresentarOS(id)` y se genera el PDF oficial mediante la ventana emergente de laudo (`zenPage.imprimirLaudo(false)`).
