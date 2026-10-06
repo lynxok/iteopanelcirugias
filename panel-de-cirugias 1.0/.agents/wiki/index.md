@@ -18,6 +18,12 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-10-06]`: **Gestión de Vacaciones y Cobertura de Turno Tarde para Técnicos (v3.13.6)**:
+    *   **Gestión de Períodos de Licencia**: Modal y persistencia en `admin_settings` (`tecnico_leaves`) para registrar rangos de fechas de vacaciones/licencias por técnico, con auditoría completa en `audit_logs`.
+    *   **Cobertura Automática de Turno Tarde**: Si el técnico fijo de la tarde está de vacaciones o ausente, las técnicas de guardia que hayan registrado fichada (`check_in`) cubren la tarde y computan la cirugía al 50% de forma simultánea.
+    *   **Supresión de Falso Positivo en Discordancias**: Eliminado el badge amarillo de advertencia cuando las técnicas presentes de guardia están en cobertura activa por vacaciones de la titular fija.
+    *   **Alertas en Asignación de Guardias**: En `Calendar.tsx`, los selectores de instrumentadores de guardia (semanal y diario) indican con 🏖️ y rango de fechas si un profesional está de vacaciones.
+
 *   `[2026-09-30]`: **Registro de Tarjetas y Selector DNI en IPHH (v3.13.5)**:
     *   **Visibilidad de Tarjetas en Log**: Cuando no coincide el paciente con las tarjetas encontradas en IPHH o con las filas de Nanni, se imprimen todas las tarjetas/filas detectadas con su texto completo en la consola en vivo.
     *   **Corrección de Selector DNI en IPHH**: Exclusión de inputs de fecha en el selector del DNI para asegurar que se ingrese en el campo de texto de documento y no falle con `Malformed value`.

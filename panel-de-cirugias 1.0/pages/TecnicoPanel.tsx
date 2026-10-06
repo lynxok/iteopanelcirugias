@@ -157,6 +157,16 @@ export const parseSurgeryPractices = (procedureStr: string, allRates: Rate[]): S
     return practices;
 };
 
+export interface TecnicoLeave {
+    id: string;
+    user_id: string;
+    user_name: string;
+    start_date: string;
+    end_date: string;
+    reason?: string;
+    created_at?: string;
+}
+
 export interface ManualSurgery {
     id: string;
     user_id: string;
@@ -213,6 +223,15 @@ export default function TecnicoPanel() {
     const [onDutyTecnicosConfig, setOnDutyTecnicosConfig] = useState<Record<string, any>>({});
     const [selectedPracticesMap, setSelectedPracticesMap] = useState<Record<string, string[]>>({});
     const [isSavingSelectedPractices, setIsSavingSelectedPractices] = useState<boolean>(false);
+    
+    // Licencias / Vacaciones de Técnicos
+    const [tecnicoLeaves, setTecnicoLeaves] = useState<TecnicoLeave[]>([]);
+    const [isLeaveModalOpen, setIsLeaveModalOpen] = useState<boolean>(false);
+    const [isSavingLeave, setIsSavingLeave] = useState<boolean>(false);
+    const [leaveTecnicoId, setLeaveTecnicoId] = useState<string>('');
+    const [leaveStartDate, setLeaveStartDate] = useState<string>('');
+    const [leaveEndDate, setLeaveEndDate] = useState<string>('');
+    const [leaveReason, setLeaveReason] = useState<string>('Vacaciones');
     
     // IP del cliente e IP de la clínica
     const [clientIp, setClientIp] = useState<string>('');
@@ -387,6 +406,7 @@ export default function TecnicoPanel() {
                 ratesRes,
                 onDutyRes,
                 selectedPracticesRes,
+                leavesRes,
                 manualSurgeriesRes,
                 surgeriesRes,
                 attendanceRes,
@@ -409,6 +429,11 @@ export default function TecnicoPanel() {
                     .from('admin_settings')
                     .select('value')
                     .eq('key', 'tecnico_selected_practices')
+                    .maybeSingle(),
+                supabase
+                    .from('admin_settings')
+                    .select('value')
+                    .eq('key', 'tecnico_leaves')
                     .maybeSingle(),
                 supabase
                     .from('tecnico_manual_surgeries')
@@ -460,6 +485,17 @@ export default function TecnicoPanel() {
                 }
             } else {
                 setSelectedPracticesMap({});
+            }
+
+            // Procesar Vacaciones / Licencias de Técnicos
+            if (leavesRes?.data?.value) {
+                try {
+                    setTecnicoLeaves(JSON.parse(leavesRes.data.value) || []);
+                } catch {
+                    setTecnicoLeaves([]);
+                }
+            } else {
+                setTecnicoLeaves([]);
             }
 
             // Procesar Tarifas
@@ -567,6 +603,12 @@ export default function TecnicoPanel() {
         }, 1000);
         return () => clearInterval(timer);
     }, []);
+
+    // Helper: Verificar si un técnico está de vacaciones / licencia en una fecha
+    const isTecnicoOnLeave = useCallback((userId: string, dateStr: string) => {
+        if (!userId || !dateStr || !tecnicoLeaves.length) return false;
+        return tecnicoLeaves.some(l => l.user_id === userId && dateStr >= l.start_date && dateStr <= l.end_date);
+    }, [tecnicoLeaves]);
 
     // Helper: Verificar si un técnico registró fichaje de ingreso (check_in) en una fecha determinada
     const hasCheckedInOnDate = useCallback((userId: string, dateStr: string) => {
@@ -759,19 +801,31 @@ export default function TecnicoPanel() {
                 return isGuardia;
             }
 
-            // En el turno tarde, participan AMBOS (Fijo y Guardia), PERO DEBEN HABER MARCADO INGRESO ESE DÍA
+            // En el turno tarde:
+            // Participan Fijo y Guardia si marcaron ingreso.
+            // Si el técnico fijo está de vacaciones o ausente, los técnicos con guardia o asignados que marcaron presente cubren el turno tarde.
             if (isWithinTardeShift) {
+                const checkedIn = hasCheckedInOnDate(selectedTecnicoId, s.date);
+                if (!checkedIn) return false;
+
                 if (isFijo || isGuardia) {
-                    const checkedIn = hasCheckedInOnDate(selectedTecnicoId, s.date);
-                    return checkedIn;
+                    return true;
                 }
+
+                // Si este técnico hace guardias o figura en ficha, y el técnico fijo está de vacaciones o no marcó presente:
+                const fijoTec = tecnicos.find(t => t.is_turno_tarde);
+                const isFijoAbsentOrOnLeave = !fijoTec || isTecnicoOnLeave(fijoTec.id, s.date) || !hasCheckedInOnDate(fijoTec.id, s.date);
+                if (isFijoAbsentOrOnLeave && (tec.does_guardias || isAssignedInForm)) {
+                    return true;
+                }
+
                 return false;
             }
 
             // En el Turno Mañana (06:00 a 14:00/15:00 hs) de días hábiles, no se imputa al de guardia salvo en la ficha técnica
             return false;
         });
-    }, [surgeries, selectedTecnicoId, tecnicos, getOnDutyTecnicoForDate, manualSurgeryIds, hasCheckedInOnDate]);
+    }, [surgeries, selectedTecnicoId, tecnicos, getOnDutyTecnicoForDate, manualSurgeryIds, hasCheckedInOnDate, isTecnicoOnLeave]);
 
     // Cálculo del Costo de las Cirugías
     const surgeriesReport = useMemo(() => {
@@ -881,9 +935,15 @@ export default function TecnicoPanel() {
             const effectiveTimeCost = effectiveRoundedHrs * hourRate;
             const effectiveTotalQx = practiceRate + effectiveTimeCost;
 
+            // Verificar si el técnico fijo está de vacaciones o ausente en el turno tarde
+            const fijoTec = isWithinTardeShift ? tecnicos.find(t => t.is_turno_tarde) : null;
+            const isFijoAbsentOrOnLeave = isWithinTardeShift && (!fijoTec || isTecnicoOnLeave(fijoTec.id, s.date) || !hasCheckedInOnDate(fijoTec.id, s.date));
+            const isCoveringFijo = isWithinTardeShift && isFijoAbsentOrOnLeave && (tec.does_guardias || isGuardia);
+
             // Verificar si el técnico asignado en la Ficha Técnica difiere de guardia/turno tarde
             const formInstrumentadora = Array.isArray(s.surgery_forms) ? s.surgery_forms[0]?.instrumentadora : s.surgery_forms?.instrumentadora;
-            const isInstrumentadoraMismatch = formInstrumentadora && !isFijo && !isGuardia;
+            // No mostrar advertencia si es el técnico de turno tarde, de guardia, o si está cubriendo el turno tarde por ausencia/vacaciones del técnico fijo
+            const isInstrumentadoraMismatch = formInstrumentadora && !isFijo && !isGuardia && !isCoveringFijo;
 
             // Contar cuántos técnicos están asignados y aprobados a esta cirugía
             const approvedManualAssignees = allManualSurgeries
@@ -961,7 +1021,7 @@ export default function TecnicoPanel() {
                 manualStatus
             };
         });
-    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate, overtimeTolerance, selectedPracticesMap]);
+    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate, overtimeTolerance, selectedPracticesMap, isTecnicoOnLeave, hasCheckedInOnDate]);
 
     const totalSurgeriesAmount = useMemo(() => {
         return surgeriesReport.reduce((acc, curr) => acc + curr.share, 0);
@@ -1799,6 +1859,97 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
         }
     };
 
+    // Gestión de Licencias / Vacaciones de Técnicos
+    const handleAddLeave = async () => {
+        if (!leaveTecnicoId) return alert('Seleccione un técnico.');
+        if (!leaveStartDate) return alert('Seleccione la fecha de inicio.');
+        if (!leaveEndDate) return alert('Seleccione la fecha de fin.');
+        if (leaveEndDate < leaveStartDate) return alert('La fecha de fin no puede ser anterior a la de inicio.');
+
+        setIsSavingLeave(true);
+        try {
+            const tec = tecnicos.find(t => t.id === leaveTecnicoId);
+            const tecName = tec?.name || 'Técnico';
+
+            const newLeave: TecnicoLeave = {
+                id: `leave-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                user_id: leaveTecnicoId,
+                user_name: tecName,
+                start_date: leaveStartDate,
+                end_date: leaveEndDate,
+                reason: leaveReason.trim() || 'Vacaciones',
+                created_at: new Date().toISOString()
+            };
+
+            const updatedLeaves = [...tecnicoLeaves, newLeave];
+
+            const { error } = await supabase
+                .from('admin_settings')
+                .upsert({
+                    key: 'tecnico_leaves',
+                    value: JSON.stringify(updatedLeaves)
+                }, { onConflict: 'key' });
+
+            if (error) throw error;
+
+            setTecnicoLeaves(updatedLeaves);
+
+            await logAudit(
+                'CREATE',
+                'Técnicos - Vacaciones / Licencias',
+                newLeave.id,
+                `${user?.name || 'Usuario'} registró ${newLeave.reason} para ${tecName} (${newLeave.start_date} al ${newLeave.end_date}).`,
+                newLeave
+            );
+
+            // Reset campos
+            setLeaveStartDate('');
+            setLeaveEndDate('');
+            setLeaveReason('Vacaciones');
+            alert(`Licencia/Vacaciones registradas correctamente para ${tecName}.`);
+        } catch (err: any) {
+            console.error('Error saving leave:', err);
+            alert('Error al guardar licencia: ' + err.message);
+        } finally {
+            setIsSavingLeave(false);
+        }
+    };
+
+    const handleDeleteLeave = async (leaveId: string) => {
+        const target = tecnicoLeaves.find(l => l.id === leaveId);
+        if (!target) return;
+        if (!confirm(`¿Eliminar la licencia/vacaciones de ${target.user_name} (${target.start_date} al ${target.end_date})?`)) return;
+
+        setIsSavingLeave(true);
+        try {
+            const updatedLeaves = tecnicoLeaves.filter(l => l.id !== leaveId);
+
+            const { error } = await supabase
+                .from('admin_settings')
+                .upsert({
+                    key: 'tecnico_leaves',
+                    value: JSON.stringify(updatedLeaves)
+                }, { onConflict: 'key' });
+
+            if (error) throw error;
+
+            setTecnicoLeaves(updatedLeaves);
+
+            await logAudit(
+                'DELETE',
+                'Técnicos - Vacaciones / Licencias',
+                target.id,
+                `${user?.name || 'Usuario'} eliminó ${target.reason} de ${target.user_name} (${target.start_date} al ${target.end_date}).`,
+                target
+            );
+        } catch (err: any) {
+            console.error('Error deleting leave:', err);
+            alert('Error al eliminar licencia: ' + err.message);
+        } finally {
+            setIsSavingLeave(false);
+        }
+    };
+
     const handleDeletePracticeRate = async (id: string) => {
         const targetRate = rates.find(r => r.id === id);
         if (!confirm(`¿Eliminar tarifa de la práctica [${targetRate?.practice_code || id}]?`)) return;
@@ -1937,6 +2088,28 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                             >
                                 <span className="material-symbols-outlined text-base text-indigo-600">print</span>
                                 <span>Imprimir Resumen</span>
+                            </button>
+                        </>
+                    )}
+
+                    {isLevelAdmin && (
+                        <>
+                            <div className="h-8 w-px bg-slate-200 hidden md:block"></div>
+                            <button
+                                onClick={() => {
+                                    setLeaveTecnicoId(selectedTecnicoId || (tecnicos[0]?.id || ''));
+                                    setIsLeaveModalOpen(true);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-all active:scale-95 shadow-2xs"
+                                title="Gestionar licencias y vacaciones de técnicos"
+                            >
+                                <span className="material-symbols-outlined text-base text-amber-600">beach_access</span>
+                                <span>Vacaciones / Licencias</span>
+                                {tecnicoLeaves.length > 0 && (
+                                    <span className="ml-0.5 px-1.5 py-0.2 bg-amber-200 text-amber-900 rounded-full text-[10px]">
+                                        {tecnicoLeaves.length}
+                                    </span>
+                                )}
                             </button>
                         </>
                     )}
@@ -2526,9 +2699,29 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                 <h3 className="text-base font-bold text-slate-900">Guardias Realizadas</h3>
                                 <p className="text-sm text-slate-500 mt-1">Cálculo proporcional de guardias cubiertas (Hábiles, Sábados, Domingos y Feriados)</p>
                             </div>
-                            <div className="text-right bg-slate-50 p-4 rounded-xl border border-slate-200 w-full md:w-auto">
-                                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Subtotal Guardias ({guardsReport.daysCount.toFixed(2)} días)</p>
-                                <p className="text-2xl font-black text-emerald-600 mt-1">${formatCurrency(guardsReport.totalAmount)}</p>
+                            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+                                {isLevelAdmin && (
+                                    <button
+                                        onClick={() => {
+                                            setLeaveTecnicoId(selectedTecnicoId || (tecnicos[0]?.id || ''));
+                                            setIsLeaveModalOpen(true);
+                                        }}
+                                        className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all shadow-xs"
+                                        title="Administrar períodos de vacaciones y licencias"
+                                    >
+                                        <span className="material-symbols-outlined text-base text-amber-600">beach_access</span>
+                                        <span>Gestionar Vacaciones / Licencias</span>
+                                        {tecnicoLeaves.length > 0 && (
+                                            <span className="ml-1 px-1.5 py-0.2 bg-amber-200 text-amber-900 rounded-full text-[10px]">
+                                                {tecnicoLeaves.length}
+                                            </span>
+                                        )}
+                                    </button>
+                                )}
+                                <div className="text-right bg-slate-50 p-4 rounded-xl border border-slate-200 w-full md:w-auto">
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Subtotal Guardias ({guardsReport.daysCount.toFixed(2)} días)</p>
+                                    <p className="text-2xl font-black text-emerald-600 mt-1">${formatCurrency(guardsReport.totalAmount)}</p>
+                                </div>
                             </div>
                         </div>
 
@@ -3753,6 +3946,190 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Gestión de Vacaciones / Licencias */}
+            {isLeaveModalOpen && (
+                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden animate-scaleUp flex flex-col max-h-[90vh]">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-5 text-white flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white/10 rounded-xl">
+                                    <span className="material-symbols-outlined text-2xl">beach_access</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold">Gestión de Vacaciones y Licencias</h3>
+                                    <p className="text-xs text-amber-100">Configuración de ausencias programadas y cobertura automática de turnos</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsLeaveModalOpen(false)}
+                                className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-xl">close</span>
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                            {/* Formulario para agregar nuevo período */}
+                            <div className="bg-amber-50/50 rounded-xl border border-amber-200/70 p-4 space-y-4">
+                                <h4 className="text-xs font-black text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-sm text-amber-600">add_circle</span>
+                                    Registrar Nuevo Período
+                                </h4>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                            Técnico / Instrumentador
+                                        </label>
+                                        <select
+                                            value={leaveTecnicoId}
+                                            onChange={e => setLeaveTecnicoId(e.target.value)}
+                                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                        >
+                                            <option value="">-- Seleccionar Técnico --</option>
+                                            {tecnicos.map(t => (
+                                                <option key={t.id} value={t.id}>
+                                                    {t.name} {t.is_turno_tarde ? '(Fijo Tarde)' : '(Guardia)'}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                            Motivo / Concepto
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={leaveReason}
+                                            onChange={e => setLeaveReason(e.target.value)}
+                                            placeholder="Ej: Vacaciones, Licencia Médica..."
+                                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                            Fecha Desde
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={leaveStartDate}
+                                            onChange={e => setLeaveStartDate(e.target.value)}
+                                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                            Fecha Hasta (Inclusive)
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={leaveEndDate}
+                                            onChange={e => setLeaveEndDate(e.target.value)}
+                                            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-between items-center pt-2">
+                                    <p className="text-[10px] text-amber-800/80 italic">
+                                        💡 Si un técnico fijo está de vacaciones, el turno tarde se distribuye automáticamente entre los técnicos de guardia presentes al 50%.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleAddLeave}
+                                        disabled={isSavingLeave || !leaveTecnicoId || !leaveStartDate || !leaveEndDate}
+                                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 shrink-0"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">save</span>
+                                        {isSavingLeave ? 'Guardando...' : 'Guardar Período'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Listado de Períodos Registrados */}
+                            <div className="space-y-3">
+                                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                                    <span>Períodos Activos / Históricos ({tecnicoLeaves.length})</span>
+                                </h4>
+
+                                {tecnicoLeaves.length === 0 ? (
+                                    <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                        <span className="material-symbols-outlined text-3xl mb-1 text-slate-300">event_busy</span>
+                                        <p className="text-xs">No hay vacaciones ni licencias programadas en el sistema.</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white">
+                                        {tecnicoLeaves
+                                            .slice()
+                                            .sort((a, b) => b.start_date.localeCompare(a.start_date))
+                                            .map(leave => {
+                                                const todayStr = getLocalStr(new Date());
+                                                const isActive = todayStr >= leave.start_date && todayStr <= leave.end_date;
+                                                const isFuture = todayStr < leave.start_date;
+
+                                                return (
+                                                    <div key={leave.id} className="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`p-2 rounded-lg ${isActive ? 'bg-emerald-100 text-emerald-800' : isFuture ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'}`}>
+                                                                <span className="material-symbols-outlined text-lg">beach_access</span>
+                                                            </div>
+                                                            <div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-xs font-bold text-slate-900">{leave.user_name}</span>
+                                                                    {isActive && (
+                                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                                            Actualmente en curso
+                                                                        </span>
+                                                                    )}
+                                                                    {isFuture && (
+                                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                                                            Próximo
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                                                    <strong>{leave.reason || 'Vacaciones'}</strong>: Del{' '}
+                                                                    <span className="font-semibold text-slate-700">{leave.start_date}</span> al{' '}
+                                                                    <span className="font-semibold text-slate-700">{leave.end_date}</span>
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        <button
+                                                            onClick={() => handleDeleteLeave(leave.id)}
+                                                            disabled={isSavingLeave}
+                                                            className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-lg transition-colors"
+                                                            title="Eliminar este período"
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">delete</span>
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setIsLeaveModalOpen(false)}
+                                className="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-colors"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

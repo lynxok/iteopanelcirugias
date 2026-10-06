@@ -198,6 +198,7 @@ const Calendar: React.FC = () => {
     const [allDoctors, setAllDoctors] = useState<{ id: string; full_name: string }[]>([]);
     const [allTecnicos, setAllTecnicos] = useState<{ id: string; full_name: string }[]>([]);
     const [allAnestesistas, setAllAnestesistas] = useState<{ id: string; full_name: string }[]>([]);
+    const [tecnicoLeaves, setTecnicoLeaves] = useState<{ id: string; user_id: string; user_name: string; start_date: string; end_date: string; reason?: string }[]>([]);
     
     const [showOnDutyPanel, setShowOnDutyPanel] = useState(false);
     const [selectedOnDutyWeekStart, setSelectedOnDutyWeekStart] = useState<Date>(new Date());
@@ -224,7 +225,7 @@ const Calendar: React.FC = () => {
                     supabase
                         .from('admin_settings')
                         .select('key, value')
-                        .in('key', ['on_duty_doctors', 'on_duty_tecnicos', 'on_duty_anestesistas', 'role_permissions'])
+                        .in('key', ['on_duty_doctors', 'on_duty_tecnicos', 'on_duty_anestesistas', 'role_permissions', 'tecnico_leaves'])
                 ]);
 
                 if (doctorsRes.data) {
@@ -250,6 +251,9 @@ const Calendar: React.FC = () => {
 
                     const permsConf = onDutyRes.data.find(d => d.key === 'role_permissions');
                     if (permsConf?.value) setRolePermissions(JSON.parse(permsConf.value));
+
+                    const leavesConf = onDutyRes.data.find(d => d.key === 'tecnico_leaves');
+                    if (leavesConf?.value) setTecnicoLeaves(JSON.parse(leavesConf.value));
                 }
             } catch (err) {
                 console.error('Error fetching on-duty config:', err);
@@ -3306,11 +3310,24 @@ const Calendar: React.FC = () => {
                                                 className="w-full bg-white border border-emerald-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
                                             >
                                                 <option value="">-- Sin Instrumentador General --</option>
-                                                {allTecnicos.map(doc => (
-                                                    <option key={doc.id} value={doc.id}>
-                                                        {doc.full_name}
-                                                    </option>
-                                                ))}
+                                                {allTecnicos.map(doc => {
+                                                    const weekStartStr = getLocalStr(selectedOnDutyWeekStart);
+                                                    const weekEnd = new Date(selectedOnDutyWeekStart);
+                                                    weekEnd.setDate(weekEnd.getDate() + 6);
+                                                    const weekEndStr = getLocalStr(weekEnd);
+                                                    const leaveMatch = tecnicoLeaves.find(l => 
+                                                        l.user_id === doc.id && 
+                                                        !(l.end_date < weekStartStr || l.start_date > weekEndStr)
+                                                    );
+                                                    const label = leaveMatch 
+                                                        ? `${doc.full_name} 🏖️ (${leaveMatch.reason || 'Vacaciones'}: ${leaveMatch.start_date.slice(5)} al ${leaveMatch.end_date.slice(5)})`
+                                                        : doc.full_name;
+                                                    return (
+                                                        <option key={doc.id} value={doc.id}>
+                                                            {label}
+                                                        </option>
+                                                    );
+                                                })}
                                             </select>
                                             <span className="material-symbols-outlined absolute right-2 top-2 text-slate-400 pointer-events-none text-base">
                                                 arrow_drop_down
@@ -3507,11 +3524,21 @@ const Calendar: React.FC = () => {
                                                                         : '-- Sin Instrumentador (Por Defecto) --'}
                                                                 </option>
                                                                 <option value="none">-- Sin Instrumentador (Forzar) --</option>
-                                                                {allTecnicos.map(doc => (
-                                                                    <option key={doc.id} value={doc.id}>
-                                                                        {doc.full_name}
-                                                                    </option>
-                                                                ))}
+                                                                {allTecnicos.map(doc => {
+                                                                    const leaveMatch = tecnicoLeaves.find(l => 
+                                                                        l.user_id === doc.id && 
+                                                                        dateStr >= l.start_date && 
+                                                                        dateStr <= l.end_date
+                                                                    );
+                                                                    const label = leaveMatch 
+                                                                        ? `${doc.full_name} 🏖️ (${leaveMatch.reason || 'Vacaciones'}: ${leaveMatch.start_date.slice(5)} al ${leaveMatch.end_date.slice(5)})`
+                                                                        : doc.full_name;
+                                                                    return (
+                                                                        <option key={doc.id} value={doc.id}>
+                                                                            {label}
+                                                                        </option>
+                                                                    );
+                                                                })}
                                                             </select>
                                                             <span className="material-symbols-outlined absolute right-2 top-2 text-slate-400 pointer-events-none text-base">
                                                                 arrow_drop_down

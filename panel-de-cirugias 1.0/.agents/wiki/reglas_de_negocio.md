@@ -231,9 +231,15 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     2. Modificar valores globales (Valor Hora, Valor Guardia, IPs autorizadas WiFi de la clínica y correo de administración).
     3. Cargar, modificar y eliminar tarifas de prácticas nomencladas (OSER / AOTER).
     4. Agregar y co-asignar cirugías a técnicos de forma manual.
+    5. **Gestión de Vacaciones y Licencias (`admin_settings` con `tecnico_leaves`)**:
+       - Permite registrar ausencias programadas por rango de fechas (`start_date` a `end_date`, inclusive) para cualquier técnico.
+       - **Cobertura Automática de Turno Tarde**: Si el técnico asignado fijo al turno tarde (`is_turno_tarde: true`) está de vacaciones (o ausente sin fichada) en la fecha de una cirugía de la tarde, el cupo queda liberado para los técnicos que rotan en guardia. Si dos técnicas de guardia registran fichada de ingreso (`check_in`) en ese día, la cirugía del turno tarde se les computa automáticamente a ambas coparticipada al **50% a cada una**.
+       - **Supresión de Advertencia**: Se anula el cartel de advertencia de discordancia (`isInstrumentadoraMismatch`) cuando el técnico presente con guardia está cubriendo activamente el turno tarde en reemplazo del titular de vacaciones.
+       - **Indicador en Calendario de Guardias**: En el selector de instrumentadores (`Calendar.tsx`), los técnicos que se encuentren dentro de un período de vacaciones o licencia figuran destacados con el ícono 🏖️ y el detalle de las fechas correspondientes para evitar asignaciones erróneas.
 *   **Trazabilidad y Registro de Auditoría (`audit_logs`)**: Todas las acciones mutadoras en el panel de técnicos se graban de manera persistente en `quirofano.audit_logs`:
     - **Tarifas Globales (`UPDATE`)**: Registra cambios en valor hora, valor guardia, IP y correos, persistiendo los valores anteriores (`old`) y nuevos (`new`).
     - **Tarifas por Práctica (`CREATE` / `UPDATE` / `DELETE`)**: Guarda el código de práctica, montos modificados/eliminados y el usuario responsable.
+    - **Vacaciones y Licencias (`CREATE` / `DELETE`)**: Guarda el técnico, fechas de inicio y fin, motivo y responsable.
     - **Cirugías Manuales y Co-asignaciones (`CREATE` / `DELETE`)**: Identifica paciente, técnico sumado o removido, y quién ejecutó la acción.
     - **Fichadas y Conformidades (`CREATE` / `STATUS_CHANGE`)**: Registra la IP, tipo de fichada o monto liquidado al momento de otorgar la conformidad mensual.
 
