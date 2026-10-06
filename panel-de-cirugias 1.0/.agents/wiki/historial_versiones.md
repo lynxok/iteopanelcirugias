@@ -2,6 +2,17 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.7 [2026-10-06]**: Lanzada la versión **v3.13.7**.
+    *   **Módulo de Cobertura de Enfermería y Cuadrante de Turnos (`NursingRosterView.tsx`)**:
+        *   Planificación de turnos de enfermería (Mañana 06-14, Tarde 14-22, Noche 22-06).
+        *   Vistas Mensual (grilla de calendario completa), Semanal (cuadrante de turnos) y Diaria.
+        *   Cálculo y semáforo automático de dotación sugerida en tiempo real según ocupación de 9 camas ($\le 6$ camas: 1 enfermera/o por turno; $7$ a $9$ camas: 2 enfermeras/os por turno).
+        *   Gestión de ausencias, licencias y vacaciones con visualización directa en el calendario.
+    *   **Cierre de Turno y Contabilización de Curaciones (`NursingShiftLogModal.tsx`)**:
+        *   Registro de fin de turno con contador interactivo de curaciones realizadas.
+        *   Regla de umbral inteligente: hasta 20 curaciones/día se absorbe en la rutina habitual sin computar tiempo; superadas las 20 curaciones diarias, calcula el impacto en tiempo extra ($N \times \text{minutos promedio}$) y alerta para refuerzo.
+    *   **Permiso Específico para Responsable de Enfermería (`can_manage_nursing_shifts`)**:
+        *   Checkbox en `Configuración > Usuarios` para roles de Enfermería/Internación que habilita la gestión de cuadrantes y ausencias sin permitir modificar parámetros institucionales de curaciones.
 *   **v3.13.5 [2026-09-30]**: Lanzada la versión **v3.13.5**.
     *   **Registro de Tarjetas y Corrección de Selector DNI en IPHH (`prequirurgicos_collector.py`)**:
         *   **Log Exhaustivo de Tarjetas**: Cuando no se produce coincidencia automática por nombre o DNI con un paciente en IPHH o Nanni, el robot ahora lista en la consola de eventos todas las tarjetas o protocolos visibles detectados (con índice y texto completo), facilitando la verificación humana.

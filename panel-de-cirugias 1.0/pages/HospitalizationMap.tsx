@@ -10,6 +10,8 @@ import ProgressBar from '../components/ProgressBar';
 
 import SurgeryMiniMonitor from '../components/SurgeryMiniMonitor';
 import SurgicalCoordinationAlerts from '../components/SurgicalCoordinationAlerts';
+import { NursingRosterView } from '../components/NursingRosterView';
+import { NursingShiftLogModal } from '../components/NursingShiftLogModal';
 import nomencladorMapping from '../src/data/nomenclador_mapping.json';
 
 // Helper to normalize procedure codes (remove dots, hyphens, brackets, spaces, and make uppercase)
@@ -105,7 +107,8 @@ const HospitalizationMap: React.FC = () => {
     const [isScanning, setIsScanning] = useState(false);
     const [scannerError, setScannerError] = useState<string | null>(null);
     const scannerRef = useRef<Html5Qrcode | null>(null);
-    const [viewMode, setViewMode] = useState<'map' | 'timeline'>('map');
+    const [viewMode, setViewMode] = useState<'map' | 'timeline' | 'roster'>('map');
+    const [showShiftLogModal, setShowShiftLogModal] = useState(false);
     const [bedStats, setBedStats] = useState<any[]>([]);
 
     const getBedDischargeProjection = (bed: HospitalBed) => {
@@ -928,27 +931,51 @@ let hospitalizationCache: {
                                     </div>
                                 </div>
 
-                                {/* View Mode Toggle */}
-                                <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-                                    <button 
-                                        onClick={() => setViewMode('map')}
-                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${viewMode === 'map' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                                {/* View Mode Toggle & Acciones */}
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                                        <button 
+                                            onClick={() => setViewMode('map')}
+                                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${viewMode === 'map' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                                        >
+                                            <span className="material-symbols-outlined text-sm">grid_view</span>
+                                            Vista Mapa
+                                        </button>
+                                        <button 
+                                            onClick={() => setViewMode('timeline')}
+                                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${viewMode === 'timeline' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                                        >
+                                            <span className="material-symbols-outlined text-sm">date_range</span>
+                                            Cronograma de Altas
+                                        </button>
+                                        <button 
+                                            onClick={() => setViewMode('roster')}
+                                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${viewMode === 'roster' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                                        >
+                                            <span className="material-symbols-outlined text-sm">calendar_month</span>
+                                            Planificador de Turnos
+                                        </button>
+                                    </div>
+
+                                    {/* Botón de Cierre de Turno y Curaciones */}
+                                    <button
+                                        onClick={() => setShowShiftLogModal(true)}
+                                        className="px-3.5 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all shadow-xs"
+                                        title="Registrar cierre del turno y contabilizar curaciones realizadas"
                                     >
-                                        <span className="material-symbols-outlined text-sm">grid_view</span>
-                                        Vista Mapa
-                                    </button>
-                                    <button 
-                                        onClick={() => setViewMode('timeline')}
-                                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${viewMode === 'timeline' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-                                    >
-                                        <span className="material-symbols-outlined text-sm">date_range</span>
-                                        Cronograma de Altas
+                                        <span className="material-symbols-outlined text-sm">assignment_turned_in</span>
+                                        Cierre de Turno / Curaciones
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Main Content Area: Map vs Timeline */}
-                            {viewMode === 'timeline' ? (
+                            {/* Main Content Area: Map vs Timeline vs Roster */}
+                            {viewMode === 'roster' ? (
+                                <NursingRosterView 
+                                    currentOccupiedBedsCount={beds.filter(b => b.status === 'occupied').length}
+                                    canManage={!!user?.can_manage_nursing_shifts}
+                                />
+                            ) : viewMode === 'timeline' ? (
                                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-6 space-y-6">
                                     <div>
                                         <h3 className="text-base font-bold text-slate-900">Cronograma de Altas Estimadas (Próximos 7 días)</h3>
@@ -1165,6 +1192,14 @@ let hospitalizationCache: {
                     </div>
 
             </div>
+
+            {/* Modal de Cierre de Turno y Curaciones */}
+            <NursingShiftLogModal
+                show={showShiftLogModal}
+                onClose={() => setShowShiftLogModal(false)}
+                onSaved={() => fetchData(true)}
+                currentOccupiedBedsCount={beds.filter(b => b.status === 'occupied').length}
+            />
 
             {/* Bed Detail Modal */}
             {showBedModal && selectedBed && (

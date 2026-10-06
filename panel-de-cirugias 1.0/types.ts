@@ -226,6 +226,7 @@ export interface AppUser {
   can_view_all_vendors?: boolean;
   is_turno_tarde?: boolean;
   has_tecnico_section_access?: boolean;
+  can_manage_nursing_shifts?: boolean;
 }
 
 export interface ResidentLevelHistoryEntry {
@@ -528,4 +529,46 @@ export interface ConsultingCalendarException {
   consulting_rooms?: ConsultingRoom;
   consulting_professionals?: ConsultingProfessional;
   substitute_professionals?: ConsultingProfessional;
+}
+
+// Módulo de Turnos y Cobertura de Enfermería
+export type NursingShiftType = 'manana' | 'tarde' | 'noche';
+export type NursingRosterStatus = 'programado' | 'franco' | 'vacaciones' | 'licencia' | 'refuerzo';
+export type NursingAbsenceType = 'vacaciones' | 'licencia_medica' | 'licencia_especial' | 'otro';
+
+export interface NursingShiftLog {
+  id: string;
+  date: string; // YYYY-MM-DD
+  shift: NursingShiftType;
+  nurse_id?: string | null;
+  nurse_name: string;
+  wound_dressings_count: number;
+  avg_minutes_per_dressing: number;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface NursingRosterEntry {
+  id: string;
+  nurse_id: string;
+  date: string; // YYYY-MM-DD
+  shift: NursingShiftType;
+  status: NursingRosterStatus;
+  notes?: string | null;
+  created_at?: string;
+  created_by?: string | null;
+  nurse?: { id: string; name: string; full_name?: string; email?: string };
+}
+
+export interface NursingAbsence {
+  id: string;
+  nurse_id: string;
+  type: NursingAbsenceType;
+  start_date: string; // YYYY-MM-DD
+  end_date: string; // YYYY-MM-DD
+  notes?: string | null;
+  created_at?: string;
+  created_by?: string | null;
+  nurse?: { id: string; name: string; full_name?: string; email?: string };
 }

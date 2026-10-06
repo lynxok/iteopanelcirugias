@@ -187,7 +187,8 @@ export const useSettings = () => {
                 resident_level_history: u.resident_level_history || [],
                 can_view_all_vendors: u.can_view_all_vendors,
                 is_turno_tarde: u.is_turno_tarde,
-                has_tecnico_section_access: u.has_tecnico_section_access
+                has_tecnico_section_access: u.has_tecnico_section_access,
+                can_manage_nursing_shifts: u.can_manage_nursing_shifts
             })));
         }
     }, []);
@@ -459,7 +460,8 @@ export const useSettings = () => {
                 resident_level_history: newUser.role === 'Residente' ? residentLevelHistory : [],
                 can_view_all_vendors: newUser.role === 'Ortopedia' ? (newUser.can_view_all_vendors || false) : false,
                 is_turno_tarde: newUser.role === 'Tecnico' ? (newUser.is_turno_tarde || false) : false,
-                has_tecnico_section_access: newUser.role === 'Tecnico' ? (newUser.has_tecnico_section_access || false) : false
+                has_tecnico_section_access: newUser.role === 'Tecnico' ? (newUser.has_tecnico_section_access || false) : false,
+                can_manage_nursing_shifts: (newUser.role === 'Enfermeria' || newUser.role === 'Internacion' || (newUser.role as any) === 'JefaturaDeEnfermeria') ? (newUser.can_manage_nursing_shifts || false) : false
             };
             if (isEditingUser && newUser.id) userPayload.id = newUser.id;
 

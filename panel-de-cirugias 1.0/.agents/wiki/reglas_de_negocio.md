@@ -275,3 +275,19 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 *   **Visualización Completa de Salas**:
     - El gráfico de torta de "Habitaciones más utilizadas" lista la totalidad de salas de la institución (incluida la Habitación 2 / Suite) sin aplicar recortes artificiales (sin `slice(0, 5)`).
     - Los registros de admisiones sin cama asignada se identifican claramente como `"Sin Cama Asignada"` en lugar de `"Desconocida"`.
+
+### Cobertura de Enfermería, Roster y Curaciones (`NursingRosterView.tsx` y `NursingShiftLogModal.tsx`)
+*   **Dimensionamiento de Dotación según Ocupación (Capacidad: 9 camas)**:
+    - **1 a 6 camas ocupadas**: Dotación objetivo de **1 enfermera/o por turno**.
+    - **7 a 9 camas ocupadas**: Dotación objetivo de **2 enfermeras/os por turno**.
+    - El sistema cuenta con indicador semaforizado en tiempo real de dotación sugerida vs. enfermeras programadas en el cuadrante.
+*   **Registro de Cierre de Turno y Regla de Curaciones**:
+    - Al finalizar cada turno (Mañana, Tarde, Noche), la enfermera a cargo registra el total de curaciones realizadas en `quirofano.nursing_shift_logs`.
+    - **Umbral de activación (> 20 curaciones/día)**:
+      - Si en el acumulado diario del sanatorio las curaciones son $\le 20$, se consideran parte de la rutina habitual de piso y el sistema **no computa tiempo extra de curaciones**.
+      - Si el acumulado supera las **20 curaciones**, el sistema activa el cálculo de impacto temporal: $\text{Tiempo Extra} = \text{Total Curaciones} \times \text{Minutos Promedio (default 20 min)}$ e informa la sobrecarga en horas para alertar la necesidad de refuerzo.
+*   **Permisos y Roles de Gestión (`can_manage_nursing_shifts`)**:
+    - Checkbox configurable en `Configuración > Usuarios` para roles `Enfermeria`, `Internacion` y `JefaturaDeEnfermeria`.
+    - **Responsable de Enfermería**: Puede diagramar cuadrantes, asignar turnos, francos y registrar ausencias/vacaciones. No tiene acceso a cambiar los minutos base ni el umbral de curaciones (reservado para SuperAdmin / Dirección).
+    - **Enfermera de Guardia**: Modo visor en el cronograma y permiso exclusivo para realizar el **Cierre de su propio Turno**.
+
