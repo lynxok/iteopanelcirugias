@@ -63,6 +63,18 @@ export const NursingRosterView: React.FC<NursingRosterViewProps> = ({
         notes: ''
     });
 
+    // Modal de Asignación por Rango / Bloque (CCT 122/75)
+    const [showBulkModal, setShowBulkModal] = useState(false);
+    const [bulkForm, setBulkForm] = useState({
+        nurse_id: '',
+        shift: 'manana' as NursingShiftType,
+        start_date: format(new Date(), 'yyyy-MM-dd'),
+        end_date: format(addDays(new Date(), 9), 'yyyy-MM-dd'), // 10 días por defecto
+        pattern: 'consecutive' as 'consecutive' | 'weekdays' | 'rotation_6x2',
+        override_warning: false
+    });
+    const [bulkValidationWarnings, setBulkValidationWarnings] = useState<string[]>([]);
+
     const isSupervisor = canManage || 
         user?.role === 'SuperAdmin' || 
         (user?.role as any) === 'Dirección' || 
@@ -185,6 +197,108 @@ export const NursingRosterView: React.FC<NursingRosterViewProps> = ({
         }
     };
 
+    const handleSaveBulk = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!bulkForm.nurse_id) {
+            alert('Seleccione un enfermero/a');
+            return;
+        }
+
+        const start = parseISO(bulkForm.start_date);
+        const end = parseISO(bulkForm.end_date);
+        if (end < start) {
+            alert('La fecha hasta debe ser igual o posterior a la fecha desde');
+            return;
+        }
+
+        const allDays = eachDayOfInterval({ start, end });
+        const warnings: string[] = [];
+
+        // Evaluar días a asignar según el patrón
+        const daysToAssign: { dateStr: string; status: NursingRosterStatus }[] = [];
+        let consecutiveWorkDays = 0;
+
+        for (let i = 0; i < allDays.length; i++) {
+            const currentDay = allDays[i];
+            const dateStr = format(currentDay, 'yyyy-MM-dd');
+            const dayOfWeek = currentDay.getDay(); // 0 = Domingo, 6 = Sábado
+
+            if (bulkForm.pattern === 'weekdays') {
+                if (dayOfWeek === 0 || dayOfWeek === 6) {
+                    daysToAssign.push({ dateStr, status: 'franco' });
+                    consecutiveWorkDays = 0;
+                } else {
+                    daysToAssign.push({ dateStr, status: 'programado' });
+                    consecutiveWorkDays++;
+                }
+            } else if (bulkForm.pattern === 'rotation_6x2') {
+                // Ciclo de 8 días: 6 trabajo, 2 francos
+                const cycleIndex = i % 8;
+                if (cycleIndex < 6) {
+                    daysToAssign.push({ dateStr, status: 'programado' });
+                    consecutiveWorkDays++;
+                } else {
+                    daysToAssign.push({ dateStr, status: 'franco' });
+                    consecutiveWorkDays = 0;
+                }
+            } else {
+                // 'consecutive' corrido
+                daysToAssign.push({ dateStr, status: 'programado' });
+                consecutiveWorkDays++;
+            }
+
+            // Validación CCT 122/75: Límite de días seguidos (> 6 días)
+            if (consecutiveWorkDays > 6) {
+                warnings.push(`Excede el límite de 6 jornadas continuas sin descanso semanal de 40 hs (Art. 20 CCT 122/75). Acumula ${consecutiveWorkDays} días continuos.`);
+            }
+        }
+
+        // Validación descanso entre jornadas (12 hs mínimas)
+        // Si el turno asignado es Mañana (06:00), verificar si el día anterior tenía turno Tarde (22:00) o Noche
+        if (bulkForm.shift === 'manana') {
+            for (const item of daysToAssign) {
+                if (item.status === 'programado') {
+                    const prevDate = format(addDays(parseISO(item.dateStr), -1), 'yyyy-MM-dd');
+                    const prevEntry = rosterEntries.find(r => r.nurse_id === bulkForm.nurse_id && r.date === prevDate && (r.shift === 'tarde' || r.shift === 'noche'));
+                    if (prevEntry) {
+                        warnings.push(`Incompatibilidad de descanso en fecha ${item.dateStr}: el día anterior realizó turno ${prevEntry.shift.toUpperCase()} (solo median 8 hs de reposo, el CCT y LCT exigen mínimo 12 hs).`);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (warnings.length > 0 && !bulkForm.override_warning) {
+            setBulkValidationWarnings(warnings);
+            return;
+        }
+
+        try {
+            // Guardar masivamente en Supabase
+            const payload = daysToAssign.map(item => ({
+                nurse_id: bulkForm.nurse_id,
+                date: item.dateStr,
+                shift: bulkForm.shift,
+                status: item.status,
+                created_by: user?.id || null
+            }));
+
+            const { error } = await supabase
+                .from('nursing_roster')
+                .upsert(payload, { onConflict: 'nurse_id,date,shift' });
+
+            if (error) throw error;
+
+            alert(`Se asignaron ${payload.length} jornadas correctamente respetando la cobertura.`);
+            setShowBulkModal(false);
+            setBulkValidationWarnings([]);
+            setBulkForm({ ...bulkForm, override_warning: false });
+            fetchNursesAndRoster();
+        } catch (err: any) {
+            alert('Error en asignación masiva: ' + err.message);
+        }
+    };
+
     // Cálculo de dotación sugerida para 9 camas
     // <= 6 camas -> 1 enfermera por turno
     // 7 a 9 camas -> 2 enfermeras por turno
@@ -239,13 +353,25 @@ export const NursingRosterView: React.FC<NursingRosterViewProps> = ({
                 {/* Acciones de Supervisor */}
                 <div className="flex items-center gap-2">
                     {isSupervisor && (
-                        <button
-                            onClick={() => setShowAbsenceModal(true)}
-                            className="px-3 py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-sm"
-                        >
-                            <span className="material-symbols-outlined text-sm">beach_access</span>
-                            Vacaciones / Licencia
-                        </button>
+                        <>
+                            <button
+                                onClick={() => {
+                                    setBulkValidationWarnings([]);
+                                    setShowBulkModal(true);
+                                }}
+                                className="px-3 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-sm"
+                            >
+                                <span className="material-symbols-outlined text-sm">date_range</span>
+                                Carga Rápida (Rango)
+                            </button>
+                            <button
+                                onClick={() => setShowAbsenceModal(true)}
+                                className="px-3 py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-sm"
+                            >
+                                <span className="material-symbols-outlined text-sm">beach_access</span>
+                                Vacaciones / Licencia
+                            </button>
+                        </>
                     )}
 
                     {/* Selector de Vista */}
@@ -667,6 +793,153 @@ export const NursingRosterView: React.FC<NursingRosterViewProps> = ({
                                     className="flex-1 py-2.5 bg-primary text-white font-black rounded-xl text-xs uppercase shadow-md shadow-primary/20"
                                 >
                                     Guardar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Carga Rápida / Asignación Masiva por Rango (CCT 122/75) */}
+            {showBulkModal && (
+                <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-6 shadow-2xl max-w-lg w-full border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+                        <div className="flex justify-between items-center mb-4">
+                            <div>
+                                <h3 className="text-base font-black text-slate-800">Carga Rápida de Cobertura</h3>
+                                <p className="text-xs text-slate-500 font-medium mt-0.5">Asignación por bloque de fechas con validaciones CCT 122/75</p>
+                            </div>
+                            <button 
+                                onClick={() => { setShowBulkModal(false); setBulkValidationWarnings([]); }}
+                                className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSaveBulk} className="space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Enfermero/a a Programar</label>
+                                <select
+                                    value={bulkForm.nurse_id}
+                                    onChange={e => {
+                                        setBulkForm({ ...bulkForm, nurse_id: e.target.value, override_warning: false });
+                                        setBulkValidationWarnings([]);
+                                    }}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                                    required
+                                >
+                                    <option value="">Seleccione personal...</option>
+                                    {nurses.map(n => (
+                                        <option key={n.id} value={n.id}>{n.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Turno Habitual</label>
+                                    <select
+                                        value={bulkForm.shift}
+                                        onChange={e => {
+                                            setBulkForm({ ...bulkForm, shift: e.target.value as NursingShiftType, override_warning: false });
+                                            setBulkValidationWarnings([]);
+                                        }}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                                    >
+                                        <option value="manana">Mañana (06:00 - 14:00)</option>
+                                        <option value="tarde">Tarde (14:00 - 22:00)</option>
+                                        <option value="noche">Noche (22:00 - 06:00)</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Patrón / Modalidad</label>
+                                    <select
+                                        value={bulkForm.pattern}
+                                        onChange={e => {
+                                            setBulkForm({ ...bulkForm, pattern: e.target.value as any, override_warning: false });
+                                            setBulkValidationWarnings([]);
+                                        }}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                                    >
+                                        <option value="weekdays">Lunes a Viernes (Sáb/Dom Franco)</option>
+                                        <option value="rotation_6x2">Rotativo 6x2 (6 Trabajo / 2 Francos CCT)</option>
+                                        <option value="consecutive">Días Corridos (Requiere validar descansos)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Fecha Desde</label>
+                                    <input 
+                                        type="date"
+                                        value={bulkForm.start_date}
+                                        onChange={e => {
+                                            setBulkForm({ ...bulkForm, start_date: e.target.value, override_warning: false });
+                                            setBulkValidationWarnings([]);
+                                        }}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Fecha Hasta</label>
+                                    <input 
+                                        type="date"
+                                        value={bulkForm.end_date}
+                                        onChange={e => {
+                                            setBulkForm({ ...bulkForm, end_date: e.target.value, override_warning: false });
+                                            setBulkValidationWarnings([]);
+                                        }}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Alerta de advertencia CCT 122/75 */}
+                            {bulkValidationWarnings.length > 0 && (
+                                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl space-y-2 animate-in fade-in">
+                                    <div className="flex items-center gap-2 text-amber-800 font-bold text-xs">
+                                        <span className="text-base">⚠️</span>
+                                        <span>Observaciones de Jornada Laboral (CCT 122/75):</span>
+                                    </div>
+                                    <ul className="text-[11px] text-amber-700 space-y-1 list-disc list-inside">
+                                        {bulkValidationWarnings.map((warn, i) => (
+                                            <li key={i}>{warn}</li>
+                                        ))}
+                                    </ul>
+
+                                    <div className="pt-2 border-t border-amber-200/60 flex items-center gap-2">
+                                        <input 
+                                            type="checkbox"
+                                            id="override_warning"
+                                            checked={bulkForm.override_warning}
+                                            onChange={e => setBulkForm({ ...bulkForm, override_warning: e.target.checked })}
+                                            className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500"
+                                        />
+                                        <label htmlFor="override_warning" className="text-xs font-bold text-amber-900 cursor-pointer">
+                                            Autorizar excepción y asignar de todas formas
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex gap-2 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowBulkModal(false); setBulkValidationWarnings([]); }}
+                                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs uppercase"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 py-2.5 bg-primary text-white font-black rounded-xl text-xs uppercase shadow-md shadow-primary/20 hover:brightness-105"
+                                >
+                                    {bulkValidationWarnings.length > 0 && !bulkForm.override_warning ? 'Verificar y Continuar' : 'Confirmar Asignación'}
                                 </button>
                             </div>
                         </form>
