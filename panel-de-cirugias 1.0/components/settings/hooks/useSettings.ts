@@ -18,7 +18,7 @@ export const useSettings = () => {
     const { user } = useAuth();
     
     // --- TABS & UI STATE ---
-    const [activeTab, setActiveTab] = useState<'users' | 'doctors' | 'ors' | 'tree' | 'vendors' | 'coverages' | 'vademecum' | 'medications' | 'email_config' | 'forms' | 'signature' | 'permissions' | 'cie10' | 'oser_sync' | 'printers' | 'obs_config' | 'bed_stats' | 'nomenclador'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'doctors' | 'ors' | 'tree' | 'vendors' | 'coverages' | 'vademecum' | 'medications' | 'email_config' | 'forms' | 'signature' | 'permissions' | 'cie10' | 'oser_sync' | 'printers' | 'obs_config' | 'bed_stats' | 'nomenclador' | 'holidays'>('users');
     const [isPrintingBlank, setIsPrintingBlank] = useState(false);
     const [materialPagesCount, setMaterialPagesCount] = useState(1);
     

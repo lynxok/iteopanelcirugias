@@ -2,6 +2,14 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.9 [2026-10-07]**: Lanzada la versión **v3.13.9**.
+    *   **Pestaña de Feriados y Asuetos en Configuración (`components/settings/HolidaysTab.tsx`, `pages/Settings.tsx`, `useSettings.ts`)**:
+        *   Administración integral de feriados nacionales, asuetos de sanidad (ATSA), provinciales, institucionales y otros en `quirofano.calendar_holidays`.
+        *   Sincronización automática de feriados oficiales con un clic conectando con la API de ArgentinaDatos.
+        *   Configuración granular de reglas de atención (indicador si afecta o cierra consultorios externos).
+    *   **Integración Dinámica en Calendarios de Quirófano y Panel de Técnicos (`pages/Calendar.tsx`, `pages/TecnicoPanel.tsx`)**:
+        *   `Calendar.tsx` ahora consulta reactivamente la base de datos para renderizar feriados personalizados o asuetos institucionales.
+        *   En `TecnicoPanel.tsx`, las guardias de técnicos ahora reconocen dinámicamente los asuetos sanitarios (ej. 21 de Septiembre - Día de la Sanidad), liquidando el día completo como feriado trabajado e identificándolo con estrellas y etiquetas descriptivas en el calendario mensual de guardias.
 *   **v3.13.7 [2026-10-06]**: Lanzada la versión **v3.13.7**.
     *   **Módulo de Cobertura de Enfermería y Cuadrante de Turnos (`NursingRosterView.tsx`)**:
         *   Planificación de turnos de enfermería (Mañana 06-14, Tarde 14-22, Noche 22-06).

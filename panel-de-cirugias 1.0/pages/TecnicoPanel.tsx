@@ -30,8 +30,12 @@ const getWeekStartStr = (d: Date) => {
     return getLocalStr(start);
 };
 
-const isHoliday = (date: Date) => {
-    return ARGENTINA_HOLIDAYS.has(getLocalStr(date));
+const isHoliday = (date: Date, customHolidays?: Set<string>) => {
+    const str = getLocalStr(date);
+    if (customHolidays && customHolidays.size > 0) {
+        return customHolidays.has(str);
+    }
+    return ARGENTINA_HOLIDAYS.has(str);
 };
 
 const formatCurrency = (val: number) => {
@@ -224,6 +228,14 @@ export default function TecnicoPanel() {
     const [selectedPracticesMap, setSelectedPracticesMap] = useState<Record<string, string[]>>({});
     const [isSavingSelectedPractices, setIsSavingSelectedPractices] = useState<boolean>(false);
     
+    // Feriados y Asuetos (cargados dinámicamente desde quirofano.calendar_holidays)
+    const [holidaysMap, setHolidaysMap] = useState<Record<string, string>>({});
+    const holidaysSet = useMemo(() => {
+        const s = new Set<string>(ARGENTINA_HOLIDAYS);
+        Object.keys(holidaysMap).forEach(d => s.add(d));
+        return s;
+    }, [holidaysMap]);
+    
     // Licencias / Vacaciones de Técnicos
     const [tecnicoLeaves, setTecnicoLeaves] = useState<TecnicoLeave[]>([]);
     const [isLeaveModalOpen, setIsLeaveModalOpen] = useState<boolean>(false);
@@ -410,7 +422,8 @@ export default function TecnicoPanel() {
                 manualSurgeriesRes,
                 surgeriesRes,
                 attendanceRes,
-                consentRes
+                consentRes,
+                holidaysRes
             ] = await Promise.all([
                 supabase
                     .from('users')
@@ -463,7 +476,12 @@ export default function TecnicoPanel() {
                     .select('*')
                     .eq('user_id', targetTecnicoId)
                     .eq('period', periodStr)
-                    .maybeSingle() : Promise.resolve({ data: null })
+                    .maybeSingle() : Promise.resolve({ data: null }),
+                supabase
+                    .from('calendar_holidays')
+                    .select('date, name, holiday_type')
+                    .gte('date', `${selectedYear}-01-01`)
+                    .lte('date', `${selectedYear}-12-31`)
             ]);
 
             // Procesar Técnicos
@@ -496,6 +514,17 @@ export default function TecnicoPanel() {
                 }
             } else {
                 setTecnicoLeaves([]);
+            }
+
+            // Procesar Feriados y Asuetos de Sanidad
+            if (holidaysRes?.data && holidaysRes.data.length > 0) {
+                const map: Record<string, string> = {};
+                holidaysRes.data.forEach((h: any) => {
+                    map[h.date] = h.name;
+                });
+                setHolidaysMap(map);
+            } else {
+                setHolidaysMap({});
             }
 
             // Procesar Tarifas
@@ -1062,7 +1091,7 @@ export default function TecnicoPanel() {
             if (onDutyTec && onDutyTec.id === selectedTecnicoId) {
                 const dayOfWeek = dateObj.getDay();
                 const isWE = dayOfWeek === 0 || dayOfWeek === 6;
-                const isHolidayDay = isHoliday(dateObj);
+                const isHolidayDay = isHoliday(dateObj, holidaysSet);
 
                 if (isHolidayDay && !isWE) {
                     // Si cae en día de semana y es feriado, se suma como feriado
@@ -1110,7 +1139,7 @@ export default function TecnicoPanel() {
                 targetDate.setDate(lastDayOfCurrentMonth.getDate() + (d - lastDayOfWeek));
                 
                 const targetDayOfWeek = targetDate.getDay();
-                const isTargetHoliday = isHoliday(targetDate);
+                const isTargetHoliday = isHoliday(targetDate, holidaysSet);
 
                 if (targetDayOfWeek >= 1 && targetDayOfWeek <= 5) {
                     if (isTargetHoliday) {
@@ -1154,7 +1183,7 @@ export default function TecnicoPanel() {
             holidaysCount: holidaysWorkedCount,
             totalAmount
         };
-    }, [selectedYear, selectedMonth, selectedTecnicoId, tecnicos, getOnDutyTecnicoForDate, guardRate]);
+    }, [selectedYear, selectedMonth, selectedTecnicoId, tecnicos, getOnDutyTecnicoForDate, guardRate, holidaysSet]);
 
     const grandTotalAmount = useMemo(() => {
         return totalSurgeriesAmount + guardsReport.totalAmount + attendanceHoursReport.amount;
@@ -2835,7 +2864,8 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                             const onDuty = getOnDutyTecnicoForDate(dateStr);
                                             
                                             const isMe = onDuty && onDuty.id === selectedTecnicoId;
-                                            const isHolidayDay = isHoliday(dateObj);
+                                            const isHolidayDay = isHoliday(dateObj, holidaysSet);
+                                            const holidayName = holidaysMap[dateStr];
                                             const dayOfWeek = dateObj.getDay();
                                             const isWE = dayOfWeek === 0 || dayOfWeek === 6;
 
@@ -2848,20 +2878,31 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                 } else {
                                                     cellClass = "bg-emerald-500 text-white font-bold shadow-md shadow-emerald-100 border border-emerald-600";
                                                 }
+                                            } else if (isHolidayDay && !isWE) {
+                                                // Indicador visual tenue si es feriado pero este técnico no está de guardia
+                                                cellClass = "bg-amber-50/70 text-amber-700 border border-amber-200/60 hover:bg-amber-100/60";
                                             }
 
                                             cells.push(
                                                 <div 
                                                     key={`day-${day}`} 
                                                     className={`aspect-square rounded-xl flex flex-col items-center justify-between p-2 transition-all relative ${cellClass}`}
-                                                    title={isMe ? `Guardia asignada: ${isHolidayDay ? 'Feriado' : isWE ? 'Fin de Semana' : 'Día Hábil'}` : 'Sin asignación'}
+                                                    title={
+                                                        isMe 
+                                                            ? `Guardia asignada: ${isHolidayDay ? `Feriado (${holidayName || 'Feriado Nacional'})` : isWE ? 'Fin de Semana' : 'Día Hábil'}` 
+                                                            : (isHolidayDay ? `Feriado: ${holidayName || 'Feriado'}` : 'Sin asignación')
+                                                    }
                                                 >
                                                     <span className="text-xs font-black">{day}</span>
-                                                    {isMe && (
+                                                    {isMe ? (
                                                         <span className="material-symbols-outlined text-[10px] absolute bottom-1 text-white/90">
                                                             {isHolidayDay ? 'star' : isWE ? 'event' : 'check_circle'}
                                                         </span>
-                                                    )}
+                                                    ) : (isHolidayDay && !isWE && (
+                                                        <span className="material-symbols-outlined text-[10px] absolute bottom-1 text-amber-500" title={holidayName || 'Feriado'}>
+                                                            star
+                                                        </span>
+                                                    ))}
                                                 </div>
                                             );
                                         }

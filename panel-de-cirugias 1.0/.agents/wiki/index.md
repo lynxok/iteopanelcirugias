@@ -18,6 +18,12 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-10-07]`: **Pestaña de Gestión de Feriados y Asuetos en Configuración e Integración en Panel de Técnicos (`Settings.tsx`, `HolidaysTab.tsx`, `Calendar.tsx`, `TecnicoPanel.tsx`)**:
+    *   **Nueva Pestaña UI**: Sección **"Feriados y Asuetos"** en Configuración (`HolidaysTab.tsx`) para listar, crear, editar y eliminar feriados nacionales, provinciales, institucionales y asuetos de sanidad (ATSA).
+    *   **Sincronización Automática con ArgentinaDatos**: Botón de un solo clic para sincronizar y rellenar automáticamente los feriados oficiales nacionales de cualquier año en la tabla `quirofano.calendar_holidays`.
+    *   **Unificación con Calendario Quirúrgico**: `Calendar.tsx` ahora consulta de forma reactiva la tabla `calendar_holidays` de Supabase (permitiendo feriados y asuetos manuales), manteniendo como fallback la API oficial.
+    *   **Liquidación Dinámica en Panel de Técnicos**: `TecnicoPanel.tsx` ahora consulta `quirofano.calendar_holidays` para el año seleccionado. Fechas como el **Día de la Sanidad (21 de Septiembre)** y cualquier feriado institucional ahora se computan automáticamente como feriado en el cálculo de guardias (1 día entero de liquidación), se colorean de amarillo/ámbar en el calendario y muestran su nombre y estrella distintiva.
+
 *   `[2026-10-06]`: **Gestión de Vacaciones y Cobertura de Turno Tarde para Técnicos (v3.13.6)**:
     *   **Gestión de Períodos de Licencia**: Modal y persistencia en `admin_settings` (`tecnico_leaves`) para registrar rangos de fechas de vacaciones/licencias por técnico, con auditoría completa en `audit_logs`.
     *   **Cobertura Automática de Turno Tarde**: Si el técnico fijo de la tarde está de vacaciones o ausente, las técnicas de guardia que hayan registrado fichada (`check_in`) cubren la tarde y computan la cirugía al 50% de forma simultánea.

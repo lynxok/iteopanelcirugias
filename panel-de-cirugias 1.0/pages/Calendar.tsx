@@ -437,17 +437,39 @@ const Calendar: React.FC = () => {
         const fetchHolidays = async () => {
             try {
                 const year = currentDate.getFullYear();
-                if (holidayCache[year]) {
-                    setHolidays(holidayCache[year]);
-                    return;
-                }
-                const response = await fetch(`https://api.argentinadatos.com/v1/feriados/${year}`);
-                const data = await response.json();
+                const startDate = `${year}-01-01`;
+                const endDate = `${year}-12-31`;
 
                 const holidayMap: Record<string, string> = {};
-                data.forEach((h: any) => {
-                    holidayMap[h.fecha] = h.nombre;
-                });
+
+                // 1. Intentar cargar desde quirofano.calendar_holidays en Supabase (permite feriados personalizados y asuetos de sanidad)
+                const { data: dbHolidays } = await supabase
+                    .from('calendar_holidays')
+                    .select('date, name')
+                    .gte('date', startDate)
+                    .lte('date', endDate);
+
+                if (dbHolidays && dbHolidays.length > 0) {
+                    dbHolidays.forEach((h: any) => {
+                        holidayMap[h.date] = h.name;
+                    });
+                } else {
+                    // 2. Si no hay registros en la base de datos para este año, consultar API oficial como fallback
+                    if (holidayCache[year]) {
+                        setHolidays(holidayCache[year]);
+                        return;
+                    }
+                    const response = await fetch(`https://api.argentinadatos.com/v1/feriados/${year}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (Array.isArray(data)) {
+                            data.forEach((h: any) => {
+                                holidayMap[h.fecha] = h.nombre;
+                            });
+                        }
+                    }
+                }
+
                 holidayCache[year] = holidayMap;
                 setHolidays(holidayMap);
             } catch (err) {

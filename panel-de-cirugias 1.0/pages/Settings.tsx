@@ -41,6 +41,7 @@ import SpecialtiesModal from '../components/settings/modals/SpecialtiesModal';
 import { ManageCatalogsModal } from '../components/settings/modals/ManageCatalogsModal';
 import OserSyncTab from '../components/settings/OserSyncTab';
 import BedStatsTab from '../components/settings/BedStatsTab';
+import HolidaysTab from '../components/settings/HolidaysTab';
 
 
 const Settings: React.FC = () => {
@@ -114,6 +115,7 @@ const Settings: React.FC = () => {
         { id: 'signature', label: 'Mi Firma', icon: 'draw' },
         ...( (window as any).electronAPI ? [{ id: 'printers', label: 'Impresoras', icon: 'print' }] : [] ),
         ...( (window as any).electronAPI && hasObsAccess ? [{ id: 'obs_config', label: 'Grabación (OBS)', icon: 'videocam' }] : [] ),
+        { id: 'holidays', label: 'Feriados y Asuetos', icon: 'event_busy' },
         { id: 'permissions', label: 'Permisos', icon: 'lock' }
     ];
 
@@ -495,6 +497,10 @@ const Settings: React.FC = () => {
                                 catalogs={s.nomencladorCatalogs}
                                 onOpenManageCatalogs={() => s.setShowManageCatalogsModal(true)}
                             />
+                        )}
+
+                        {s.activeTab === 'holidays' && (
+                            <HolidaysTab isSuperAdmin={s.user?.role === 'SuperAdmin'} />
                         )}
                     </motion.div>
                 </AnimatePresence>
