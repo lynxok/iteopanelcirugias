@@ -200,6 +200,14 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     *   Los campos que no cambiaron preservan su fecha previa de edición (`updated_at`) y el nombre del usuario responsable original.
     *   La fecha visible de última edición de hora y guardia en la interfaz refleja la vigencia del período que se esté visualizando o configurando.
 
+### Cómputo y Liquidación de Guardias de Técnicos (07/10/2026 - v3.13.9)
+*   **Días Hábiles (Lunes a Viernes no feriados)**:
+    *   La guardia de días hábiles computa de forma proporcional a semana completa: **5 días hábiles = 1 día de guardia liquidado** ($\text{Fracción} = \frac{\text{días trabajados}}{5}$).
+*   **Fines de Semana y Feriados / Asuetos de Sanidad**:
+    *   **Fines de Semana (Sábados y Domingos)**: Cada día de guardia asignado computa como **1 día completo de guardia liquidado** (1.0).
+    *   **Feriados Nacionales, Provinciales e Institucionales**: Cada feriado trabajado en día de semana computa como **1 día completo de guardia liquidado** (1.0). Además, se incorpora al conjunto semanal para no castigar la fracción de los restantes días hábiles.
+    *   **Asuetos de Sanidad (ATSA - 21 de Septiembre)**: Se integran reactivamente desde `quirofano.calendar_holidays`. Cualquier fecha configurada como feriado/asueto se liquida como **1 día entero de guardia**, mostrándose en el calendario mensual con fondo ámbar/amarillo, estrella distintiva y tooltip con el nombre de la conmemoración.
+
 ### Asignación de Cirugías y Coparticipación
 ### Horarios y Asignación de Cirugías a Técnicos (10/08/2026)
 *   **Guardia Nocturna, Fines de Semana y Feriados:** 
