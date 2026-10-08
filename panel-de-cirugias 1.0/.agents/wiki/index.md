@@ -18,8 +18,22 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-10-08]`: **Motor Predictivo de Quirófano y Camas: Ajuste de Muestras y Parser Multilínea (`useSurgeryDetail.ts`, `LogisticsSection.tsx`, `HospitalizationMap.tsx`, `BedStatsTab.tsx`, `ResultsDashboard.tsx`)**:
+    *   **Duración Sugerida en Detalle de Cirugía**:
+        - Si hay 1 o 2 cirugías históricas en el procedimiento, se toma el tiempo **mayor** (enfoque conservador). Si hay 3 o más cirugías, se toma el **promedio**.
+        - Si el médico tiene $\ge 3$ cirugías, muestra el promedio de su equipo (`equipo: N`); si no, toma la casuística global (`gral: N`).
+        - Autocompletado automático del campo "Duración Est." al seleccionar el procedimiento (protegiendo cirugías ya guardadas en base de datos o editadas a mano por el usuario).
+        - Badge de sugerencia interactivo y clickeable para aplicar el valor en el input.
+    *   **Estimación de Camas de Internación y Extractor Multilínea**:
+        - Corregido bug en `extractProcedureCodeAndName` que cortaba cadenas con saltos de línea (`\n`, como notas de honorarios y AOTER), permitiendo agrupar más de 103 cirugías que quedaban como código desconocido (`UNKNOWN`).
+        - Reducida la meta mínima de muestras para estimación de camas de **10 a 3 casos**, habilitando de inmediato la predicción de alta y semáforo de camas para cirugías de mediana casuística (ej. Artroplastia de cadera con 9 casos).
+
+*   `[2026-10-07]`: **Carga Directa de Guardias de Enfermería en Calendario Mensual y Fix de Query (`NursingRosterView.tsx`)**:
+    *   **Asignación Directa en Grilla Mensual**: Cada celda mensual ahora exhibe franjas individuales para Mañana (M), Tarde (T) y Noche (N) con código de color institucional. Toda la tarjeta del turno es interactiva para abrir el selector de asignación sin navegar a la vista diaria.
+    *   **Gestión Rápida de Bajas**: Botón interactivo `×` por turno asignado para quitar cobertura de forma inmediata con confirmación.
+    *   **Solución a Error 400 en Supabase**: Corregido el query de `nursing_roster` y `nursing_absences` retirando la columna inexistente `full_name` de `quirofano.users` (`nurse:nurse_id(id, name, email)`).
+
 *   `[2026-10-07]`: **Pestaña de Gestión de Feriados y Asuetos en Configuración e Integración en Panel de Técnicos (`Settings.tsx`, `HolidaysTab.tsx`, `Calendar.tsx`, `TecnicoPanel.tsx`)**:
-    *   **Nueva Pestaña UI**: Sección **"Feriados y Asuetos"** en Configuración (`HolidaysTab.tsx`) para listar, crear, editar y eliminar feriados nacionales, provinciales, institucionales y asuetos de sanidad (ATSA).
     *   **Sincronización Automática con ArgentinaDatos**: Botón de un solo clic para sincronizar y rellenar automáticamente los feriados oficiales nacionales de cualquier año en la tabla `quirofano.calendar_holidays`.
     *   **Unificación con Calendario Quirúrgico**: `Calendar.tsx` ahora consulta de forma reactiva la tabla `calendar_holidays` de Supabase (permitiendo feriados y asuetos manuales), manteniendo como fallback la API oficial.
     *   **Liquidación Dinámica en Panel de Técnicos**: `TecnicoPanel.tsx` ahora consulta `quirofano.calendar_holidays` para el año seleccionado. Fechas como el **Día de la Sanidad (21 de Septiembre)** y cualquier feriado institucional ahora se computan automáticamente como feriado en el cálculo de guardias (1 día entero de liquidación), se colorean de amarillo/ámbar en el calendario y muestran su nombre y estrella distintiva.

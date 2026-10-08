@@ -59,6 +59,7 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
     const [surgeryDate, setSurgeryDate] = useState('');
     const [startTime, setStartTime] = useState('');
     const [estimatedDuration, setEstimatedDuration] = useState('');
+    const [isDurationUserModified, setIsDurationUserModified] = useState(false);
     const [status, setStatus] = useState<string>('pending_validation');
     const [priority, setPriority] = useState<string>('elective');
     const [isGuardia, setIsGuardia] = useState(false);
@@ -449,18 +450,55 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
                     return { duration, doctorId: s.doctor_id };
                 }).filter(s => s.duration > 5 && s.duration < 600);
                 if (validSurgeries.length === 0) { setPredictedDuration(null); setPredictionBasis(null); setPredictionCount(0); return; }
+                // Helper de cálculo: si hay 3 o más calcula promedio, si hay 1 o 2 toma el mayor (tiempo más conservador)
+                const calculateSuggestedDuration = (surgeriesList: { duration: number }[]) => {
+                    if (surgeriesList.length >= 3) {
+                        return Math.round(surgeriesList.reduce((acc, s) => acc + s.duration, 0) / surgeriesList.length);
+                    }
+                    return Math.max(...surgeriesList.map(s => s.duration));
+                };
+
                 const doctorSurgeries = validSurgeries.filter(s => s.doctorId === selectedDoctorId);
+
+                let suggestedVal: number | null = null;
+                // Si el médico tiene 3 o más, sugerencia basada en el equipo (promedio de su equipo)
                 if (doctorSurgeries.length >= 3) {
-                    const avg = Math.round(doctorSurgeries.reduce((acc, s) => acc + s.duration, 0) / doctorSurgeries.length);
-                    setPredictedDuration(avg); setPredictionBasis('doctor'); setPredictionCount(doctorSurgeries.length);
+                    suggestedVal = calculateSuggestedDuration(doctorSurgeries);
+                    setPredictedDuration(suggestedVal);
+                    setPredictionBasis('doctor');
+                    setPredictionCount(doctorSurgeries.length);
                 } else if (validSurgeries.length >= 3) {
-                    const avg = Math.round(validSurgeries.reduce((acc, s) => acc + s.duration, 0) / validSurgeries.length);
-                    setPredictedDuration(avg); setPredictionBasis('general'); setPredictionCount(validSurgeries.length);
-                } else { setPredictedDuration(null); setPredictionBasis(null); setPredictionCount(0); }
+                    // Si el médico no llega a 3, pero en el global hay 3 o más: promedio general
+                    suggestedVal = calculateSuggestedDuration(validSurgeries);
+                    setPredictedDuration(suggestedVal);
+                    setPredictionBasis('general');
+                    setPredictionCount(validSurgeries.length);
+                } else if (validSurgeries.length >= 1) {
+                    // Si en el global hay solo 1 o 2 cirugías: toma el tiempo mayor
+                    suggestedVal = calculateSuggestedDuration(validSurgeries);
+                    setPredictedDuration(suggestedVal);
+                    setPredictionBasis('general');
+                    setPredictionCount(validSurgeries.length);
+                } else {
+                    setPredictedDuration(null);
+                    setPredictionBasis(null);
+                    setPredictionCount(0);
+                }
+
+                // Reemplazar automáticamente el campo de Duración Est.
+                // A menos que:
+                // 1. El usuario lo haya modificado manualmente en esta sesión (isDurationUserModified).
+                // 2. O la cirugía ya esté guardada en la base de datos con una duración previa (!isNew && originalData?.estimated_duration).
+                if (suggestedVal !== null) {
+                    const alreadySavedInDB = !isNew && originalData?.estimated_duration && Number(originalData.estimated_duration) > 0;
+                    if (!isDurationUserModified && !alreadySavedInDB) {
+                        setEstimatedDuration(String(suggestedVal));
+                    }
+                }
             } catch (err) { console.error('Error in prediction:', err); }
         };
         fetchPredictedDuration();
-    }, [selectedProcedures, selectedDoctorId]);
+    }, [selectedProcedures, selectedDoctorId, isNew, originalData?.estimated_duration, isDurationUserModified]);
 
     // Config Logic
     useEffect(() => {
@@ -1185,7 +1223,7 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
         anesthesiaType, setAnesthesiaType, preOpNotes, setPreOpNotes, preOpExams, setPreOpExams,
         preOpDate, setPreOpDate, consentSigned, setConsentSigned, authDate, setAuthDate,
         medicalCoverage, setMedicalCoverage, surgeryDate, setSurgeryDate, startTime, setStartTime,
-        estimatedDuration, setEstimatedDuration, status, setStatus, priority, setPriority,
+        estimatedDuration, setEstimatedDuration, isDurationUserModified, setIsDurationUserModified, status, setStatus, priority, setPriority,
         isGuardia, setIsGuardia, selectedOrId, setSelectedOrId, anesthesiologistId, setAnesthesiologistId,
         selectedDoctorId, setSelectedDoctorId, referringDoctorId, setReferringDoctorId,
         selectedVendor, setSelectedVendor, requiresProsthesis, setRequiresProsthesis,

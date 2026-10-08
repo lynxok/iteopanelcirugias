@@ -76,6 +76,7 @@ export const SurgeryDetail: React.FC = () => {
         surgeryDate, setSurgeryDate,
         startTime, setStartTime,
         estimatedDuration, setEstimatedDuration,
+        setIsDurationUserModified,
         selectedOrId, setSelectedOrId,
         anesthesiaType, setAnesthesiaType,
         anesthesiologistId, setAnesthesiologistId,
@@ -467,7 +468,10 @@ export const SurgeryDetail: React.FC = () => {
                         startTime={startTime}
                         onStartTimeChange={setStartTime}
                         estimatedDuration={estimatedDuration === "" ? "" : Number(estimatedDuration)}
-                        onEstimatedDurationChange={(val) => setEstimatedDuration(val === "" ? "" : String(val))}
+                        onEstimatedDurationChange={(val) => {
+                            setIsDurationUserModified(true);
+                            setEstimatedDuration(val === "" ? "" : String(val));
+                        }}
                         predictedDuration={predictedDuration}
                         predictionBasis={predictionBasis}
                         predictionCount={predictionCount}

@@ -30,9 +30,10 @@ const normalizedNomencladorMapping = Object.fromEntries(
 // Helper to parse procedure code and clean name
 const extractProcedureCodeAndName = (procedureName: string) => {
     if (!procedureName) return { code: '', cleanName: '' };
+    const cleanProc = procedureName.trim();
     
     // Format 1: [CODE] Name
-    const bracketMatch = procedureName.match(/^\[(.*?)\]\s*(.*)$/);
+    const bracketMatch = cleanProc.match(/^\[(.*?)\]\s*([\s\S]*)$/);
     if (bracketMatch) {
         return {
             code: bracketMatch[1].trim(),
@@ -41,7 +42,7 @@ const extractProcedureCodeAndName = (procedureName: string) => {
     }
     
     // Format 2: CODE followed by separator (colon, hyphen, or space) and Name
-    const genericMatch = procedureName.match(/^([A-Za-z0-9]+(?:[\.\-][A-Za-z0-9]+)+)\s*[\s\-:]\s*(.*)$/);
+    const genericMatch = cleanProc.match(/^([A-Za-z0-9]+(?:[\.\-][A-Za-z0-9]+)+)\s*[\s\-:]\s*([\s\S]*)$/);
     if (genericMatch) {
         return {
             code: genericMatch[1].trim(),
@@ -50,7 +51,7 @@ const extractProcedureCodeAndName = (procedureName: string) => {
     }
 
     // Format 3: Just the CODE (e.g. "PC.09.01")
-    const codeOnlyMatch = procedureName.match(/^([A-Za-z0-9]+(?:[\.\-][A-Za-z0-9]+)+)$/);
+    const codeOnlyMatch = cleanProc.match(/^([A-Za-z0-9]+(?:[\.\-][A-Za-z0-9]+)+)$/);
     if (codeOnlyMatch) {
         return {
             code: codeOnlyMatch[1].trim(),
@@ -59,7 +60,7 @@ const extractProcedureCodeAndName = (procedureName: string) => {
     }
 
     // Format 4: CODE: Name
-    const colonMatch = procedureName.match(/^([^:]+?)\s*:\s*(.*)$/);
+    const colonMatch = cleanProc.match(/^([^:\n]+?)\s*:\s*([\s\S]*)$/);
     if (colonMatch) {
         const prefix = colonMatch[1].trim();
         const suffix = colonMatch[2].trim();
@@ -73,7 +74,7 @@ const extractProcedureCodeAndName = (procedureName: string) => {
 
     return {
         code: '',
-        cleanName: procedureName.trim()
+        cleanName: cleanProc
     };
 };
 
@@ -144,7 +145,7 @@ const HospitalizationMap: React.FC = () => {
             }
         });
 
-        if (totalCases < 10) {
+        if (totalCases < 3) {
             return {
                 status: 'insufficient_data',
                 label: 'Estadía Indefinida',
@@ -683,8 +684,8 @@ let hospitalizationCache: {
                     }
                 });
 
-                if (totalCases < 10) {
-                    const proceed = confirm(`Advertencia: El procedimiento "${fullSurgery.procedure_name}" tiene solo ${totalCases} casos registrados en total (se requieren mínimo 10 casos válidos para habilitar la estimación predictiva de camas). ¿Desea proceder con el ingreso manualmente de todas formas?`);
+                if (totalCases < 3) {
+                    const proceed = confirm(`Advertencia: El procedimiento "${fullSurgery.procedure_name}" tiene solo ${totalCases} casos registrados en total (se requieren mínimo 3 casos válidos para habilitar la estimación predictiva de camas). ¿Desea proceder con el ingreso manualmente de todas formas?`);
                     if (!proceed) {
                         setLoading(false);
                         return;
@@ -1154,7 +1155,7 @@ let hospitalizationCache: {
                                                                                 return (
                                                                                     <span 
                                                                                         className="inline-block mt-1 text-[8px] font-black text-slate-400 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded uppercase"
-                                                                                        title={`Falta recolectar muestras (${proj.recorded_cases}/10 casos)`}
+                                                                                        title={`Falta recolectar muestras (${proj.recorded_cases}/3 casos)`}
                                                                                     >
                                                                                         Indefinida
                                                                                     </span>

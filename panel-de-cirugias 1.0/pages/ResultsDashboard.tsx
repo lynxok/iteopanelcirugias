@@ -95,9 +95,10 @@ const normalizedNomencladorMapping = Object.fromEntries(
 // Helper to parse procedure code and clean name
 const extractProcedureCodeAndName = (procedureName: string) => {
     if (!procedureName) return { code: '', cleanName: '' };
+    const cleanProc = procedureName.trim();
     
     // Format 1: [CODE] Name
-    const bracketMatch = procedureName.match(/^\[(.*?)\]\s*(.*)$/);
+    const bracketMatch = cleanProc.match(/^\[(.*?)\]\s*([\s\S]*)$/);
     if (bracketMatch) {
         return {
             code: bracketMatch[1].trim(),
@@ -107,7 +108,7 @@ const extractProcedureCodeAndName = (procedureName: string) => {
     
     // Format 2: CODE followed by separator (colon, hyphen, or space) and Name
     // A code starts with letters/numbers and has at least one dot or hyphen, e.g. PC.09.01 or 121.01.01
-    const genericMatch = procedureName.match(/^([A-Za-z0-9]+(?:[\.\-][A-Za-z0-9]+)+)\s*[\s\-:]\s*(.*)$/);
+    const genericMatch = cleanProc.match(/^([A-Za-z0-9]+(?:[\.\-][A-Za-z0-9]+)+)\s*[\s\-:]\s*([\s\S]*)$/);
     if (genericMatch) {
         return {
             code: genericMatch[1].trim(),
@@ -116,7 +117,7 @@ const extractProcedureCodeAndName = (procedureName: string) => {
     }
 
     // Format 3: Just the CODE (e.g. "PC.09.01")
-    const codeOnlyMatch = procedureName.match(/^([A-Za-z0-9]+(?:[\.\-][A-Za-z0-9]+)+)$/);
+    const codeOnlyMatch = cleanProc.match(/^([A-Za-z0-9]+(?:[\.\-][A-Za-z0-9]+)+)$/);
     if (codeOnlyMatch) {
         return {
             code: codeOnlyMatch[1].trim(),
@@ -125,7 +126,7 @@ const extractProcedureCodeAndName = (procedureName: string) => {
     }
 
     // Format 4: CODE: Name (fallback for codes without dots/hyphens but short prefix with colon)
-    const colonMatch = procedureName.match(/^([^:]+?)\s*:\s*(.*)$/);
+    const colonMatch = cleanProc.match(/^([^:\n]+?)\s*:\s*([\s\S]*)$/);
     if (colonMatch) {
         const prefix = colonMatch[1].trim();
         const suffix = colonMatch[2].trim();
@@ -139,7 +140,7 @@ const extractProcedureCodeAndName = (procedureName: string) => {
 
     return {
         code: '',
-        cleanName: procedureName.trim()
+        cleanName: cleanProc
     };
 };
 

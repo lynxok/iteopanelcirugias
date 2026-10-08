@@ -122,12 +122,12 @@ export const NursingRosterView: React.FC<NursingRosterViewProps> = ({
             const [rosterRes, absencesRes, logsRes] = await Promise.all([
                 supabase
                     .from('nursing_roster')
-                    .select('*, nurse:nurse_id(id, name, full_name, email)')
+                    .select('*, nurse:nurse_id(id, name, email)')
                     .gte('date', startStr)
                     .lte('date', endStr),
                 supabase
                     .from('nursing_absences')
-                    .select('*, nurse:nurse_id(id, name, full_name, email)')
+                    .select('*, nurse:nurse_id(id, name, email)')
                     .or(`start_date.lte.${endStr},end_date.gte.${startStr}`),
                 supabase
                     .from('nursing_shift_logs')
@@ -611,23 +611,31 @@ export const NursingRosterView: React.FC<NursingRosterViewProps> = ({
                             return (
                                 <div
                                     key={dateStr}
-                                    onClick={() => {
-                                        setSelectedDate(d);
-                                        setViewMode('daily');
-                                    }}
-                                    className={`min-h-[105px] p-2 rounded-xl border transition-all cursor-pointer flex flex-col justify-between hover:border-primary hover:shadow-md ${
+                                    className={`min-h-[135px] p-2 rounded-xl border transition-all flex flex-col justify-between ${
                                         isToday 
                                             ? 'bg-primary/5 border-primary ring-1 ring-primary/20' 
-                                            : 'bg-white border-slate-200'
+                                            : 'bg-white border-slate-200 hover:border-slate-300'
                                     }`}
                                 >
-                                    <div className="flex justify-between items-center mb-1">
-                                        <span className={`text-xs font-black size-6 rounded-full flex items-center justify-center ${
-                                            isToday ? 'bg-primary text-white' : 'text-slate-700'
-                                        }`}>
+                                    <div className="flex justify-between items-center mb-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedDate(d);
+                                                setViewMode('daily');
+                                            }}
+                                            className={`text-xs font-black size-6 rounded-full flex items-center justify-center transition-transform hover:scale-110 ${
+                                                isToday ? 'bg-primary text-white shadow-xs' : 'text-slate-700 hover:bg-slate-100'
+                                            }`}
+                                            title="Ver detalle del día"
+                                        >
                                             {format(d, 'd')}
-                                        </span>
-                                        <div className="flex items-center gap-1">
+                                        </button>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-[9px] font-bold text-slate-400">
+                                                {dayEntries.length} {dayEntries.length === 1 ? 'enf' : 'enfs'}
+                                            </span>
                                             <div className={`size-2 rounded-full ${
                                                 dayEntries.length === 0 
                                                     ? 'bg-rose-400' 
@@ -644,38 +652,91 @@ export const NursingRosterView: React.FC<NursingRosterViewProps> = ({
                                         </div>
                                     </div>
 
-                                    {/* Lista de Turnos Asignados */}
-                                    <div className="space-y-1 flex-1 overflow-hidden">
+                                    {/* Franjas de Turnos: Mañana, Tarde, Noche */}
+                                    <div className="space-y-1 flex-1">
                                         {(['manana', 'tarde', 'noche'] as NursingShiftType[]).map(s => {
                                             const sEntries = dayEntries.filter(e => e.shift === s);
-                                            if (sEntries.length === 0) return null;
+                                            const shiftInfo = SHIFT_LABELS[s];
+                                            const isShiftAssigned = sEntries.length > 0;
+
                                             return (
-                                                <div key={s} className="text-[9px] truncate flex items-center gap-1 text-slate-600">
-                                                    <span className={`font-black uppercase px-1 rounded ${
-                                                        s === 'manana' ? 'bg-amber-100 text-amber-800' :
-                                                        s === 'tarde' ? 'bg-sky-100 text-sky-800' :
-                                                        'bg-indigo-100 text-indigo-800'
-                                                    }`}>
-                                                        {s[0].toUpperCase()}
-                                                    </span>
-                                                    <span className="truncate font-semibold">
-                                                        {sEntries.map(e => e.nurse?.name || 'Enf').join(', ')}
-                                                    </span>
+                                                <div 
+                                                    key={s} 
+                                                    onClick={() => {
+                                                        if (!isSupervisor) return;
+                                                        setSelectedSlot({ dateStr, shift: s });
+                                                        setShowAssignModal(true);
+                                                    }}
+                                                    className={`group/shift rounded-md px-1.5 py-1 text-[10px] flex items-center justify-between transition-all border ${
+                                                        isSupervisor ? 'cursor-pointer' : ''
+                                                    } ${
+                                                        isShiftAssigned 
+                                                            ? 'bg-slate-50/80 border-slate-200 hover:border-primary/50 hover:bg-slate-100/80 shadow-2xs' 
+                                                            : 'bg-transparent border-dashed border-slate-200 hover:border-primary hover:bg-primary/5'
+                                                    }`}
+                                                    title={isSupervisor ? `Asignar o cambiar guardia ${shiftInfo.label}` : undefined}
+                                                >
+                                                    <div className="flex items-center gap-1 min-w-0 flex-1">
+                                                        <span className={`font-black uppercase text-[8px] px-1 py-0.2 rounded shrink-0 ${shiftInfo.color}`}>
+                                                            {s === 'manana' ? 'M' : s === 'tarde' ? 'T' : 'N'}
+                                                        </span>
+                                                        
+                                                        {isShiftAssigned ? (
+                                                            <div className="truncate text-slate-700 font-bold text-[10px]">
+                                                                {sEntries.map(e => e.nurse?.name || 'Enf').join(', ')}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[9px] text-slate-400 font-medium italic group-hover/shift:text-primary transition-colors">
+                                                                Sin cubrir
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Botón de acción por turno */}
+                                                    {isSupervisor && (
+                                                        <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                                                            {isShiftAssigned && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleRemoveEntry(sEntries[0].id);
+                                                                    }}
+                                                                    className="opacity-0 group-hover/shift:opacity-100 text-rose-500 hover:text-rose-700 size-4 flex items-center justify-center rounded hover:bg-rose-50 transition-opacity"
+                                                                    title="Quitar guardia"
+                                                                >
+                                                                    &times;
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSelectedSlot({ dateStr, shift: s });
+                                                                    setShowAssignModal(true);
+                                                                }}
+                                                                className={`size-4 rounded flex items-center justify-center transition-all ${
+                                                                    !isShiftAssigned 
+                                                                        ? 'text-slate-400 group-hover/shift:text-primary group-hover/shift:scale-110' 
+                                                                        : 'opacity-0 group-hover/shift:opacity-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200'
+                                                                }`}
+                                                                title={`Asignar guardia ${shiftInfo.label}`}
+                                                            >
+                                                                <span className="material-symbols-outlined text-[12px]">add</span>
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             );
                                         })}
 
-                                        {/* Badge de Vacaciones / Ausencias si existen */}
+                                        {/* Badge de Vacaciones / Ausencias */}
                                         {dayAbsences.map(a => (
                                             <div key={a.id} className="text-[8px] truncate px-1 rounded bg-purple-50 text-purple-700 font-bold border border-purple-200 flex items-center gap-0.5">
-                                                <span className="material-symbols-outlined text-[10px]">beach_access</span>
-                                                <span className="truncate">{a.nurse?.name}: Vacaciones</span>
+                                                <span className="material-symbols-outlined text-[9px]">beach_access</span>
+                                                <span className="truncate">{a.nurse?.name}: Vac</span>
                                             </div>
                                         ))}
-                                    </div>
-
-                                    <div className="text-[9px] text-slate-400 font-bold pt-1 text-right">
-                                        {dayEntries.length} {dayEntries.length === 1 ? 'enf' : 'enfs'}
                                     </div>
                                 </div>
                             );
