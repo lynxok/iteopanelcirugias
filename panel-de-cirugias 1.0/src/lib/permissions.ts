@@ -322,16 +322,25 @@ export const checkAccess = (
   if (!role) return false;
   if (role.toLowerCase() === 'superadmin') return true;
 
+  // Normalizar alias de roles frecuentes (ej: 'ART' -> 'Oficina ART')
+  const normalizedRole = role.toLowerCase() === 'art' ? 'oficina art' : role.toLowerCase();
+
   let perms = null;
   const roleKey = Object.keys(rolePermissions || {}).find(
-    k => k.toLowerCase() === role.toLowerCase()
+    k => {
+      const kNorm = k.toLowerCase() === 'art' ? 'oficina art' : k.toLowerCase();
+      return kNorm === normalizedRole;
+    }
   );
   if (roleKey) {
     perms = rolePermissions[roleKey];
   } else {
     // Fallback de seguridad al diccionario LEGACY_PERMISSIONS embebido
     const legacyKey = Object.keys(LEGACY_PERMISSIONS).find(
-      k => k.toLowerCase() === role.toLowerCase()
+      k => {
+        const kNorm = k.toLowerCase() === 'art' ? 'oficina art' : k.toLowerCase();
+        return kNorm === normalizedRole;
+      }
     );
     if (legacyKey) {
       perms = LEGACY_PERMISSIONS[legacyKey];
@@ -375,8 +384,13 @@ export const checkFieldPermission = (
   if (!role) return false;
   if (role.toLowerCase() === 'superadmin') return true;
 
+  const normalizedRole = role.toLowerCase() === 'art' ? 'oficina art' : role.toLowerCase();
+
   const roleKey = Object.keys(rolePermissions || {}).find(
-    k => k.toLowerCase() === role.toLowerCase()
+    k => {
+      const kNorm = k.toLowerCase() === 'art' ? 'oficina art' : k.toLowerCase();
+      return kNorm === normalizedRole;
+    }
   );
   if (!roleKey) return true; // Por defecto editable si no hay restricciones
 

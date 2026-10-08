@@ -1175,7 +1175,11 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
         };
     }, []);
 
-    const hasEditAccess = checkAccess(rolePermissions || LEGACY_PERMISSIONS, currentUserRole, 'surgeries', 'edit');
+    const isArtRole = currentUserRole?.toLowerCase() === 'oficina art' || currentUserRole?.toLowerCase() === 'art' || currentUserRole === 'Administrativo ART';
+    const isArtSurgery = availableCoverages.find(c => c.name === medicalCoverage)?.type === 'ART' || (medicalCoverage && medicalCoverage.toUpperCase().includes('ART'));
+
+    // Si el rol es de Oficina ART / ART y la cirugía es de cobertura ART, tiene acceso de edición garantizado
+    const hasEditAccess = checkAccess(rolePermissions || LEGACY_PERMISSIONS, currentUserRole, 'surgeries', 'edit') || (isArtRole && !!isArtSurgery);
 
     const isReadOnly = !hasEditAccess ||
                        (currentUserRole === 'Administrativo de Guardias' && !isNew && originalData?.created_by_role !== 'Administrativo de Guardias') ||
