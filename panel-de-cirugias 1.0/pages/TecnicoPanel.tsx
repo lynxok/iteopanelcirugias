@@ -463,7 +463,9 @@ export default function TecnicoPanel() {
                     `)
                     .eq('status', 'completed')
                     .gte('surgery_date', surgStartStr)
-                    .lte('surgery_date', surgEndStr),
+                    .lte('surgery_date', surgEndStr)
+                    .order('surgery_date', { ascending: true })
+                    .order('actual_start_time', { ascending: true }),
                 targetTecnicoId ? supabase
                     .from('tecnico_attendance')
                     .select('*')
@@ -1049,6 +1051,12 @@ export default function TecnicoPanel() {
                 manualRecord: myManual || null,
                 manualStatus
             };
+        }).sort((a, b) => {
+            const dateCompare = a.date.localeCompare(b.date);
+            if (dateCompare !== 0) return dateCompare;
+            const timeA = a.startTime || '';
+            const timeB = b.startTime || '';
+            return timeA.localeCompare(timeB);
         });
     }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate, overtimeTolerance, selectedPracticesMap, isTecnicoOnLeave, hasCheckedInOnDate]);
 
