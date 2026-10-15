@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../src/lib/supabase';
 import { useAuth } from '../src/lib/AuthContext';
+import { format } from 'date-fns';
+import * as XLSX from 'xlsx';
 import ProgressBar from '../components/ProgressBar';
 import ExcelImporter from '../components/ExcelImporter';
 import { captureError } from '../src/lib/errorLogger';
@@ -10,6 +12,7 @@ interface SurgeryRow {
     id: string;
     patientName: string;
     patientId: string;
+    medicalRecordNumber?: string;
     procedure: string;
     doctor: string;
     status: 'Borrador' | 'Pendiente Autorización' | 'Programada' | 'En Quirófano' | 'En Curso' | 'Demorada' | 'Finalizada' | 'Cancelada' | 'Suspendida' | 'A la espera de fecha';
@@ -65,6 +68,7 @@ const SurgeryList: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('Todos');
     const [filterCoverage, setFilterCoverage] = useState<string>('Todas');
+    const [filterYear, setFilterYear] = useState<string>('Todos');
     const [filterVendor, setFilterVendor] = useState<string>('Todas');
     const [coverageTypeFilter, setCoverageTypeFilter] = useState<string>('Todos');
     const [coverageMapping, setCoverageMapping] = useState<Record<string, string>>({});
@@ -108,7 +112,7 @@ const SurgeryList: React.FC = () => {
     // Resetear a página 1 cuando cambian los filtros
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, filterStatus, filterCoverage, filterVendor, coverageTypeFilter, filterDuplicatesOnly]);
+    }, [searchTerm, filterStatus, filterCoverage, filterYear, filterVendor, coverageTypeFilter, filterDuplicatesOnly]);
 
     useEffect(() => {
         initSurgeryListData();
@@ -188,7 +192,7 @@ const SurgeryList: React.FC = () => {
                     oser_status,
                     diagnosis,
                     operating_rooms (name),
-                    patients (full_name, document_number, nuc),
+                    patients (full_name, document_number, nuc, medical_record_number),
                     nuc,
                     doctors!doctor_id (full_name),
                     vendors (name)
@@ -277,6 +281,7 @@ const SurgeryList: React.FC = () => {
                         id: s.id,
                         patientName: s.patients?.full_name || 'N/A',
                         patientId: s.patients?.document_number || 'N/A',
+                        medicalRecordNumber: s.patients?.medical_record_number || '',
                         procedure: s.procedure_name || '',
                         doctor: s.doctors?.full_name || 'N/A',
                         status: mapStatus(finalStatus),
@@ -537,6 +542,7 @@ const SurgeryList: React.FC = () => {
             const matchesSearch =
                 item.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 item.patientId.includes(searchTerm) ||
+                (item.medicalRecordNumber && String(item.medicalRecordNumber).toLowerCase().includes(searchTerm.toLowerCase())) ||
                 (item.nuc && String(item.nuc).toLowerCase().includes(searchTerm.toLowerCase())) ||
                 item.procedure.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 item.doctor.toLowerCase().includes(searchTerm.toLowerCase());
@@ -545,6 +551,9 @@ const SurgeryList: React.FC = () => {
 
             const matchesCoverage = filterCoverage === 'Todas' || item.medical_coverage === filterCoverage;
             const matchesVendor = filterVendor === 'Todas' || item.vendor_name === filterVendor;
+
+            const surgeryYear = item.date && item.date !== 'TBD' ? item.date.substring(0, 4) : '';
+            const matchesYear = filterYear === 'Todos' || surgeryYear === filterYear;
 
             let matchesType = true;
             if (coverageTypeFilter !== 'Todos') {
@@ -560,7 +569,7 @@ const SurgeryList: React.FC = () => {
 
             const matchesDuplicates = !filterDuplicatesOnly || (item.nuc && nucFrequencies[String(item.nuc).trim()] > 1);
 
-            return matchesSearch && matchesStatus && matchesCoverage && matchesVendor && matchesType && matchesDuplicates;
+            return matchesSearch && matchesStatus && matchesCoverage && matchesVendor && matchesYear && matchesType && matchesDuplicates;
         });
 
         // Si estamos viendo duplicados, ordenamos por NUC para que queden juntos y sea facil compararlos
@@ -573,7 +582,7 @@ const SurgeryList: React.FC = () => {
         }
 
         return result;
-    }, [surgeries, searchTerm, filterStatus, filterCoverage, filterVendor, coverageTypeFilter, filterDuplicatesOnly, nucFrequencies, coverageMapping]);
+    }, [surgeries, searchTerm, filterStatus, filterCoverage, filterYear, filterVendor, coverageTypeFilter, filterDuplicatesOnly, nucFrequencies, coverageMapping]);
 
     // Paginación calculada
     const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
@@ -592,6 +601,72 @@ const SurgeryList: React.FC = () => {
         const vendors = new Set(surgeries.map(s => s.vendor_name).filter(Boolean));
         return ['Todas', ...Array.from(vendors).sort()];
     }, [surgeries]);
+
+    // Derive unique years for dropdown
+    const uniqueYears = useMemo(() => {
+        const years = new Set(
+            surgeries
+                .map(s => (s.date && s.date !== 'TBD' ? s.date.substring(0, 4) : ''))
+                .filter(y => y && y.length === 4)
+        );
+        const sorted = Array.from(years).sort().reverse();
+        return ['Todos', ...sorted];
+    }, [surgeries]);
+
+    const exportToExcel = () => {
+        if (!filteredData.length) return;
+
+        const exportRows = filteredData.map(s => {
+            let formattedDate = s.date;
+            if (s.date && s.date !== 'TBD') {
+                try {
+                    formattedDate = format(new Date(s.date + 'T12:00:00'), 'dd/MM/yyyy');
+                } catch {
+                    formattedDate = s.date;
+                }
+            }
+
+            return {
+                'Fecha': formattedDate,
+                'Hora': s.time || '--:--',
+                'Paciente': s.patientName,
+                'DNI': s.patientId,
+                'Nº Historia Clínica': s.medicalRecordNumber || '',
+                'NUC': s.nuc || '',
+                'Cobertura': s.medical_coverage || 'Sin Cobertura',
+                'Procedimiento': s.procedure,
+                'Diagnóstico': s.diagnosis || '',
+                'Cirujano': s.doctor,
+                'Ortopedia': s.vendor_name || '',
+                'Quirófano': s.or || '',
+                'Estado': s.status
+            };
+        });
+
+        const ws = XLSX.utils.json_to_sheet(exportRows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Cirugías');
+
+        ws['!cols'] = [
+            { wch: 12 }, // Fecha
+            { wch: 8 },  // Hora
+            { wch: 30 }, // Paciente
+            { wch: 12 }, // DNI
+            { wch: 18 }, // Nº HC
+            { wch: 12 }, // NUC
+            { wch: 25 }, // Cobertura
+            { wch: 45 }, // Procedimiento
+            { wch: 30 }, // Diagnóstico
+            { wch: 25 }, // Cirujano
+            { wch: 20 }, // Ortopedia
+            { wch: 15 }, // Quirófano
+            { wch: 18 }  // Estado
+        ];
+
+        const dateSuffix = format(new Date(), 'yyyy-MM-dd_HHmm');
+        const yearTag = filterYear !== 'Todos' ? `_${filterYear}` : '';
+        XLSX.writeFile(wb, `Listado_Cirugias${yearTag}_${dateSuffix}.xlsx`);
+    };
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -628,26 +703,37 @@ const SurgeryList: React.FC = () => {
                         <h1 className="text-2xl font-bold text-slate-900">Listado General</h1>
                         <p className="text-slate-500 text-sm mt-1">Gestión centralizada de todas las solicitudes quirúrgicas.</p>
                     </div>
-                    {user?.role !== 'Medico' && user?.role !== 'Tecnico' && user?.role !== 'Ortopedia' && (
-                        <div className="flex flex-col md:flex-row gap-2">
-                            {user?.role === 'SuperAdmin' && (
+                    <div className="flex flex-col md:flex-row gap-2">
+                        <button
+                            onClick={exportToExcel}
+                            disabled={filteredData.length === 0}
+                            className="h-10 px-4 bg-emerald-600 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-emerald-600/20"
+                            title="Exportar a Excel (.xlsx) las cirugías según los filtros aplicados"
+                        >
+                            <span className="material-symbols-outlined text-lg">download</span>
+                            Exportar Excel ({filteredData.length})
+                        </button>
+                        {user?.role !== 'Medico' && user?.role !== 'Tecnico' && user?.role !== 'Ortopedia' && (
+                            <>
+                                {user?.role === 'SuperAdmin' && (
+                                    <button
+                                        onClick={() => setShowImporter(!showImporter)}
+                                        className="h-10 px-4 bg-slate-100 text-slate-700 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-200 transition-all border border-slate-200"
+                                    >
+                                        <span className="material-symbols-outlined text-lg">upload_file</span>
+                                        {showImporter ? 'Cerrar Importador' : 'Importar Excel'}
+                                    </button>
+                                )}
                                 <button
-                                    onClick={() => setShowImporter(!showImporter)}
-                                    className="h-10 px-4 bg-slate-100 text-slate-700 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-200 transition-all border border-slate-200"
+                                    onClick={() => navigate('/nueva-cirugia')}
+                                    className="h-10 px-4 bg-primary text-white rounded-xl font-bold flex items-center gap-2 hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
                                 >
-                                    <span className="material-symbols-outlined text-lg">upload_file</span>
-                                    {showImporter ? 'Cerrar Importador' : 'Importar Excel'}
+                                    <span className="material-symbols-outlined text-lg">add</span>
+                                    Nueva Cirugía
                                 </button>
-                            )}
-                            <button
-                                onClick={() => navigate('/nueva-cirugia')}
-                                className="h-10 px-4 bg-primary text-white rounded-xl font-bold flex items-center gap-2 hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
-                            >
-                                <span className="material-symbols-outlined text-lg">add</span>
-                                Nueva Cirugía
-                            </button>
-                        </div>
-                    )}
+                            </>
+                        )}
+                    </div>
                 </div>
 
                 {/* Filters Bar */}
@@ -656,7 +742,7 @@ const SurgeryList: React.FC = () => {
                         <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400">search</span>
                         <input
                             type="text"
-                            placeholder="Buscar por Paciente, DNI, NUC, Procedimiento..."
+                            placeholder="Buscar por Paciente, DNI, HC, NUC, Procedimiento..."
                             className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm transition-all"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -664,6 +750,20 @@ const SurgeryList: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+
+                        {/* Year Filter */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Año:</span>
+                            <select
+                                value={filterYear}
+                                onChange={(e) => setFilterYear(e.target.value)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-300 bg-white text-slate-700 outline-none focus:ring-2 focus:ring-primary/50"
+                            >
+                                {uniqueYears.map(y => (
+                                    <option key={y} value={y}>{y}</option>
+                                ))}
+                            </select>
+                        </div>
 
                         {/* Coverage Filter */}
                         <div className="flex items-center gap-2">
@@ -796,6 +896,12 @@ const SurgeryList: React.FC = () => {
                                                          </div>
                                                         <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5">
                                                             <span>DNI: {row.patientId}</span>
+                                                            {row.medicalRecordNumber && (
+                                                                <>
+                                                                    <span className="text-slate-300">|</span>
+                                                                    <span className="text-slate-600 font-bold bg-slate-100 px-1 py-0.2 rounded border border-slate-200 text-[9px]">HC: {row.medicalRecordNumber}</span>
+                                                                </>
+                                                            )}
                                                             {row.nuc && (
                                                                 <>
                                                                     <span className="text-slate-300">|</span>
@@ -928,11 +1034,17 @@ const SurgeryList: React.FC = () => {
                                     <div className="flex justify-between items-start mb-3">
                                         <div className="flex flex-col max-w-[70%]">
                                             <span className="font-bold text-slate-900 text-sm leading-tight uppercase">{row.patientName}</span>
-                                            {row.nuc && (
-                                                <span className="inline-block text-[9px] text-indigo-700 font-black bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded w-max mt-1 mr-auto">
-                                                    NUC: {row.nuc}
-                                                </span>
-                                            )}
+                                            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5">
+                                                <span>DNI: {row.patientId}</span>
+                                                {row.medicalRecordNumber && (
+                                                    <span className="text-slate-600 font-bold bg-slate-100 px-1 py-0.2 rounded border border-slate-200 text-[9px]">HC: {row.medicalRecordNumber}</span>
+                                                )}
+                                                {row.nuc && (
+                                                    <span className="text-indigo-700 font-black bg-indigo-50 border border-indigo-100 px-1.5 py-0.2 rounded text-[9px]">
+                                                        NUC: {row.nuc}
+                                                    </span>
+                                                )}
+                                            </div>
                                             <span className="text-xs text-slate-500 mt-1">{row.procedure}</span>
                                             <div className="flex flex-wrap gap-1 mt-2">
                                                 {row.medical_coverage && row.medical_coverage !== 'Sin Cobertura' && (

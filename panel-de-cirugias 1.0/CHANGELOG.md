@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v3.13.14 (2026-10-15)
+- **Exportación General a Excel (.xlsx), Filtro por Año y Soporte de Historia Clínica (`SurgeryList.tsx`)**:
+    * **Exportación Directa a Excel**: Botón "Exportar Excel (N)" en la cabecera del Listado General (`/surgeries`) para descargar instantáneamente las cirugías según los filtros activos.
+    * **Columnas Exportadas**: Fecha, Hora, Paciente, DNI, Nº Historia Clínica (`medical_record_number`), NUC, Cobertura, Procedimiento, Diagnóstico, Cirujano, Ortopedia, Quirófano y Estado.
+    * **Filtro de Año Quirúrgico**: Selector desplegable dinámico para filtrar cirugías por año calendario (ej. 2026, 2025, etc.).
+    * **Búsqueda Integral con Historia Clínica**: Inclusión de coincidencia por H.C. en el buscador universal y badge visual `HC` en tarjetas de escritorio y móviles.
+
 ## v3.12.8 (2026-09-25)
 - **Estadísticas de Internación y Ocupación de Habitaciones (`HospitalizationStats.tsx`)**:
     * **Visualización Completa de Habitaciones**: Se removió el recorte de top 5 en el gráfico de torta de "Habitaciones más utilizadas", garantizando que todas las habitaciones de la clínica (incluida la Habitación 2 / Suite) aparezcan listadas.

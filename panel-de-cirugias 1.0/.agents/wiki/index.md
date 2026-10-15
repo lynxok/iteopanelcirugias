@@ -18,6 +18,12 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-10-15]`: **Exportación General a Excel (.xlsx), Filtro de Año y Soporte de Historia Clínica en Listado (`SurgeryList.tsx`)**:
+    *   **Botón de Exportación Directa a Excel**: Incorporado botón "Exportar Excel (N)" en la cabecera de la vista `Listado General` (`/surgeries`). Genera archivo `.xlsx` nativo respetando exactamente los filtros aplicados en pantalla.
+    *   **Columnas Exportadas**: Fecha, Hora, Paciente, DNI, Nº Historia Clínica (`medical_record_number`), NUC, Cobertura, Procedimiento, Diagnóstico, Cirujano, Ortopedia, Quirófano y Estado.
+    *   **Filtro por Año Quirúrgico**: Selector dinámico de año en la barra de filtros (`Todos`, `2026`, `2025`, etc.) derivado de las fechas registradas.
+    *   **Buscador Universal con Historia Clínica**: La barra de búsqueda ahora contempla coincidencias por Paciente, DNI, Nº de HC, NUC, Procedimiento y Cirujano. Visualización de badge `HC` tanto en versión escritorio como en tarjetas móviles.
+
 *   `[2026-10-15]`: **Unificación de Estudios Prequirúrgicos, Solapas Agrupadas y Respaldo Cloud con Retención (v3.13.13)**:
     *   **Solapa Única para ECG (Ergometría)**: Reemplazo de los múltiples checkboxes individuales por una sola tarjeta agrupada para Electrocardiograma que engloba todas las etapas de la ergometría.
     *   **Consolidación en 1 Solo PDF**: Fusión automática (`pypdf`) de Laboratorio y ECGs seleccionados en un único archivo con formato estándar: `PREQUIRURGICO_{APELLIDO_NOMBRE}_{DNI}_{FECHA_DESCARGA}.pdf`.
