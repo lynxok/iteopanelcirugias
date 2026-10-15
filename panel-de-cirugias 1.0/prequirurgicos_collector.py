@@ -8,7 +8,10 @@ import imaplib
 import email
 from email.header import decode_header
 from datetime import datetime
-import pypdf
+try:
+    import pypdf
+except ImportError:
+    pypdf = None
 from playwright.sync_api import sync_playwright
 
 def merge_pdf_files(file_paths, output_path):
@@ -16,6 +19,9 @@ def merge_pdf_files(file_paths, output_path):
     Combina múltiples archivos PDF en un único documento maestro.
     """
     if not file_paths:
+        return None
+    if pypdf is None:
+        log("ADVERTENCIA: La librería 'pypdf' no está instalada. Ejecute 'pip install pypdf' para habilitar la unificación de PDFs.")
         return None
     try:
         writer = pypdf.PdfWriter()

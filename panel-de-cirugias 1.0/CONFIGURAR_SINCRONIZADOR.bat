@@ -25,10 +25,10 @@ if %errorlevel% neq 0 (
     echo [ADVERTENCIA] No se pudo actualizar pip, se continuara con la instalacion de dependencias.
 )
 
-echo [!] Instalando robot de navegacion (Playwright)...
-python -m pip install playwright
+echo [!] Instalando dependencias de Python (Playwright y pypdf)...
+python -m pip install playwright pypdf
 if %errorlevel% neq 0 (
-    echo [ERROR] No se pudo instalar playwright. Por favor verifica tu conexion a internet o si tienes permisos.
+    echo [ERROR] No se pudieron instalar las dependencias (playwright/pypdf). Por favor verifica tu conexion a internet o si tienes permisos.
     pause
     exit /b %errorlevel%
 )

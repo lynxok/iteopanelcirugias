@@ -1145,8 +1145,42 @@ ipcMain.handle('select-directory', async () => {
 
 // --- RECOLECTOR DE PREQUIRÚRGICOS ---
 let activePrequirurgicosProcess = null;
+let pypdfChecked = false;
+
+async function ensurePythonDependencies(event = null) {
+    if (pypdfChecked) return;
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    return new Promise((resolve) => {
+        // Verificar si pypdf ya está instalado sin levantar procesos lentos
+        const checkProc = spawn(pythonCmd, ['-c', 'import pypdf'], { windowsHide: true });
+        checkProc.on('close', (code) => {
+            if (code === 0) {
+                pypdfChecked = true;
+                return resolve();
+            }
+            if (event && event.sender) {
+                event.sender.send('prequirurgicos-log', '[Sistema] Detectada falta de librería "pypdf". Instalando automáticamente en segundo plano...');
+            }
+            const installProc = spawn(pythonCmd, ['-m', 'pip', 'install', 'pypdf'], { windowsHide: true });
+            installProc.on('close', (installCode) => {
+                if (installCode === 0) {
+                    pypdfChecked = true;
+                    if (event && event.sender) {
+                        event.sender.send('prequirurgicos-log', '[Sistema] Librería "pypdf" instalada con éxito.');
+                    }
+                } else if (event && event.sender) {
+                    event.sender.send('prequirurgicos-log', '[Advertencia] No se pudo auto-instalar "pypdf". Continuando...');
+                }
+                resolve();
+            });
+            installProc.on('error', () => resolve());
+        });
+        checkProc.on('error', () => resolve());
+    });
+}
 
 ipcMain.handle('run-prequirurgicos-collector', async (event, patientName, labDate, ecgDate, outputDir, showBrowser = false, patientDni = '') => {
+    await ensurePythonDependencies(event);
     return new Promise((resolve) => {
         if (activePrequirurgicosProcess) {
             try {
@@ -1303,6 +1337,7 @@ ipcMain.handle('read-file-base64', async (event, filePath) => {
 });
 
 ipcMain.handle('merge-prequirurgicos-pdfs', async (event, destPath, filePaths) => {
+    await ensurePythonDependencies(event);
     return new Promise((resolve) => {
         try {
             if (!destPath || !filePaths || filePaths.length === 0) {
