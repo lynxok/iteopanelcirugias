@@ -1302,5 +1302,72 @@ ipcMain.handle('read-file-base64', async (event, filePath) => {
     }
 });
 
+ipcMain.handle('merge-prequirurgicos-pdfs', async (event, destPath, filePaths) => {
+    return new Promise((resolve) => {
+        try {
+            if (!destPath || !filePaths || filePaths.length === 0) {
+                return resolve({ success: false, error: 'Parámetros inválidos para combinación de PDFs.' });
+            }
+
+            let scriptPath = path.join(__dirname, 'prequirurgicos_collector.py');
+            if (app.isPackaged) {
+                const resPath = path.join(process.resourcesPath, 'prequirurgicos_collector.py');
+                if (fs.existsSync(resPath)) {
+                    scriptPath = resPath;
+                } else {
+                    const appAsarUnpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'prequirurgicos_collector.py');
+                    if (fs.existsSync(appAsarUnpacked)) scriptPath = appAsarUnpacked;
+                }
+            }
+
+            const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+            const args = [scriptPath, '--merge-files', destPath, ...filePaths];
+
+            const proc = spawn(pythonCommand, args, {
+                cwd: path.dirname(destPath) || process.cwd(),
+                env: { ...process.env, PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8' },
+                windowsHide: true
+            });
+
+            let stdoutAcc = '';
+            let stderrAcc = '';
+
+            proc.stdout.on('data', (d) => { stdoutAcc += d.toString(); });
+            proc.stderr.on('data', (d) => { stderrAcc += d.toString(); });
+
+            proc.on('close', (code) => {
+                if (code === 0 && fs.existsSync(destPath)) {
+                    resolve({ success: true, mergedFile: destPath });
+                } else {
+                    resolve({ success: false, error: stderrAcc || stdoutAcc || `Falló el merge con código ${code}` });
+                }
+            });
+
+            proc.on('error', (err) => {
+                resolve({ success: false, error: err.message });
+            });
+        } catch (e) {
+            resolve({ success: false, error: e.message });
+        }
+    });
+});
+
+ipcMain.handle('write-file-base64', async (event, filePath, base64Data) => {
+    try {
+        if (!filePath || !base64Data) {
+            return { success: false, error: 'Parámetros inválidos para escribir archivo.' };
+        }
+        const buffer = Buffer.from(base64Data, 'base64');
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(filePath, buffer);
+        return { success: true, filePath };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
+
 
 

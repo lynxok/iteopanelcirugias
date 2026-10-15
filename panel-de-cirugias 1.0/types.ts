@@ -572,3 +572,20 @@ export interface NursingAbsence {
   created_by?: string | null;
   nurse?: { id: string; name: string; full_name?: string; email?: string };
 }
+
+export interface PatientPreoperative {
+  id: string;
+  surgery_id?: string | null;
+  patient_name: string;
+  patient_dni?: string | null;
+  surgery_date?: string | null;
+  downloaded_at: string;
+  expires_at: string;
+  storage_path: string;
+  file_name: string;
+  file_size_bytes?: number | null;
+  has_lab?: boolean;
+  has_ecg?: boolean;
+  created_at?: string;
+  created_by?: string | null;
+}

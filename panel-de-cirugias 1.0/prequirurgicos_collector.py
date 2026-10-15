@@ -8,7 +8,38 @@ import imaplib
 import email
 from email.header import decode_header
 from datetime import datetime
+import pypdf
 from playwright.sync_api import sync_playwright
+
+def merge_pdf_files(file_paths, output_path):
+    """
+    Combina múltiples archivos PDF en un único documento maestro.
+    """
+    if not file_paths:
+        return None
+    try:
+        writer = pypdf.PdfWriter()
+        for fp in file_paths:
+            if not fp or not os.path.exists(fp):
+                continue
+            read_path = fp
+            if os.name == 'nt' and not read_path.startswith('\\\\?\\'):
+                read_path = f"\\\\?\\{os.path.abspath(read_path)}"
+            reader = pypdf.PdfReader(read_path)
+            for page in reader.pages:
+                writer.add_page(page)
+                
+        write_path = output_path
+        if os.name == 'nt' and not write_path.startswith('\\\\?\\'):
+            write_path = f"\\\\?\\{os.path.abspath(write_path)}"
+            
+        with open(write_path, "wb") as f_out:
+            writer.write(f_out)
+            
+        return output_path
+    except Exception as e:
+        log(f"Error al combinar PDFs en {output_path}: {e}")
+        return None
 
 def log(msg):
     print(f"[PREQUIRURGICOS] {msg}", flush=True)
@@ -186,10 +217,31 @@ def collect_ecg(patient_name, ecg_date_str, output_dir):
                     if matching_attachments:
                         log(f"¡Correo exacto encontrado! Asunto: '{subject}' | Fecha: {date_val}")
                         report_progress(30, f"Informe ECG encontrado ({len(matching_attachments)} archivo/s), descargando...")
-                        for fname, content in matching_attachments:
-                            safe_name = f"ECG_{re.sub(r'[^a-zA-Z0-9_-]', '_', patient_name)}_{fname}"
+                        clean_pat = re.sub(r'[^a-zA-Z0-9_-]', '_', patient_name).strip('_')
+
+                        for idx, (fname, content) in enumerate(matching_attachments, 1):
+                            # Extraer descriptor relevante si existe (ej. Etapa_Basal, Etapa_Recuperacion, Etapa_3)
+                            m_etapa = re.search(r'Etapa[_\s]+([a-zA-Z0-9áéíóúñ]+)', fname, re.IGNORECASE)
+                            if m_etapa:
+                                raw_etapa = m_etapa.group(1).lower()
+                                raw_etapa = raw_etapa.replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')
+                                suffix = f"_{raw_etapa.capitalize()}"
+                            else:
+                                suffix = ""
+
+                            if len(matching_attachments) > 1:
+                                suffix = f"{suffix}_{idx}" if suffix else f"_{idx}"
+
+                            safe_name = f"ECG_{clean_pat}{suffix}.pdf"
                             dest_path = os.path.join(output_dir, safe_name)
-                            with open(dest_path, "wb") as f:
+
+                            # Soporte para rutas largas en Windows (evita límite de 260 caracteres MAX_PATH)
+                            write_path = dest_path
+                            if os.name == 'nt' and not write_path.startswith('\\\\?\\'):
+                                abs_path = os.path.abspath(write_path)
+                                write_path = f"\\\\?\\{abs_path}"
+
+                            with open(write_path, "wb") as f:
                                 f.write(content)
                             downloaded_files.append(dest_path)
                             log(f"Guardado adjunto ECG: {safe_name}")
@@ -526,6 +578,21 @@ def collect_lab_iphh(playwright, patient_name, lab_date_str, output_dir, patient
         return {"success": False, "file": None, "error": str(e)}
 
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] == "--merge-files":
+        # Modo utilidad independiente: python prequirurgicos_collector.py --merge-files <dest_path> <file1> <file2> ...
+        if len(sys.argv) < 4:
+            print(json.dumps({"success": False, "error": "Faltan argumentos para merge. Uso: --merge-files <dest_path> <file1> [file2...]" }))
+            sys.exit(1)
+        dest_path = sys.argv[2].strip()
+        files_to_merge = [f.strip() for f in sys.argv[3:] if f.strip()]
+        merged_res = merge_pdf_files(files_to_merge, dest_path)
+        if merged_res and os.path.exists(merged_res):
+            print(json.dumps({"success": True, "merged_file": merged_res}))
+            sys.exit(0)
+        else:
+            print(json.dumps({"success": False, "error": "No se pudo generar el PDF unificado."}))
+            sys.exit(1)
+
     if len(sys.argv) < 4:
         print(json.dumps({
             "success": False, 
@@ -572,12 +639,14 @@ def main():
     results = {
         "timestamp": datetime.now().isoformat(),
         "patient": patient_name,
+        "patient_dni": patient_dni,
         "lab_date": lab_date,
         "ecg_date": ecg_date,
         "output_dir": output_dir,
         "ecg": None,
         "laboratory": None,
-        "downloaded_files": []
+        "downloaded_files": [],
+        "merged_dossier": None
     }
     
     # Si show_browser está activado, ejecutar laboratorios web PRIMERO para que el usuario observe el navegador de inmediato
@@ -624,6 +693,29 @@ def main():
             log(f"Error en navegador Playwright para laboratorio: {e}")
             report_progress(95, "Error en Playwright al buscar laboratorios.")
             results["laboratory"] = {"success": False, "error": str(e), "message": "No se pudo acceder a los portales de laboratorio."}
+
+    # Fusión automática de legajo preliminar (Laboratorio + ECGs)
+    if results["downloaded_files"]:
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', patient_name).upper()
+        clean_dni = re.sub(r'[^0-9]', '', str(patient_dni or "")).strip()
+        dni_suffix = f"_{clean_dni}" if clean_dni else ""
+        dossier_filename = f"PREQUIRURGICO_{clean_name}{dni_suffix}_{today_str}.pdf"
+        dossier_path = os.path.join(output_dir, dossier_filename)
+        
+        # Ordenar: Laboratorio primero si existe, luego ECGs
+        ordered_files = []
+        if results.get("laboratory") and results["laboratory"].get("file"):
+            ordered_files.append(results["laboratory"]["file"])
+        if results.get("ecg") and results["ecg"].get("files"):
+            ordered_files.extend(results["ecg"]["files"])
+        if not ordered_files:
+            ordered_files = list(results["downloaded_files"])
+            
+        merged_file = merge_pdf_files(ordered_files, dossier_path)
+        if merged_file:
+            results["merged_dossier"] = merged_file
+            log(f"¡Legajo prequirúrgico unificado creado exitosamente!: {dossier_filename}")
 
     # Salida final JSON
     report_progress(100, "Proceso de recolección de prequirúrgicos completado.")

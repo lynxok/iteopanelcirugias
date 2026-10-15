@@ -18,6 +18,19 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-10-15]`: **Unificación de Estudios Prequirúrgicos, Solapas Agrupadas y Respaldo Cloud con Retención (v3.13.13)**:
+    *   **Solapa Única para ECG (Ergometría)**: Reemplazo de los múltiples checkboxes individuales por una sola tarjeta agrupada para Electrocardiograma que engloba todas las etapas de la ergometría.
+    *   **Consolidación en 1 Solo PDF**: Fusión automática (`pypdf`) de Laboratorio y ECGs seleccionados en un único archivo con formato estándar: `PREQUIRURGICO_{APELLIDO_NOMBRE}_{DNI}_{FECHA_DESCARGA}.pdf`.
+    *   **Respaldo Cloud con Retención de 60 Días**: Subida automática del PDF consolidado a Supabase Storage (`documents/prequirurgicos/...`) y registro en `quirofano.patient_preoperatives`. Retención acotada a 60 días posteriores a la fecha quirúrgica (`cleanup_expired_preoperatives`) para evitar saturación de espacio.
+    *   **Acceso y Previsualización Directa**: Banner en cabecera de carga para ver o descargar el legajo previo desde la nube y paso automático de metadatos desde `SurgeryHeader.tsx`.
+    *   **Fix de Rutas Largas en Windows (MAX_PATH / Errno 2)**: Nombres de adjuntos de ECG acortados y prefijo `\\?\` para compatibilidad en OneDrive (`7 - PREQUIRÚRGICOS`).
+
+*   `[2026-10-14]`: **Búsqueda por Fecha de Realización en IPHH y Descarga de Laboratorio (v3.13.12)**:
+    *   **Filtro por Fecha del Estudio en IPHH**: Solucionado el problema donde el portal IPHH quedaba filtrado por la fecha del día actual (`14/10/2026`). El robot Playwright ahora ingresa directamente la fecha de realización en el input `date` y busca las tarjetas de ese día.
+    *   **Coincidencia y Descarga de PDF**: Coincidencia exacta por DNI y nombre sobre las tarjetas de la fecha indicada. Corrección del selector de descarga a `button[title='Descargar']` visible en la barra de informe con fallback al botón PDF.
+    *   **Fallback Histórico**: Si no se localiza por fecha puntual, se ejecuta búsqueda histórica por DNI con *"Ir al último informe"*.
+    *   **Orden Cronológico en Panel de Técnicos**: Ordenamiento ascendente de cirugías por fecha y hora de inicio (`actual_start_time`).
+
 *   `[2026-10-08]`: **Motor Predictivo de Quirófano y Camas: Ajuste de Muestras y Parser Multilínea (`useSurgeryDetail.ts`, `LogisticsSection.tsx`, `HospitalizationMap.tsx`, `BedStatsTab.tsx`, `ResultsDashboard.tsx`)**:
     *   **Duración Sugerida en Detalle de Cirugía**:
         - Si hay 1 o 2 cirugías históricas en el procedimiento, se toma el tiempo **mayor** (enfoque conservador). Si hay 3 o más cirugías, se toma el **promedio**.

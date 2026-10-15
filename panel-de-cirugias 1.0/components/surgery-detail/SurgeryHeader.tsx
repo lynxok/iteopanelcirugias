@@ -10,6 +10,7 @@ interface SurgeryHeaderProps {
     currentUserRole: string;
     documentNumber: string;
     nuc: string;
+    surgeryDate?: string | null;
     selectedProcedures: string[];
     selectedDoctorId: string | number;
     doctors: any[];
@@ -39,6 +40,7 @@ export const SurgeryHeader: React.FC<SurgeryHeaderProps> = ({
     currentUserRole,
     documentNumber,
     nuc,
+    surgeryDate,
     selectedProcedures,
     selectedDoctorId,
     doctors,
@@ -58,6 +60,8 @@ export const SurgeryHeader: React.FC<SurgeryHeaderProps> = ({
     doctorPriorityValidated,
     onSetDoctorPriorityValidated
 }) => {
+    const navigate = useNavigate();
+
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mb-8 overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
             <div className="p-6">
@@ -186,9 +190,16 @@ export const SurgeryHeader: React.FC<SurgeryHeaderProps> = ({
                         <div className="flex items-center gap-2 ml-2">
                             {!isNew && patientName && (
                                 <button
-                                    onClick={() => navigate('/prequirurgicos', { state: { patientName } })}
+                                    onClick={() => navigate('/prequirurgicos', { 
+                                        state: { 
+                                            surgeryId: id,
+                                            patientName,
+                                            patientDni: documentNumber,
+                                            surgeryDate
+                                        } 
+                                    })}
                                     className="px-3 py-2 flex items-center gap-1.5 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded-xl border border-blue-200 transition-all shadow-sm active:scale-95 text-xs font-bold"
-                                    title="Descargar Prequirúrgicos (Lab y ECG)"
+                                    title="Descargar o consultar Prequirúrgicos (Lab y ECG)"
                                 >
                                     <span className="material-symbols-outlined text-base">assignment_turned_in</span>
                                     <span className="hidden sm:inline">Prequirúrgicos</span>

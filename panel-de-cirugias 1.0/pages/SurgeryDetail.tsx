@@ -279,6 +279,7 @@ export const SurgeryDetail: React.FC = () => {
                     currentUserRole={currentUserRole}
                     documentNumber={documentNumber}
                     nuc={nuc}
+                    surgeryDate={surgeryDate}
                     selectedProcedures={selectedProcedures}
                     selectedDoctorId={selectedDoctorId}
                     doctors={doctors}

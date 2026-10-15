@@ -62,12 +62,21 @@ export const Prequirurgicos: React.FC = () => {
     const [result, setResult] = useState<CollectionResult | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    // Modal de Confirmación y Previsualización
+    // Vinculación opcional con cirugía
+    const [surgeryId, setSurgeryId] = useState<string | null>(null);
+    const [surgeryDate, setSurgeryDate] = useState<string | null>(null);
+
+    // Modal de Confirmación Agrupada y Previsualización
     const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [selectedFilesToKeep, setSelectedFilesToKeep] = useState<string[]>([]);
+    const [keepLab, setKeepLab] = useState(true);
+    const [keepEcg, setKeepEcg] = useState(true);
+    const [activeStudyTab, setActiveStudyTab] = useState<'lab' | 'ecg'>('lab');
     const [previewPdfPath, setPreviewPdfPath] = useState<string | null>(null);
     const [previewPdfBase64, setPreviewPdfBase64] = useState<string | null>(null);
     const [loadingPdfPreview, setLoadingPdfPreview] = useState(false);
+    const [isSavingAndMerging, setIsSavingAndMerging] = useState(false);
+    const [existingPreop, setExistingPreop] = useState<any | null>(null);
+    const [loadingExistingPreop, setLoadingExistingPreop] = useState(false);
 
     const logContainerRef = useRef<HTMLDivElement>(null);
 
@@ -122,8 +131,45 @@ export const Prequirurgicos: React.FC = () => {
             if (state.patientDni || state.documentNumber) setPatientDni(state.patientDni || state.documentNumber);
             if (state.labDate) setLabDate(state.labDate);
             if (state.ecgDate) setEcgDate(state.ecgDate);
+            if (state.surgeryId) setSurgeryId(state.surgeryId);
+            if (state.surgeryDate) setSurgeryDate(state.surgeryDate);
         }
     }, [location.state]);
+
+    // Consultar si ya existe un prequirúrgico guardado en la nube para la cirugía o DNI
+    useEffect(() => {
+        const checkExisting = async () => {
+            const targetSurgeryId = surgeryId;
+            const targetDni = patientDni.trim();
+            if (!targetSurgeryId && !targetDni) {
+                setExistingPreop(null);
+                return;
+            }
+
+            try {
+                setLoadingExistingPreop(true);
+                let query = supabase.from('patient_preoperatives').select('*');
+                if (targetSurgeryId) {
+                    query = query.eq('surgery_id', targetSurgeryId);
+                } else if (targetDni) {
+                    query = query.eq('patient_dni', targetDni);
+                }
+                const { data, error } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle();
+                if (!error && data) {
+                    setExistingPreop(data);
+                } else {
+                    setExistingPreop(null);
+                }
+            } catch (err) {
+                console.error('Error buscando prequirúrgico existente:', err);
+                setExistingPreop(null);
+            } finally {
+                setLoadingExistingPreop(false);
+            }
+        };
+
+        checkExisting();
+    }, [surgeryId, patientDni]);
 
     // Búsqueda inteligente, flexible y tolerante a errores / faltantes en cirugías programadas
     useEffect(() => {
@@ -278,6 +324,8 @@ export const Prequirurgicos: React.FC = () => {
     const handleSelectPatient = (p: any) => {
         setPatientName(p.patient_name || '');
         setPatientDni(p.patient_document || '');
+        setSurgeryId(p.id || null);
+        setSurgeryDate(p.surgery_date || null);
         if (p.surgery_date) {
             setLabDate(p.surgery_date);
             const d = new Date(p.surgery_date);
@@ -338,9 +386,22 @@ export const Prequirurgicos: React.FC = () => {
 
                 const files = resp.data.downloaded_files || [];
                 if (files.length > 0) {
-                    setSelectedFilesToKeep([...files]);
+                    setKeepLab(!!(resp.data.laboratory?.file || files.some((f: string) => f.split(/[\\/]/).pop()?.toUpperCase().startsWith('LAB_'))));
+                    setKeepEcg(!!(resp.data.ecg?.files?.length || files.some((f: string) => f.split(/[\\/]/).pop()?.toUpperCase().startsWith('ECG_'))));
                     setShowConfirmModal(true);
-                    loadPreview(files[0]);
+                    
+                    // Cargar previsualización por defecto (Laboratorio primero si existe, sino ECG)
+                    const labFile = files.find((f: string) => f.split(/[\\/]/).pop()?.toUpperCase().startsWith('LAB_'));
+                    const ecgFile = files.find((f: string) => f.split(/[\\/]/).pop()?.toUpperCase().startsWith('ECG_'));
+                    if (labFile) {
+                        setActiveStudyTab('lab');
+                        loadPreview(labFile);
+                    } else if (ecgFile) {
+                        setActiveStudyTab('ecg');
+                        loadPreview(ecgFile);
+                    } else {
+                        loadPreview(files[0]);
+                    }
                 }
             } else {
                 setErrorMessage(resp.error || 'Ocurrió un error durante la ejecución del proceso.');
@@ -375,37 +436,154 @@ export const Prequirurgicos: React.FC = () => {
         }
     };
 
-    const toggleFileKeep = (filePath: string) => {
-        setSelectedFilesToKeep(prev => 
-            prev.includes(filePath) ? prev.filter(f => f !== filePath) : [...prev, filePath]
-        );
-    };
-
     const handleConfirmSelection = async () => {
         if (!result) return;
-        
-        // Descartar/eliminar de disco los archivos desmarcados
-        const allFiles = result.downloaded_files || [];
-        const discarded = allFiles.filter(f => !selectedFilesToKeep.includes(f));
+        setIsSavingAndMerging(true);
 
-        for (const file of discarded) {
-            if ((window as any).electronAPI?.deleteFile) {
-                try {
-                    await (window as any).electronAPI.deleteFile(file);
-                } catch (e) {
-                    console.error('Error al eliminar archivo descartado:', e);
+        try {
+            const allFiles = result.downloaded_files || [];
+            const labFiles = allFiles.filter(f => f.split(/[\\/]/).pop()?.toUpperCase().startsWith('LAB_'));
+            const ecgFiles = allFiles.filter(f => f.split(/[\\/]/).pop()?.toUpperCase().startsWith('ECG_'));
+            const otherFiles = allFiles.filter(f => !labFiles.includes(f) && !ecgFiles.includes(f));
+
+            const filesToKeep: string[] = [];
+            const filesToDiscard: string[] = [];
+
+            if (keepLab) {
+                filesToKeep.push(...labFiles);
+            } else {
+                filesToDiscard.push(...labFiles);
+            }
+
+            if (keepEcg) {
+                filesToKeep.push(...ecgFiles);
+            } else {
+                filesToDiscard.push(...ecgFiles);
+            }
+
+            if (filesToKeep.length === 0) {
+                alert('Debe conservar al menos un estudio (Laboratorio o ECG).');
+                setIsSavingAndMerging(false);
+                return;
+            }
+
+            // Normalización para el nombre de archivo único
+            const cleanStr = (s: string) => s.trim().toUpperCase().replace(/[\s\W]+/g, '_').replace(/^_+|_+$/g, '');
+            const safeName = cleanStr(patientName || 'PACIENTE');
+            const safeDni = patientDni.trim() || 'SIN_DNI';
+            const todayStr = new Date().toISOString().split('T')[0];
+            const unifiedFileName = `PREQUIRURGICO_${safeName}_${safeDni}_${todayStr}.pdf`;
+            const destUnifiedPath = `${result.output_dir}\\${unifiedFileName}`;
+
+            // 1. Fusionar en un único PDF
+            let finalPdfPath = filesToKeep[0];
+            if (filesToKeep.length > 1 && (window as any).electronAPI?.mergePrequirurgicosPdfs) {
+                setLogs(prev => [...prev, `[Consolidación] Generando legajo único: ${unifiedFileName}...`]);
+                const mergeRes = await (window as any).electronAPI.mergePrequirurgicosPdfs(destUnifiedPath, filesToKeep);
+                if (mergeRes.success && mergeRes.mergedFile) {
+                    finalPdfPath = mergeRes.mergedFile;
+                    setLogs(prev => [...prev, `[Consolidación] PDF unificado generado con éxito en: ${finalPdfPath}`]);
+                    // Descartar los archivos individuales parciales para conservar solo el consolidado
+                    for (const f of filesToKeep) {
+                        if (f !== finalPdfPath && (window as any).electronAPI?.deleteFile) {
+                            try { await (window as any).electronAPI.deleteFile(f); } catch (e) {}
+                        }
+                    }
+                } else {
+                    console.warn('Fallo al unir PDFs, se conservarán los archivos individuales:', mergeRes.error);
                 }
             }
-        }
 
-        // Actualizar el resultado local solo con los conservados
-        setResult({
-            ...result,
-            downloaded_files: selectedFilesToKeep
-        });
-        setShowConfirmModal(false);
-        setPreviewPdfBase64(null);
-        setPreviewPdfPath(null);
+            // Eliminar archivos descartados de disco
+            for (const file of filesToDiscard) {
+                if ((window as any).electronAPI?.deleteFile) {
+                    try { await (window as any).electronAPI.deleteFile(file); } catch (e) {}
+                }
+            }
+
+            // 2. Subir el PDF unificado a Supabase Storage y registrar retención de 60 días
+            if ((window as any).electronAPI?.readFileBase64) {
+                try {
+                    setLogs(prev => [...prev, `[Nube] Leyendo binario para respaldo en base de datos...`]);
+                    const base64Res = await (window as any).electronAPI.readFileBase64(finalPdfPath);
+                    if (base64Res.success && base64Res.base64) {
+                        const binaryStr = atob(base64Res.base64);
+                        const len = binaryStr.length;
+                        const bytes = new Uint8Array(len);
+                        for (let i = 0; i < len; i++) {
+                            bytes[i] = binaryStr.charCodeAt(i);
+                        }
+
+                        const storageSurgeryFolder = surgeryId || 'sin_cirugia';
+                        const storagePath = `prequirurgicos/${storageSurgeryFolder}/${Date.now()}_${unifiedFileName}`;
+
+                        setLogs(prev => [...prev, `[Nube] Subiendo a Supabase Storage: ${storagePath}...`]);
+                        const { error: uploadError } = await supabase.storage
+                            .from('documents')
+                            .upload(storagePath, bytes, {
+                                contentType: 'application/pdf',
+                                upsert: true
+                            });
+
+                        if (uploadError) {
+                            console.error('Error subiendo archivo a Supabase Storage:', uploadError);
+                            setLogs(prev => [...prev, `[Aviso Nube] Error subiendo archivo a Storage: ${uploadError.message}`]);
+                        } else {
+                            setLogs(prev => [...prev, `[Nube] Archivo subido exitosamente a Storage.`]);
+
+                            // Calcular fecha de expiración: Fecha de cirugía + 60 días (o hoy + 60 días si no tiene cirugía programada)
+                            const baseDate = surgeryDate ? new Date(surgeryDate + 'T00:00:00') : new Date();
+                            const expirationDate = new Date(baseDate);
+                            expirationDate.setDate(expirationDate.getDate() + 60);
+                            const expiresAtStr = expirationDate.toISOString().split('T')[0];
+
+                            // Registrar en tabla quirofano.patient_preoperatives
+                            const { error: dbError } = await supabase
+                                .from('patient_preoperatives')
+                                .insert({
+                                    surgery_id: surgeryId || null,
+                                    patient_name: patientName.trim().toUpperCase(),
+                                    patient_dni: patientDni.trim() || null,
+                                    surgery_date: surgeryDate || null,
+                                    downloaded_at: new Date().toISOString(),
+                                    expires_at: expiresAtStr,
+                                    storage_path: storagePath,
+                                    file_name: unifiedFileName,
+                                    file_size_bytes: len,
+                                    has_lab: keepLab,
+                                    has_ecg: keepEcg,
+                                    created_by: user?.id || null
+                                });
+
+                            if (dbError) {
+                                console.error('Error insertando en quirofano.patient_preoperatives:', dbError);
+                                setLogs(prev => [...prev, `[Aviso Nube] No se pudo guardar el registro en BD: ${dbError.message}`]);
+                            } else {
+                                setLogs(prev => [...prev, `[Nube] Legajo registrado en BD con retención hasta: ${expiresAtStr}.`]);
+                            }
+                        }
+                    }
+                } catch (cloudErr: any) {
+                    console.error('Error durante la sincronización a la nube:', cloudErr);
+                    setLogs(prev => [...prev, `[Aviso Nube] Error en sincronización: ${cloudErr.message}`]);
+                }
+            }
+
+            // Actualizar el resultado local
+            setResult({
+                ...result,
+                downloaded_files: [finalPdfPath]
+            });
+            setShowConfirmModal(false);
+            setPreviewPdfBase64(null);
+            setPreviewPdfPath(null);
+            alert(`¡Legajo prequirúrgico unificado y guardado con éxito!\n\nArchivo: ${unifiedFileName}`);
+        } catch (err: any) {
+            console.error('Error al confirmar y consolidar prequirúrgicos:', err);
+            alert(`Ocurrió un error al procesar el archivo: ${err.message}`);
+        } finally {
+            setIsSavingAndMerging(false);
+        }
     };
 
     const handleStop = async () => {
@@ -477,6 +655,53 @@ export const Prequirurgicos: React.FC = () => {
                                 <span className="material-symbols-outlined text-blue-600 text-lg">person_search</span>
                                 Datos del Paciente
                             </h2>
+
+                            {/* BANNER DE PREQUIRÚRGICO EXISTENTE EN LA NUBE */}
+                            {loadingExistingPreop ? (
+                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 text-xs text-slate-500 animate-pulse">
+                                    <div className="size-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                    <span>Verificando legajo previo en base de datos...</span>
+                                </div>
+                            ) : existingPreop ? (
+                                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm animate-fadeIn">
+                                    <div className="flex items-start gap-3">
+                                        <div className="size-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-200">
+                                            <span className="material-symbols-outlined text-lg">cloud_done</span>
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-xs font-black text-emerald-950 uppercase tracking-wider">
+                                                    Legajo Digital en Nube
+                                                </h3>
+                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                                    Activo
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-emerald-800 font-mono mt-0.5">
+                                                {existingPreop.file_name}
+                                            </p>
+                                            <p className="text-[10px] text-emerald-600 mt-0.5">
+                                                Descargado el {new Date(existingPreop.downloaded_at).toLocaleDateString()} • Retención hasta: <strong>{new Date(existingPreop.expires_at + 'T00:00:00').toLocaleDateString()}</strong>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                const { data } = supabase.storage.from('documents').getPublicUrl(existingPreop.storage_path);
+                                                if (data?.publicUrl) {
+                                                    window.open(data.publicUrl, '_blank');
+                                                }
+                                            }}
+                                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+                                        >
+                                            <span className="material-symbols-outlined text-sm">visibility</span>
+                                            Ver en Nube
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : null}
 
                             {/* BUSCADOR DE CIRUGÍAS / AUTOCOMPLETAR */}
                             <div className="relative">
@@ -842,19 +1067,19 @@ export const Prequirurgicos: React.FC = () => {
 
             </div>
 
-            {/* MODAL DE CONFIRMACIÓN Y PREVISUALIZACIÓN */}
+            {/* MODAL DE CONFIRMACIÓN Y PREVISUALIZACIÓN AGRUPADO */}
             {showConfirmModal && result && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
-                    <div className="bg-white w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-scaleIn">
+                    <div className="bg-white w-full max-w-5xl h-[88vh] rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-scaleIn">
                         {/* HEADER DEL MODAL */}
                         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
                             <div className="flex items-center gap-3">
                                 <div className="size-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md">
-                                    <span className="material-symbols-outlined text-xl">verified</span>
+                                    <span className="material-symbols-outlined text-xl">auto_stories</span>
                                 </div>
                                 <div>
                                     <h3 className="text-sm font-black uppercase tracking-wider text-white">
-                                        Validación y Previsualización de Estudios
+                                        Consolidación de Legajo Prequirúrgico
                                     </h3>
                                     <p className="text-xs text-slate-400">
                                         Paciente: <strong className="text-white font-mono">{patientName}</strong> {patientDni && `(DNI: ${patientDni})`}
@@ -863,81 +1088,188 @@ export const Prequirurgicos: React.FC = () => {
                             </div>
                             <button
                                 type="button"
+                                disabled={isSavingAndMerging}
                                 onClick={() => setShowConfirmModal(false)}
-                                className="size-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                                className="size-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors disabled:opacity-50"
                             >
                                 <span className="material-symbols-outlined text-lg">close</span>
                             </button>
                         </div>
 
-                        {/* CUERPO DEL MODAL (SPLIT: LISTA + PREVISUALIZADOR) */}
+                        {/* CUERPO DEL MODAL (SPLIT: 2 SOLAPAS DE ESTUDIOS + PREVISUALIZADOR) */}
                         <div className="flex-1 grid grid-cols-1 md:grid-cols-12 min-h-0 overflow-hidden">
-                            {/* COLUMNA IZQUIERDA: LISTA DE ARCHIVOS CON CHECKBOX */}
-                            <div className="md:col-span-5 border-r border-slate-200 bg-slate-50/70 p-4 flex flex-col min-h-0">
-                                <div className="mb-3">
+                            {/* COLUMNA IZQUIERDA: 2 TARJETAS AGRUPADAS (LABORATORIO Y ECG) */}
+                            <div className="md:col-span-5 border-r border-slate-200 bg-slate-50/70 p-4 flex flex-col min-h-0 space-y-4">
+                                <div>
                                     <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                                        Informes Descargados ({result.downloaded_files.length})
+                                        Estudios Médicos Detectados
                                     </p>
                                     <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                                        Seleccioná con la casilla de verificación solo los estudios que correspondan al paciente. Los desmarcados se descartarán automáticamente.
+                                        Confirmá los estudios a incluir. Se fusionarán automáticamente en <strong>1 único PDF</strong> y se guardarán en la nube.
                                     </p>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                                    {result.downloaded_files.map((file, idx) => {
-                                        const fname = file.split(/[\\/]/).pop() || '';
-                                        const isSelected = selectedFilesToKeep.includes(file);
-                                        const isCurrentPreview = previewPdfPath === file;
-                                        const isEcg = fname.toUpperCase().startsWith('ECG_');
-                                        const isLab = fname.toUpperCase().startsWith('LAB_');
+                                <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                                    {/* 1. SOLAPA / CARD: LABORATORIO */}
+                                    {(() => {
+                                        const labFiles = (result.downloaded_files || []).filter(f => f.split(/[\\/]/).pop()?.toUpperCase().startsWith('LAB_'));
+                                        const hasLab = labFiles.length > 0;
+                                        const isActiveTab = activeStudyTab === 'lab';
 
                                         return (
                                             <div
-                                                key={idx}
-                                                onClick={() => loadPreview(file)}
-                                                className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
-                                                    isCurrentPreview
-                                                        ? 'bg-blue-50/90 border-blue-400 shadow-sm ring-1 ring-blue-400'
+                                                onClick={() => {
+                                                    setActiveStudyTab('lab');
+                                                    if (hasLab) loadPreview(labFiles[0]);
+                                                }}
+                                                className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                                                    isActiveTab
+                                                        ? 'bg-purple-50/80 border-purple-400 shadow-sm ring-1 ring-purple-300'
                                                         : 'bg-white border-slate-200 hover:border-slate-300'
                                                 }`}
                                             >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isSelected}
-                                                    onChange={(e) => {
-                                                        e.stopPropagation();
-                                                        toggleFileKeep(file);
-                                                    }}
-                                                    className="size-4 mt-0.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer shrink-0"
-                                                />
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-1.5 mb-1">
-                                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
-                                                            isLab ? 'bg-purple-100 text-purple-700' : isEcg ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
-                                                        }`}>
-                                                            {isLab ? 'Laboratorio' : isEcg ? 'ECG' : 'Estudio'}
-                                                        </span>
-                                                        {isCurrentPreview && (
-                                                            <span className="text-[10px] font-bold text-blue-600 flex items-center gap-0.5">
-                                                                <span className="material-symbols-outlined text-xs">visibility</span>
-                                                                Viendo
-                                                            </span>
-                                                        )}
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex items-start gap-3">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={keepLab && hasLab}
+                                                            disabled={!hasLab}
+                                                            onChange={(e) => {
+                                                                e.stopPropagation();
+                                                                setKeepLab(e.target.checked);
+                                                            }}
+                                                            className="size-4 mt-1 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer shrink-0 disabled:opacity-40"
+                                                        />
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs font-black text-slate-900 uppercase">
+                                                                    Laboratorio de Análisis
+                                                                </span>
+                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                                                    hasLab ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500'
+                                                                }`}>
+                                                                    {hasLab ? (result.laboratory?.source || 'Disponible') : 'No Encontrado'}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-[11px] text-slate-600 mt-1">
+                                                                {hasLab 
+                                                                    ? `${labFiles.length} informe de laboratorio descargado.` 
+                                                                    : 'No se localizó en portales Nanni / IPHH.'}
+                                                            </p>
+                                                            {hasLab && (
+                                                                <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate max-w-[220px]">
+                                                                    {labFiles[0].split(/[\\/]/).pop()}
+                                                                </p>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                    <p className="text-xs font-mono font-medium text-slate-800 break-words line-clamp-2" title={fname}>
-                                                        {fname}
-                                                    </p>
+
+                                                    {hasLab && isActiveTab && (
+                                                        <span className="text-[10px] font-bold text-purple-600 flex items-center gap-0.5 shrink-0">
+                                                            <span className="material-symbols-outlined text-xs">visibility</span>
+                                                            Viendo
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                         );
-                                    })}
+                                    })()}
+
+                                    {/* 2. SOLAPA / CARD: ELECTROCARDIOGRAMA (ECG / ERGOMETRÍA) */}
+                                    {(() => {
+                                        const ecgFiles = (result.downloaded_files || []).filter(f => f.split(/[\\/]/).pop()?.toUpperCase().startsWith('ECG_'));
+                                        const hasEcg = ecgFiles.length > 0;
+                                        const isActiveTab = activeStudyTab === 'ecg';
+
+                                        return (
+                                            <div
+                                                onClick={() => {
+                                                    setActiveStudyTab('ecg');
+                                                    if (hasEcg) loadPreview(ecgFiles[0]);
+                                                }}
+                                                className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                                                    isActiveTab
+                                                        ? 'bg-amber-50/80 border-amber-400 shadow-sm ring-1 ring-amber-300'
+                                                        : 'bg-white border-slate-200 hover:border-slate-300'
+                                                }`}
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex items-start gap-3">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={keepEcg && hasEcg}
+                                                            disabled={!hasEcg}
+                                                            onChange={(e) => {
+                                                                e.stopPropagation();
+                                                                setKeepEcg(e.target.checked);
+                                                            }}
+                                                            className="size-4 mt-1 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer shrink-0 disabled:opacity-40"
+                                                        />
+                                                        <div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs font-black text-slate-900 uppercase">
+                                                                    Electrocardiograma (ECG)
+                                                                </span>
+                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                                                    hasEcg ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'
+                                                                }`}>
+                                                                    {hasEcg ? `${ecgFiles.length} archivo(s)` : 'No Encontrado'}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-[11px] text-slate-600 mt-1">
+                                                                {hasEcg 
+                                                                    ? `Agrupado en una sola solapa (${ecgFiles.length} partes/etapas).` 
+                                                                    : 'No se encontraron registros en el correo.'}
+                                                            </p>
+                                                            {hasEcg && ecgFiles.length > 1 && (
+                                                                <div className="mt-2 flex flex-wrap gap-1">
+                                                                    {ecgFiles.map((ef, idx) => (
+                                                                        <button
+                                                                            key={idx}
+                                                                            type="button"
+                                                                            onClick={(ev) => {
+                                                                                ev.stopPropagation();
+                                                                                setActiveStudyTab('ecg');
+                                                                                loadPreview(ef);
+                                                                            }}
+                                                                            className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-all ${
+                                                                                previewPdfPath === ef 
+                                                                                    ? 'bg-amber-600 text-white border-amber-600 font-bold' 
+                                                                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-amber-100'
+                                                                            }`}
+                                                                        >
+                                                                            Parte {idx + 1}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {hasEcg && isActiveTab && (
+                                                        <span className="text-[10px] font-bold text-amber-600 flex items-center gap-0.5 shrink-0">
+                                                            <span className="material-symbols-outlined text-xs">visibility</span>
+                                                            Viendo
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
 
-                                <div className="pt-3 border-t border-slate-200 flex items-center justify-between text-xs font-bold text-slate-600">
-                                    <span>Conservar:</span>
-                                    <span className="text-blue-600 font-mono">
-                                        {selectedFilesToKeep.length} de {result.downloaded_files.length} archivos
-                                    </span>
+                                <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-1">
+                                    <p className="text-[11px] font-bold text-blue-900 flex items-center gap-1.5">
+                                        <span className="material-symbols-outlined text-sm">inventory_2</span>
+                                        Salida de Consolidación
+                                    </p>
+                                    <p className="text-[10px] text-blue-800 font-mono break-all leading-tight">
+                                        PREQUIRURGICO_{patientName.trim().toUpperCase().replace(/[\s\W]+/g, '_')}_{patientDni.trim() || 'SIN_DNI'}_{new Date().toISOString().split('T')[0]}.pdf
+                                    </p>
+                                    <p className="text-[10px] text-blue-600 leading-tight pt-1">
+                                        • Guardado en disco local y Supabase Storage.<br/>
+                                        • Retención de 60 días tras la fecha quirúrgica.
+                                    </p>
                                 </div>
                             </div>
 
@@ -947,7 +1279,7 @@ export const Prequirurgicos: React.FC = () => {
                                     <div className="flex items-center gap-2 truncate mr-2">
                                         <span className="material-symbols-outlined text-blue-600 text-lg">preview</span>
                                         <span className="text-xs font-bold text-slate-800 truncate font-mono">
-                                            {previewPdfPath ? previewPdfPath.split(/[\\/]/).pop() : 'Seleccione un archivo'}
+                                            {previewPdfPath ? previewPdfPath.split(/[\\/]/).pop() : 'Seleccione un estudio a la izquierda'}
                                         </span>
                                     </div>
                                     {previewPdfPath && (
@@ -977,7 +1309,7 @@ export const Prequirurgicos: React.FC = () => {
                                     ) : (
                                         <div className="text-center p-6 text-slate-400">
                                             <span className="material-symbols-outlined text-4xl mb-2 text-slate-300">description</span>
-                                            <p className="text-xs font-medium">Hacé clic en cualquier archivo de la izquierda para ver su contenido aquí.</p>
+                                            <p className="text-xs font-medium">Hacé clic en Laboratorio o ECG para previsualizar aquí.</p>
                                         </div>
                                     )}
                                 </div>
@@ -988,19 +1320,30 @@ export const Prequirurgicos: React.FC = () => {
                         <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
                             <button
                                 type="button"
-                                onClick={() => handleConfirmSelection()}
-                                className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-colors"
+                                disabled={isSavingAndMerging}
+                                onClick={() => setShowConfirmModal(false)}
+                                className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-colors disabled:opacity-50"
                             >
-                                Descartar no seleccionados y cerrar
+                                Cancelar
                             </button>
                             <div className="flex items-center gap-3">
                                 <button
                                     type="button"
+                                    disabled={isSavingAndMerging || (!keepLab && !keepEcg)}
                                     onClick={() => handleConfirmSelection()}
-                                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg shadow-blue-500/25 flex items-center gap-2 transition-all"
+                                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg shadow-blue-500/25 flex items-center gap-2 transition-all disabled:opacity-50"
                                 >
-                                    <span className="material-symbols-outlined text-base">check_circle</span>
-                                    Confirmar y Guardar ({selectedFilesToKeep.length})
+                                    {isSavingAndMerging ? (
+                                        <>
+                                            <div className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            Consolidando y Subiendo a Nube...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="material-symbols-outlined text-base">picture_as_pdf</span>
+                                            Unificar y Guardar Legajo Único
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </div>
