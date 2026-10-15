@@ -97,6 +97,7 @@ const SurgeryList: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('Todos');
     const [filterCoverage, setFilterCoverage] = useState<string>('Todas');
+    const [filterDoctor, setFilterDoctor] = useState<string>('Todos');
     const [filterYear, setFilterYear] = useState<string>('Todos');
     const [filterVendor, setFilterVendor] = useState<string>('Todas');
     const [coverageTypeFilter, setCoverageTypeFilter] = useState<string>('Todos');
@@ -141,7 +142,7 @@ const SurgeryList: React.FC = () => {
     // Resetear a página 1 cuando cambian los filtros
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, filterStatus, filterCoverage, filterYear, filterVendor, coverageTypeFilter, filterDuplicatesOnly]);
+    }, [searchTerm, filterStatus, filterCoverage, filterDoctor, filterYear, filterVendor, coverageTypeFilter, filterDuplicatesOnly]);
 
     useEffect(() => {
         initSurgeryListData();
@@ -598,6 +599,7 @@ const SurgeryList: React.FC = () => {
             const matchesStatus = filterStatus === 'Todos' || item.status === filterStatus;
 
             const matchesCoverage = filterCoverage === 'Todas' || item.medical_coverage === filterCoverage;
+            const matchesDoctor = filterDoctor === 'Todos' || item.doctor === filterDoctor;
             const matchesVendor = filterVendor === 'Todas' || item.vendor_name === filterVendor;
 
             const surgeryYear = item.date && item.date !== 'TBD' ? item.date.substring(0, 4) : '';
@@ -617,7 +619,7 @@ const SurgeryList: React.FC = () => {
 
             const matchesDuplicates = !filterDuplicatesOnly || (item.nuc && nucFrequencies[String(item.nuc).trim()] > 1);
 
-            return matchesSearch && matchesStatus && matchesCoverage && matchesVendor && matchesYear && matchesType && matchesDuplicates;
+            return matchesSearch && matchesStatus && matchesCoverage && matchesDoctor && matchesVendor && matchesYear && matchesType && matchesDuplicates;
         });
 
         // Si estamos viendo duplicados, ordenamos por NUC para que queden juntos y sea facil compararlos
@@ -630,7 +632,7 @@ const SurgeryList: React.FC = () => {
         }
 
         return result;
-    }, [surgeries, searchTerm, filterStatus, filterCoverage, filterYear, filterVendor, coverageTypeFilter, filterDuplicatesOnly, nucFrequencies, coverageMapping]);
+    }, [surgeries, searchTerm, filterStatus, filterCoverage, filterDoctor, filterYear, filterVendor, coverageTypeFilter, filterDuplicatesOnly, nucFrequencies, coverageMapping]);
 
     // Paginación calculada
     const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
@@ -638,6 +640,12 @@ const SurgeryList: React.FC = () => {
         const startIndex = (currentPage - 1) * pageSize;
         return filteredData.slice(startIndex, startIndex + pageSize);
     }, [filteredData, currentPage, pageSize]);
+
+    // Derive unique doctors for dropdown
+    const uniqueDoctors = useMemo(() => {
+        const docs = new Set(surgeries.map(s => s.doctor).filter(Boolean).filter(d => d !== 'N/A' && d !== 'Sin Asignar'));
+        return ['Todos', ...Array.from(docs).sort((a, b) => a.localeCompare(b))];
+    }, [surgeries]);
 
     // Derive unique coverages for dropdown
     const uniqueCoverages = useMemo(() => {
@@ -823,6 +831,20 @@ const SurgeryList: React.FC = () => {
                             >
                                 {uniqueCoverages.map(c => (
                                     <option key={c} value={c}>{c}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Doctor Filter */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Médico:</span>
+                            <select
+                                value={filterDoctor}
+                                onChange={(e) => setFilterDoctor(e.target.value)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-300 bg-white text-slate-700 outline-none focus:ring-2 focus:ring-primary/50 max-w-[180px] truncate"
+                            >
+                                {uniqueDoctors.map(d => (
+                                    <option key={d} value={d}>{d}</option>
                                 ))}
                             </select>
                         </div>

@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v3.13.16 (2026-10-15)
+- **Filtro Desplegable por Médico en Listado General (`SurgeryList.tsx`)**:
+    * **Selector de Cirujano**: Nuevo filtro desplegable `Médico` en la barra de filtros del Listado General (`/surgeries`) que agrupa a todos los profesionales intervinientes de forma ordenada alfabéticamente.
+    * **Compatibilidad con Exportación**: El archivo `.xlsx` descargado refleja fielmente la combinación de filtros de Médico, Año, Cobertura, Ortopedia y Estado.
+
 ## v3.13.15 (2026-10-15)
 - **Búsqueda Inteligente Bidireccional por Códigos Equivalentes de Nomenclador (`SurgeryList.tsx`)**:
     * **Resolución Automática OSER ⇄ AOTER**: Al buscar cualquier código de práctica médica (ej. `122.08.03` de OSER o `RO.08.03` de AOTER), el sistema consulta automáticamente la tabla de equivalencias y localiza todas las cirugías relacionadas independientemente del código o nomenclatura con que hayan sido cargadas.
