@@ -4,6 +4,7 @@ import { supabase } from '../src/lib/supabase';
 import { useAuth } from '../src/lib/AuthContext';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx';
+import nomencladorMapping from '../src/data/nomenclador_mapping.json';
 import ProgressBar from '../components/ProgressBar';
 import ExcelImporter from '../components/ExcelImporter';
 import { captureError } from '../src/lib/errorLogger';
@@ -51,6 +52,34 @@ const SUSPENSION_REASONS = [
     'Causa Médica / Profesional',
     'Otro'
 ];
+
+const normalizeCode = (code: string) => {
+    return code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+};
+
+// Mapa bidireccional de equivalencias: cada código normalizado mapea a todos sus códigos relacionados (OSER, AOTER, etc.)
+const codeEquivalenceGroups: Map<string, string[]> = new Map();
+(() => {
+    const rawMap: Record<string, string> = (nomencladorMapping as any)?.mapping || {};
+    // Agrupar códigos que comparten la misma práctica estándar (val)
+    const groupsByTarget: Record<string, Set<string>> = {};
+    for (const [key, val] of Object.entries(rawMap)) {
+        const normKey = normalizeCode(key);
+        const normVal = normalizeCode(val);
+        if (!groupsByTarget[normVal]) {
+            groupsByTarget[normVal] = new Set();
+        }
+        groupsByTarget[normVal].add(normKey);
+        groupsByTarget[normVal].add(normVal);
+    }
+    // Registrar para cada código todos los miembros de su grupo
+    for (const membersSet of Object.values(groupsByTarget)) {
+        const membersList = Array.from(membersSet);
+        for (const member of membersList) {
+            codeEquivalenceGroups.set(member, membersList);
+        }
+    }
+})();
 
 // Cache a nivel módulo para navegación instantánea (TTL 15 segundos)
 let surgeryListCache: {
@@ -538,14 +567,33 @@ const SurgeryList: React.FC = () => {
 
     // Filter Logic
     const filteredData = useMemo(() => {
+        const cleanTerm = searchTerm.trim().toLowerCase();
+        const normTerm = normalizeCode(cleanTerm);
+        // Si el término escrito corresponde a un código o parte de él, obtenemos sus equivalentes normalizados
+        const equivalentCodes = normTerm.length >= 3 && codeEquivalenceGroups.has(normTerm)
+            ? codeEquivalenceGroups.get(normTerm)!
+            : [];
+
         let result = surgeries.filter(item => {
+            const procLower = item.procedure.toLowerCase();
+            const normProc = normalizeCode(item.procedure);
+
+            // Coincidencia directa por texto
+            let matchesProcedure = procLower.includes(cleanTerm);
+
+            // Coincidencia inteligente por código equivalente (ej: 122.08.03 <-> RO.08.03)
+            if (!matchesProcedure && equivalentCodes.length > 0) {
+                matchesProcedure = equivalentCodes.some(code => normProc.includes(code));
+            }
+
             const matchesSearch =
-                item.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.patientId.includes(searchTerm) ||
-                (item.medicalRecordNumber && String(item.medicalRecordNumber).toLowerCase().includes(searchTerm.toLowerCase())) ||
-                (item.nuc && String(item.nuc).toLowerCase().includes(searchTerm.toLowerCase())) ||
-                item.procedure.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.doctor.toLowerCase().includes(searchTerm.toLowerCase());
+                !cleanTerm ||
+                item.patientName.toLowerCase().includes(cleanTerm) ||
+                item.patientId.includes(cleanTerm) ||
+                (item.medicalRecordNumber && String(item.medicalRecordNumber).toLowerCase().includes(cleanTerm)) ||
+                (item.nuc && String(item.nuc).toLowerCase().includes(cleanTerm)) ||
+                matchesProcedure ||
+                item.doctor.toLowerCase().includes(cleanTerm);
 
             const matchesStatus = filterStatus === 'Todos' || item.status === filterStatus;
 

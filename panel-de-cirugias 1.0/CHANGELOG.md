@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v3.13.15 (2026-10-15)
+- **Búsqueda Inteligente Bidireccional por Códigos Equivalentes de Nomenclador (`SurgeryList.tsx`)**:
+    * **Resolución Automática OSER ⇄ AOTER**: Al buscar cualquier código de práctica médica (ej. `122.08.03` de OSER o `RO.08.03` de AOTER), el sistema consulta automáticamente la tabla de equivalencias y localiza todas las cirugías relacionadas independientemente del código o nomenclatura con que hayan sido cargadas.
+    * **Coincidencia Normalizada**: Tolerancia a puntos, espacios y guiones en códigos tanto en el texto ingresado como en el procedimiento quirúrgico registrado.
+
 ## v3.13.14 (2026-10-15)
 - **Exportación General a Excel (.xlsx), Filtro por Año y Soporte de Historia Clínica (`SurgeryList.tsx`)**:
     * **Exportación Directa a Excel**: Botón "Exportar Excel (N)" en la cabecera del Listado General (`/surgeries`) para descargar instantáneamente las cirugías según los filtros activos.
