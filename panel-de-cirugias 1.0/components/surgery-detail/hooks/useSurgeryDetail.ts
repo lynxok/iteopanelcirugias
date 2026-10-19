@@ -919,9 +919,11 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
 
             if (patientData) {
                 patientId = patientData.id;
-                await supabase.from('patients').update(patientPayload).eq('id', patientId);
+                const { error: pUpdErr } = await supabase.from('patients').update(patientPayload).eq('id', patientId);
+                if (pUpdErr) throw new Error('Error al actualizar datos del paciente: ' + pUpdErr.message);
             } else {
-                const { data: newP } = await supabase.from('patients').insert({ ...patientPayload, document_number: cleanDni }).select('id').single();
+                const { data: newP, error: pInsErr } = await supabase.from('patients').insert({ ...patientPayload, document_number: cleanDni }).select('id').single();
+                if (pInsErr || !newP) throw new Error('Error al registrar paciente: ' + (pInsErr?.message || 'No se recibieron datos del paciente'));
                 patientId = newP.id;
             }
 
@@ -977,10 +979,12 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
 
             let currentSurgeryId = id;
             if (isNew) {
-                const { data: newS } = await supabase.from('surgeries').insert(surgeryPayload).select('id').single();
+                const { data: newS, error: sInsErr } = await supabase.from('surgeries').insert(surgeryPayload).select('id').single();
+                if (sInsErr || !newS) throw new Error('Error al crear la cirugía: ' + (sInsErr?.message || 'No se generó el identificador de la cirugía'));
                 currentSurgeryId = newS.id;
             } else {
-                await supabase.from('surgeries').update(surgeryPayload).eq('id', id);
+                const { error: sUpdErr } = await supabase.from('surgeries').update(surgeryPayload).eq('id', id);
+                if (sUpdErr) throw new Error('Error al actualizar la cirugía: ' + sUpdErr.message);
                 if (dateChanged) {
                     setInternacionNotified(false);
                     setInternacionNotifiedBy(null);

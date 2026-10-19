@@ -18,6 +18,10 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-10-19]`: **Paginación en Resultados Quirúrgicos (`ResultsDashboard.tsx`) para superar límite de 1.000 filas de Supabase**:
+    *   **Causa Raíz Identificada**: PostgREST/Supabase limita las consultas sin `.range()` a 1.000 registros. Al haber superado los 1.130 registros históricos, el dashboard truncaba silenciosamente las cirugías más recientes (Agosto mostraba 90 en vez de 100, Septiembre 93 en vez de 109, Octubre 48 en vez de 62).
+    *   **Solución**: Se implementó descarga en bloques paginados de 1.000 filas en paralelo (`fetchAllSurgeries` y `fetchAllAdmissions`), garantizando la recuperación del 100% de cirugías e internaciones sin importar el crecimiento de la base de datos.
+
 *   `[2026-10-15]`: **Exportación General a Excel (.xlsx), Filtro de Año y Soporte de Historia Clínica en Listado (`SurgeryList.tsx`)**:
     *   **Botón de Exportación Directa a Excel**: Incorporado botón "Exportar Excel (N)" en la cabecera de la vista `Listado General` (`/surgeries`). Genera archivo `.xlsx` nativo respetando exactamente los filtros aplicados en pantalla.
     *   **Columnas Exportadas**: Fecha, Hora, Paciente, DNI, Nº Historia Clínica (`medical_record_number`), NUC, Cobertura, Procedimiento, Diagnóstico, Cirujano, Ortopedia, Quirófano y Estado.

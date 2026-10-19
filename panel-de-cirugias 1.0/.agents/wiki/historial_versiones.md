@@ -2,6 +2,12 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.18 [2026-10-19]**: Lanzada la versión **v3.13.18**.
+    *   **Paginación Completa de Cirugías e Internaciones en Resultados (`pages/ResultsDashboard.tsx`)**:
+        *   Eliminado el límite de 1.000 registros impuesto por PostgREST/Supabase mediante consultas paginadas automáticas en lotes de 1.000 filas (`fetchAllSurgeries` y `fetchAllAdmissions`).
+        *   Garantiza que el 100% de las cirugías históricas y actuales (más de 1.130 registros) se contabilicen con exactitud en el volumen mensual, casuística y métricas ejecutivas.
+    *   **Manejo Robusto de Errores en Guardado de Cirugías (`useSurgeryDetail.ts`)**:
+        *   Validación y propagación explícita de errores al insertar o actualizar pacientes y cirugías, previniendo fallos silenciosos.
 *   **v3.13.9 [2026-10-07]**: Lanzada la versión **v3.13.9**.
     *   **Pestaña de Feriados y Asuetos en Configuración (`components/settings/HolidaysTab.tsx`, `pages/Settings.tsx`, `useSettings.ts`)**:
         *   Administración integral de feriados nacionales, asuetos de sanidad (ATSA), provinciales, institucionales y otros en `quirofano.calendar_holidays`.

@@ -473,52 +473,80 @@ const ResultsDashboard: React.FC = () => {
         try {
             const twoYearsAgoStr = format(subYears(new Date(), 2), 'yyyy-MM-dd');
 
-            // Parallel execution of all 3 queries
-            const [orRes, surRes, admRes] = await Promise.all([
+            // Parallel execution with pagination helper to bypass Supabase 1000-row limit
+            const fetchAllSurgeries = async () => {
+                let allSurgeries: any[] = [];
+                let from = 0;
+                const batchSize = 1000;
+                while (true) {
+                    const { data, error } = await supabase
+                        .from('surgeries')
+                        .select(`
+                            id,
+                            status, 
+                            suspension_reason, 
+                            operating_room_id,
+                            estimated_duration,
+                            surgery_date,
+                            procedure_name,
+                            doctor_id,
+                            patient_id,
+                            actual_start_time,
+                            actual_end_time,
+                            doctors!doctor_id (
+                                full_name,
+                                specialty
+                            ),
+                            patients!patient_id (
+                                full_name
+                            ),
+                            referring_doctor_id,
+                            referring_doctor:doctors!referring_doctor_id (
+                                full_name
+                            )
+                        `)
+                        .range(from, from + batchSize - 1);
+                    if (error) throw error;
+                    if (!data || data.length === 0) break;
+                    allSurgeries = allSurgeries.concat(data);
+                    if (data.length < batchSize) break;
+                    from += batchSize;
+                }
+                return allSurgeries;
+            };
+
+            const fetchAllAdmissions = async () => {
+                let allAdmissions: any[] = [];
+                let from = 0;
+                const batchSize = 1000;
+                while (true) {
+                    const { data, error } = await supabase
+                        .from('hospital_admissions')
+                        .select('patient_id, check_in, check_out')
+                        .not('check_out', 'is', null)
+                        .gte('check_in', twoYearsAgoStr)
+                        .range(from, from + batchSize - 1);
+                    if (error) throw error;
+                    if (!data || data.length === 0) break;
+                    allAdmissions = allAdmissions.concat(data);
+                    if (data.length < batchSize) break;
+                    from += batchSize;
+                }
+                return allAdmissions;
+            };
+
+            const [orRes, surgeriesData, admissionsData] = await Promise.all([
                 supabase
                     .from('operating_rooms')
                     .select('id, name, daily_goal')
                     .eq('active', true),
-                supabase
-                    .from('surgeries')
-                    .select(`
-                        id,
-                        status, 
-                        suspension_reason, 
-                        operating_room_id,
-                        estimated_duration,
-                        surgery_date,
-                        procedure_name,
-                        doctor_id,
-                        patient_id,
-                        actual_start_time,
-                        actual_end_time,
-                        doctors!doctor_id (
-                            full_name,
-                            specialty
-                        ),
-                        patients!patient_id (
-                            full_name
-                        ),
-                        referring_doctor_id,
-                        referring_doctor:doctors!referring_doctor_id (
-                            full_name
-                        )
-                    `),
-                supabase
-                    .from('hospital_admissions')
-                    .select('patient_id, check_in, check_out')
-                    .not('check_out', 'is', null)
-                    .gte('check_in', twoYearsAgoStr)
+                fetchAllSurgeries(),
+                fetchAllAdmissions()
             ]);
 
             if (orRes.error) throw orRes.error;
-            if (surRes.error) throw surRes.error;
-            if (admRes.error) throw admRes.error;
 
             const orsData = orRes.data || [];
-            const surgeriesData = surRes.data || [];
-            const admissionsData = admRes.data || [];
 
             setRawOrs(orsData);
             setRawSurgeries(surgeriesData);
