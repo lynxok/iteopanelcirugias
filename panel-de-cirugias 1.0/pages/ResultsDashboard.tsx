@@ -854,7 +854,7 @@ const ResultsDashboard: React.FC = () => {
                 const s = referrals.find((r: any) => r.referring_doctor_id === id);
                 return {
                     id: id,
-                    name: s?.referring_doctor?.full_name || 'Desconocido'
+                    name: (s?.referring_doctor?.full_name || 'Desconocido').trim().replace(/\s+/g, ' ')
                 };
             }).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -1166,85 +1166,48 @@ const ResultsDashboard: React.FC = () => {
     // Calculate Referral Stats when selection changes
     useEffect(() => {
         const referrals = card3Data.referrals;
-        if (referrals.length === 0) {
+        if (!referrals || referrals.length === 0) {
             setTargetSurgeonStats([]);
             return;
         }
 
-        const statsByGroup: Record<string, any[]> = {};
+        const statsByGroup: Record<string, { displayName: string; surgeries: any[] }> = {};
         let totalCount = 0;
 
         if (selectedReferrerId) {
             const myReferrals = referrals.filter(s => s.referring_doctor_id === selectedReferrerId);
             totalCount = myReferrals.length;
             myReferrals.forEach((s: any) => {
-                const surgeonName = s.doctors?.full_name || 'Sin Asignar';
-                if (!statsByGroup[surgeonName]) statsByGroup[surgeonName] = [];
-                statsByGroup[surgeonName].push(s);
+                const rawName = s.doctors?.full_name || 'Sin Asignar';
+                const key = rawName.trim().replace(/\s+/g, ' ').toUpperCase();
+                if (!statsByGroup[key]) {
+                    statsByGroup[key] = { displayName: rawName.trim().replace(/\s+/g, ' '), surgeries: [] };
+                }
+                statsByGroup[key].surgeries.push(s);
             });
         } else {
             totalCount = referrals.length;
             referrals.forEach((s: any) => {
-                const groupName = referralSummaryMode === 'Referring'
+                const rawName = referralSummaryMode === 'Referring'
                     ? s.referring_doctor?.full_name || 'Desconocido'
                     : s.doctors?.full_name || 'Sin Asignar';
-                if (!statsByGroup[groupName]) statsByGroup[groupName] = [];
-                statsByGroup[groupName].push(s);
+                const key = rawName.trim().replace(/\s+/g, ' ').toUpperCase();
+                if (!statsByGroup[key]) {
+                    statsByGroup[key] = { displayName: rawName.trim().replace(/\s+/g, ' '), surgeries: [] };
+                }
+                statsByGroup[key].surgeries.push(s);
             });
         }
 
-        const processed = Object.entries(statsByGroup).map(([name, list]) => ({
-            name,
-            count: list.length,
-            percentage: totalCount > 0 ? Math.round((list.length / totalCount) * 100) : 0,
-            surgeries: list
+        const processed = Object.values(statsByGroup).map(group => ({
+            name: group.displayName,
+            count: group.surgeries.length,
+            percentage: totalCount > 0 ? Math.round((group.surgeries.length / totalCount) * 100) : 0,
+            surgeries: group.surgeries
         })).sort((a, b) => b.count - a.count);
 
         setTargetSurgeonStats(processed);
     }, [card3Data.referrals, selectedReferrerId, referralSummaryMode]);
-
-
-    // Calculate Referral Stats when selection changes
-    useEffect(() => {
-        if (referralData.length === 0) {
-            setTargetSurgeonStats([]);
-            return;
-        }
-
-        const statsByGroup: Record<string, any[]> = {};
-        let totalCount = 0;
-
-        if (selectedReferrerId) {
-            // Detailed view: Surgeries grouped by surgeon for a specific referrer
-            const myReferrals = referralData.filter(s => s.referring_doctor_id === selectedReferrerId);
-            totalCount = myReferrals.length;
-            myReferrals.forEach((s: any) => {
-                const surgeonName = (s.doctors as any)?.full_name || 'Sin Asignar';
-                if (!statsByGroup[surgeonName]) statsByGroup[surgeonName] = [];
-                statsByGroup[surgeonName].push(s);
-            });
-        } else {
-            // Summary view: group by Referring or Receiving doctor
-            totalCount = referralData.length;
-            referralData.forEach((s: any) => {
-                const name = referralSummaryMode === 'Referring'
-                    ? (s.referring_doctor as any)?.full_name || 'Desconocido'
-                    : (s.doctors as any)?.full_name || 'Sin Asignar';
-                if (!statsByGroup[name]) statsByGroup[name] = [];
-                statsByGroup[name].push(s);
-            });
-        }
-
-        const processedStats = Object.entries(statsByGroup).map(([name, groupSurgeries]) => ({
-            name,
-            count: groupSurgeries.length,
-            percentage: totalCount > 0 ? Math.round((groupSurgeries.length / totalCount) * 100) : 0,
-            surgeries: groupSurgeries
-        })).sort((a, b) => b.count - a.count);
-
-        setTargetSurgeonStats(processedStats);
-
-    }, [selectedReferrerId, referralData, referralSummaryMode]);
 
     const activeReferrer = selectedReferrerId; // Helper for closure if needed
 

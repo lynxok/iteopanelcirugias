@@ -164,7 +164,7 @@ export const SurgeryHeader: React.FC<SurgeryHeaderProps> = ({
                         )}
 
                         {/* Internacion Visibility Check */}
-                        {!isNew && (currentUserRole === 'Internacion' || currentUserRole === 'SuperAdmin') && (
+                        {!isNew && (currentUserRole === 'Internacion' || currentUserRole === 'SuperAdmin' || currentUserRole === 'Administrativo' || currentUserRole === 'Administrativo ART') && (
                             <div className="px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-1 items-start min-w-[140px] shadow-inner">
                                 <label className="flex items-center gap-2 cursor-pointer group">
                                     <input 
@@ -172,7 +172,7 @@ export const SurgeryHeader: React.FC<SurgeryHeaderProps> = ({
                                         className="size-4 rounded border-slate-300 text-blue-500 focus:ring-blue-500 transition-colors cursor-pointer"
                                         checked={internacionNotified}
                                         onChange={onToggleInternacion}
-                                        disabled={saving || (internacionNotified && currentUserRole !== 'SuperAdmin')}
+                                        disabled={saving || (internacionNotified && currentUserRole !== 'SuperAdmin' && currentUserRole !== 'Administrativo' && currentUserRole !== 'Administrativo ART')}
                                     />
                                     <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight select-none pt-0.5">
                                         Visto Internación

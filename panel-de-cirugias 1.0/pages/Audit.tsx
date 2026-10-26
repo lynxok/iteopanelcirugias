@@ -52,6 +52,11 @@ interface ResourceDetails {
     patientName?: string;
     documentNumber?: string;
     procedureName?: string;
+    materialName?: string;
+    observation?: string;
+    isCovered?: boolean;
+    isConfirmed?: boolean;
+    quantity?: number;
 }
 
 // Cache a nivel de módulo para la primera página por defecto
@@ -139,6 +144,28 @@ const Audit: React.FC = () => {
                         if (matchedSurgeries && matchedSurgeries.length > 0) {
                             const surgeryIds = matchedSurgeries.map(s => s.id);
                             matchedResourceIds.push(...surgeryIds);
+
+                            // Vincular materiales de esas cirugías para que sus eventos aparezcan en la búsqueda del paciente
+                            const { data: matchedMats } = await supabase
+                                .from('surgery_materials')
+                                .select('id')
+                                .in('surgery_id', surgeryIds);
+                            if (matchedMats && matchedMats.length > 0) {
+                                matchedResourceIds.push(...matchedMats.map(m => m.id));
+                            }
+                        }
+                    }
+
+                    // Búsqueda directa en materiales por nombre o por observación (ej. "DERECHA", "Prótesis", "Clavo")
+                    const { data: directMats } = await supabase
+                        .from('surgery_materials')
+                        .select('id, surgery_id')
+                        .or(`name.ilike.%${searchTerm}%,observation.ilike.%${searchTerm}%`);
+                    if (directMats && directMats.length > 0) {
+                        matchedResourceIds.push(...directMats.map(m => m.id));
+                        const extraSurgeryIds = directMats.map(m => m.surgery_id).filter(Boolean);
+                        if (extraSurgeryIds.length > 0) {
+                            matchedResourceIds.push(...extraSurgeryIds);
                         }
                     }
                 } catch (e) {
@@ -169,6 +196,7 @@ const Audit: React.FC = () => {
                 // Resolver datos de paciente, DNI y práctica para los recursos
                 const surgeryIds: string[] = [];
                 const patientIds: string[] = [];
+                const materialIds: string[] = [];
 
                 data.forEach((log: AuditLog) => {
                     if (!log.resource_id) return;
@@ -177,6 +205,11 @@ const Audit: React.FC = () => {
                         surgeryIds.push(log.resource_id);
                     } else if (res === 'patients' || res === 'patient' || res === 'paciente' || res === 'pacientes') {
                         patientIds.push(log.resource_id);
+                    } else if (res === 'surgery_materials' || res === 'materials' || res === 'materiales') {
+                        materialIds.push(log.resource_id);
+                        if (log.meta?.surgery_id) {
+                            surgeryIds.push(log.meta.surgery_id);
+                        }
                     }
                 });
 
@@ -184,6 +217,7 @@ const Audit: React.FC = () => {
 
                 const uniqueSurgeryIds = Array.from(new Set(surgeryIds));
                 const uniquePatientIds = Array.from(new Set(patientIds));
+                const uniqueMaterialIds = Array.from(new Set(materialIds));
 
                 const surgeriesPromise = uniqueSurgeryIds.length > 0
                     ? supabase
@@ -206,8 +240,31 @@ const Audit: React.FC = () => {
                         .in('id', uniquePatientIds)
                     : Promise.resolve({ data: [] });
 
+                const materialsPromise = uniqueMaterialIds.length > 0
+                    ? supabase
+                        .from('surgery_materials')
+                        .select(`
+                            id,
+                            name,
+                            observation,
+                            is_covered,
+                            is_confirmed,
+                            provided_quantity,
+                            surgery_id,
+                            surgeries (
+                                id,
+                                procedure_name,
+                                patients (
+                                    full_name,
+                                    document_number
+                                )
+                            )
+                        `)
+                        .in('id', uniqueMaterialIds)
+                    : Promise.resolve({ data: [] });
+
                 try {
-                    const [surgeriesRes, patientsRes] = await Promise.all([surgeriesPromise, patientsPromise]);
+                    const [surgeriesRes, patientsRes, materialsRes] = await Promise.all([surgeriesPromise, patientsPromise, materialsPromise]);
 
                     if (surgeriesRes.data) {
                         surgeriesRes.data.forEach((s: any) => {
@@ -228,6 +285,43 @@ const Audit: React.FC = () => {
                             };
                         });
                     }
+
+                    if (materialsRes.data) {
+                        materialsRes.data.forEach((m: any) => {
+                            detailsMap[m.id] = {
+                                patientName: m.surgeries?.patients?.full_name || undefined,
+                                documentNumber: m.surgeries?.patients?.document_number || undefined,
+                                procedureName: m.surgeries?.procedure_name || undefined,
+                                materialName: m.name || undefined,
+                                observation: m.observation || undefined,
+                                isCovered: m.is_covered,
+                                isConfirmed: m.is_confirmed,
+                                quantity: m.provided_quantity
+                            };
+                        });
+                    }
+
+                    // Fallback para logs históricos cuyos materiales hayan sido reemplazados o tengan metadata persistida
+                    data.forEach((log: AuditLog) => {
+                        const res = (log.resource || '').toLowerCase();
+                        if (res === 'surgery_materials' || res === 'materials' || res === 'materiales') {
+                            const cur = detailsMap[log.resource_id] || {};
+                            if (!cur.patientName && log.meta?.patient_name) {
+                                cur.patientName = log.meta.patient_name;
+                                cur.documentNumber = log.meta.patient_dni;
+                            } else if (!cur.patientName && log.meta?.surgery_id && detailsMap[log.meta.surgery_id]) {
+                                cur.patientName = detailsMap[log.meta.surgery_id].patientName;
+                                cur.documentNumber = detailsMap[log.meta.surgery_id].documentNumber;
+                                cur.procedureName = detailsMap[log.meta.surgery_id].procedureName;
+                            }
+                            if (!cur.materialName && log.meta?.name) cur.materialName = log.meta.name;
+                            if (!cur.observation && log.meta?.observation) cur.observation = log.meta.observation;
+                            if (cur.isCovered === undefined && log.meta?.is_covered !== undefined) cur.isCovered = log.meta.is_covered;
+                            if (cur.isConfirmed === undefined && log.meta?.is_confirmed !== undefined) cur.isConfirmed = log.meta.is_confirmed;
+                            if (cur.quantity === undefined && log.meta?.quantity !== undefined) cur.quantity = log.meta.quantity;
+                            detailsMap[log.resource_id] = cur;
+                        }
+                    });
                 } catch (e) {
                     console.error('Error fetching resource details for audit:', e);
                 }
@@ -481,6 +575,41 @@ const Audit: React.FC = () => {
                                                 )}
                                             </div>
                                         )
+                                    )}
+
+                                    {/* Material & Observation Details Card */}
+                                    {((log.resource || '').toLowerCase().includes('material') || resourceDetailsMap[log.resource_id]?.materialName || log.meta?.name) && (
+                                        <div className="mb-3 px-3.5 py-2.5 bg-amber-50/70 border border-amber-200/80 rounded-xl flex flex-col gap-2 text-xs">
+                                            <div className="flex items-center gap-2 font-bold text-slate-900">
+                                                <span className="material-symbols-outlined text-base text-amber-600">inventory_2</span>
+                                                <span className="text-sm">{resourceDetailsMap[log.resource_id]?.materialName || log.meta?.name || 'Material Quirúrgico'}</span>
+                                                {(resourceDetailsMap[log.resource_id]?.quantity || log.meta?.quantity) && (
+                                                    <span className="text-[10px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-mono font-bold">
+                                                        Cant: {resourceDetailsMap[log.resource_id]?.quantity || log.meta?.quantity}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {(resourceDetailsMap[log.resource_id]?.observation || log.meta?.observation) && (
+                                                <div className="flex items-center gap-2 bg-white/90 border border-amber-300/80 p-2 rounded-lg shadow-2xs">
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
+                                                        Observación / Lateralidad:
+                                                    </span>
+                                                    <span className="font-mono font-black text-slate-900 text-xs">
+                                                        {resourceDetailsMap[log.resource_id]?.observation || log.meta?.observation}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <div className="flex flex-wrap items-center gap-4 text-[10px] text-slate-600 font-medium">
+                                                <span className="flex items-center gap-1.5">
+                                                    <span className={`size-2.5 rounded-full ${resourceDetailsMap[log.resource_id]?.isCovered || log.meta?.is_covered ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                                                    Disp. Física: <strong className="text-slate-800">{resourceDetailsMap[log.resource_id]?.isCovered || log.meta?.is_covered ? 'Sí' : 'No'}</strong>
+                                                </span>
+                                                <span className="flex items-center gap-1.5">
+                                                    <span className={`size-2.5 rounded-full ${resourceDetailsMap[log.resource_id]?.isConfirmed || log.meta?.is_confirmed ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                                                    Validado / Auditable: <strong className="text-slate-800">{resourceDetailsMap[log.resource_id]?.isConfirmed || log.meta?.is_confirmed ? 'Sí' : 'No'}</strong>
+                                                </span>
+                                            </div>
+                                        </div>
                                     )}
 
                                     {renderMetaChanges(log)}

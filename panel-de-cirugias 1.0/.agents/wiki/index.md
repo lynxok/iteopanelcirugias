@@ -18,6 +18,30 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-10-26]`: **Régimen de Liquidación de Turno Mañana para Técnicos ([TecnicoPanel.tsx](file:///pages/TecnicoPanel.tsx))**:
+    *   **Identificación de Turno Mañana**: Lunes a jueves de 06:00 a 15:00 hs y viernes de 06:00 a 14:00 hs.
+    *   **Regla de Tiempo Quirúrgico**: Las horas presenciales registradas en el reloj de asistencia se liquidan al 100% y las cirugías computan el valor de la práctica nomenclada (`practiceRate`), pero el **tiempo quirúrgico no se computa (`timeCost = $0`)** para evitar duplicar el cobro de la misma hora.
+    *   **Cómputo Exclusivo de Desborde a la Tarde**: Si la cirugía inicia en la mañana y se extiende a la tarde superando el corte + tolerancia (15:15 L-J / 14:15 V), solo computa tiempo la fracción excedente que desborda a la tarde.
+    *   **Visualización en Grilla y Reportes**: Badge informativo `0m (T. Mañana)` en la columna de duración con tachado del tiempo real, `$0` en costo por tiempo y notas explicativas `Turno Mañana` en liquidaciones y comprobantes.
+
+*   `[2026-10-22]`: **Trazabilidad y Visibilidad de Auditoría en Materiales y Observaciones de Ortopedia**:
+    *   **Ficha Quirúrgica (`MaterialsSection.tsx` y `SurgeryDetail.tsx`)**: Se integró el paso de propiedades `orthoValidatedByName` y `orthoValidationDate`. Incorporado badge de validación en la cabecera de la sección (`Validado por [Usuario] ([Fecha])`), atribución explícita del autor debajo de cada observación individual de material (`👤 Por: [Usuario] ([Fecha])`) y leyenda formal en el pie de tabla.
+    *   **Pantalla de Auditoría (`Audit.tsx`)**: Búsqueda unificada vinculando los materiales con las cirugías y pacientes encontrados (y búsqueda directa por nombre o texto de observación). Incorporada la tarjeta `Material & Observation Details Card` con el banner del paciente/DNI, el nombre del material, un chip destacado para la observación/lateralidad y los estados de disponibilidad y validación.
+    *   **Sincronización Enriquecida (`useSurgeryDetail.ts`)**: Al persistir materiales se enriquecen los eventos de `quirofano.audit_logs` con `name`, `observation`, `surgery_id`, `patient_name` y `patient_dni`. Backfill aplicado sobre los registros históricos de auditoría de materiales existentes.
+
+*   `[2026-10-21]`: **Soporte de Matrícula Profesional para Médicos y Corrección de Esquema en Supabase**:
+    *   **Resolución de Error 42703**: Aplicada la migración `20261021151500_add_quirofano_users_license_number.sql` que crea la columna `license_number` en `quirofano.users` (estaba erróneamente en `public.users`), eliminando el fallo al asociar matrículas a usuarios médicos y residentes. Backfill ejecutado desde `quirofano.doctors`.
+    *   **Sincronización Bidireccional (`useSettings.ts`)**: Al guardar un usuario médico se actualiza también la matrícula en `quirofano.doctors`, y al guardar un médico se refleja en su usuario asociado.
+    *   **Gestión en Base de Médicos (`DoctorModal.tsx` y `DoctorsTab.tsx`)**: Se incorporó el input "Número de Matrícula" en el formulario de médicos, la búsqueda por matrícula y el badge visual `M.N. [Nº]` en la tabla de profesionales.
+    *   **Registro Manual de Horas**: Habilitado modal de carga manual de asistencia exclusivo para rol `SuperAdmin`, permitiendo registrar jornadas completas (Ingreso y Egreso) o marcas individuales (Check-In, Check-Out, Break-Out, Break-In) ante contingencias técnicas o problemas de conectividad de los instrumentadores.
+    *   **Trazabilidad y Auditoría**: Los registros se guardan en `quirofano.tecnico_attendance` con origen `Manual (SuperAdmin: [Nombre])`, se asientan detalladamente en `audit_logs` vía `logAudit` y se distinguen en el listado mensual con badge distintivo `Carga Manual`.
+    *   **Gestión y Recálculo**: Se habilitó la eliminación de marcas manuales/erróneas por parte de SuperAdmin con confirmación, sincronización de mes/año de consulta y recálculo inmediato de horas mensuales y liquidación.
+
+*   `[2026-10-20]`: **Habilitación de Notificaciones de Internación (`NEW` / Reprogramadas) y Visto en Rol Administrativo (`Calendar.tsx`, `SurgeryHeader.tsx`, `UserModal.tsx`)**:
+    *   **Insignias `NEW` y `Reprogramada` en Calendario**: Extendida la condición en las 4 vistas del calendario (Mes, Semana, Día y Drawer lateral) para que los roles `Administrativo` y `Administrativo ART` visualicen las alertas de novedades de internación (`internacionNotified === false`).
+    *   **Registro de "Visto Internación"**: Habilitada la casilla de verificación en `SurgeryHeader.tsx` para que usuarios administrativos puedan asentar el visto de internación.
+    *   **Corrección de Etiqueta en UserModal**: Subsanada la opción `<option value="Internacion">` que erróneamente exhibía el texto "Enfermería" en lugar de "Internación", y agregada la opción `Enfermería` como rol independiente.
+
 *   `[2026-10-19]`: **Paginación en Resultados Quirúrgicos (`ResultsDashboard.tsx`) para superar límite de 1.000 filas de Supabase**:
     *   **Causa Raíz Identificada**: PostgREST/Supabase limita las consultas sin `.range()` a 1.000 registros. Al haber superado los 1.130 registros históricos, el dashboard truncaba silenciosamente las cirugías más recientes (Agosto mostraba 90 en vez de 100, Septiembre 93 en vez de 109, Octubre 48 en vez de 62).
     *   **Solución**: Se implementó descarga en bloques paginados de 1.000 filas en paralelo (`fetchAllSurgeries` y `fetchAllAdmissions`), garantizando la recuperación del 100% de cirugías e internaciones sin importar el crecimiento de la base de datos.

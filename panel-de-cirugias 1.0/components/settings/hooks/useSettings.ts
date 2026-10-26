@@ -198,7 +198,8 @@ export const useSettings = () => {
         if (!error && data) {
             setDoctors(data.map(d => ({
                 id: d.id, name: d.full_name, specialty: d.specialty || 'Cirugía General',
-                email: d.email || '', active: d.active, does_guardias: d.does_guardias
+                email: d.email || '', active: d.active, does_guardias: d.does_guardias,
+                license_number: d.license_number || null
             })));
         }
     }, []);
@@ -401,6 +402,7 @@ export const useSettings = () => {
                     email: newUser.email,
                     specialty: newUser.role === 'Anestesista' ? 'Anestesiología' : (newUser.role === 'Residente' ? 'Residencia' : newUserSpecialty),
                     active: newUser.active,
+                    license_number: newUser.license_number || null,
                     does_guardias: ((newUser.role === 'Medico' && (newUserSpecialty === 'Cirugía General' || newUserSpecialty === 'Cirujano')) || newUser.role === 'Anestesista') ? newUser.does_guardias : false
                 };
                 if (newUser.doctorId) {
@@ -481,6 +483,7 @@ export const useSettings = () => {
                 specialty: doctorForm.specialty, 
                 email: doctorForm.email, 
                 active: doctorForm.active,
+                license_number: doctorForm.license_number || null,
                 does_guardias: (doctorForm.specialty === 'Cirugía General' || doctorForm.specialty === 'Cirujano' || doctorForm.specialty === 'Anestesiología' || doctorForm.specialty === 'Anestesista') ? doctorForm.does_guardias : false 
             };
             const { data: savedDoc, error } = isEditingDoctor && doctorForm.id
@@ -493,7 +496,9 @@ export const useSettings = () => {
                     name: doctorForm.name, 
                     email: doctorForm.email, 
                     role: 'Medico', 
-                    active: doctorForm.active
+                    active: doctorForm.active,
+                    license_number: doctorForm.license_number || null,
+                    doctor_id: savedDoc.id
                 }, { onConflict: 'email' });
             }
             fetchInitialData();

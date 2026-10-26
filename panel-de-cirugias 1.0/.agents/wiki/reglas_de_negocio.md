@@ -102,6 +102,9 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     *   **Regla de Nomenclatura e Integridad**: Toda aseguradora de riesgos de trabajo dada de alta en el sistema (ej. `"EL NORTE SEGUROS"`, `"IAPSER ART"`, etc.) debe registrarse con `type = 'ART'` y sin caracteres invisibles/no estándar para garantizar su visibilidad en el panel de ART.
 *   **Rol Híbrido "Administrativo ART"**:
     *   **Capacidades Híbridas**: Combina las facultades operativas del rol `Administrativo` (acceso y edición plena sobre todas las cirugías del sanatorio sin restricción de prestador, programación, ficha clínica y logística) con las atribuciones y visibilidad de `Oficina ART` (acceso directo al Tablero de Control ART / Administrativo con columnas especializadas de *Pedido de autorización ART*, *Paciente Notificado*, confirmación de turnos, y capacidad de suspender/cancelar intervenciones quirúrgicas).
+*   **Visibilidad de Cirugías Nuevas y Visto de Internación para Administrativos**:
+    *   Los roles `Administrativo` y `Administrativo ART` tienen habilitada la visualización de insignias de **Cirugía Nueva** (`NEW` / `fiber_new`) y **Cirugía Reprogramada** (`event_repeat`) en el calendario (vistas de mes, semana, día y drawer de pendientes).
+    *   Cuentan con la facultad de registrar el **"Visto Internación"** (`internacion_notified`) en la cabecera de la ficha quirúrgica.
 
 *   **Sección Guardias (`on_duty`)**: Los usuarios con permiso `'view'` en la matriz de permisos pueden ver el drawer de guardias de la semana en modo solo lectura. Aquellos con `'edit'` pueden modificar el personal general y excepciones.
 *   **Guardias de Residentes (Edición de Turnos)**: Los residentes habilitados mediante el indicador `can_edit_shifts` (y usuarios con roles administrativos o SuperAdmin) pueden crear, modificar horarios (inicio, fin, fecha) y eliminar guardias asignadas tanto desde el calendario como desde el panel de "Mis Guardias" (`MyConsentsView` / `LogShiftModal`).
@@ -213,10 +216,15 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 *   **Guardia Nocturna, Fines de Semana y Feriados:** 
     *   Cualquier cirugía iniciada **antes de las 06:00 hs AM** en días hábiles, **después de las 19:00 hs** en días hábiles, o en **sábados, domingos y feriados** se asigna al 100% al **Técnico de Guardia** de esa fecha.
 *   **Turno Mañana y Extensión a Turno Tarde:** 
-    *   **Horario Base Mañana**: 06:00 a 15:00 hs (lunes a jueves) y 06:00 a 14:00 hs (viernes). Corresponde al personal del turno mañana. No se asigna automáticamente al Técnico de Guardia ni al Fijo, salvo que en la Ficha Técnica (`surgery_forms.instrumentadora`) figure expresamente su nombre.
+    *   **Horario Base Mañana**: 06:00 a 15:00 hs (lunes a jueves) y 06:00 a 14:00 hs (viernes). Corresponde al personal del turno mañana. No se asigna automáticamente al Técnico de Guardia ni al Fijo, salvo que en la Ficha Técnica (`surgery_forms.instrumentadora`) figure expresamente su nombre o se apruebe manualmente.
+    *   **Régimen de Liquidación en Turno Mañana**:
+        - **Horas de Asistencia (Fichadas)**: Se computan y liquidan al 100% según las horas registradas en el reloj de entrada/salida (`horas fichadas × valor hora`).
+        - **Cirugías**: Se liquida el arancel de la práctica quirúrgica nomenclada (`practiceRate`), asignado al 100% (o 50% si está coparticipada).
+        - **Tiempo Quirúrgico de la Cirugía**: **NO se computa** (`timeCost = $0`, duración computable = 0m). La duración transcurrida en el horario matutino ya se encuentra abonada en las horas de asistencia presencial, impidiendo duplicidad de pago.
     *   **Extensión de Cirugía a Turno Tarde (Tolerancia Configurable y Tiempo Excedente - Vigencia desde Septiembre 2026)**: Si una cirugía iniciada en el turno mañana con fecha a partir del **1 de septiembre de 2026 (`date >= '2026-09-01'`)** continúa y su horario de fin (`actual_end_time`) supera por más del margen de tolerancia configurado (por defecto **15 minutos**) la hora de corte (`> 15:15 hs` de lunes a jueves, o `> 14:15 hs` los viernes), y no comenzó después de las 19:00 hs, **se computa al grupo de técnicos de turno tarde** (50% Técnico Fijo y 50% Técnico de Guardia con fichaje presente).
         - **Vigencia Temporal**: Esta regla y su asignación automática rigen exclusivamente a partir del 1 de septiembre de 2026, evitando modificar los períodos cerrados históricos anteriores (agosto 2026 hacia atrás).
         - **Tiempo computable para el Turno Tarde**: El tiempo de cirugía liquidable a los instrumentistas de turno tarde se computa **exclusivamente desde la hora de corte + tolerancia** (ej. desde las 15:15 hs o 14:15 hs) hasta el horario de fin efectivo de la cirugía (`actual_end_time`). No se les liquida el tiempo previo transcurrido durante la mañana.
+        - **Desborde para el Técnico de Mañana**: En cirugías extendidas a la tarde, el tramo transcurrido en la mañana tiene tiempo $0, y solo computa tiempo la fracción excedente que desborda a la tarde después del corte + tolerancia.
         - **Tarifa fija de práctica**: La práctica (monto fijo por nomenclador) se mantiene computada al 50% para los técnicos de turno tarde.
     *   **Configuración de Tolerancia**: Se administra dinámicamente desde *Tarifas y Ajustes* → *Valores Globales* (`rate_type: 'overtime_tolerance'`), permitiendo ajustar los minutos de tolerancia y registrando su auditoría de cambios.
 ### Cómputo de Honorarios al 50% (Turno Tarde y Coparticipación)
@@ -243,13 +251,18 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
        - Permite registrar ausencias programadas por rango de fechas (`start_date` a `end_date`, inclusive) para cualquier técnico.
        - **Cobertura Automática de Turno Tarde**: Si el técnico asignado fijo al turno tarde (`is_turno_tarde: true`) está de vacaciones (o ausente sin fichada) en la fecha de una cirugía de la tarde, el cupo queda liberado para los técnicos que rotan en guardia. Si dos técnicas de guardia registran fichada de ingreso (`check_in`) en ese día, la cirugía del turno tarde se les computa automáticamente a ambas coparticipada al **50% a cada una**.
        - **Supresión de Advertencia**: Se anula el cartel de advertencia de discordancia (`isInstrumentadoraMismatch`) cuando el técnico presente con guardia está cubriendo activamente el turno tarde en reemplazo del titular de vacaciones.
-       - **Indicador en Calendario de Guardias**: En el selector de instrumentadores (`Calendar.tsx`), los técnicos que se encuentren dentro de un período de vacaciones o licencia figuran destacados con el ícono 🏖️ y el detalle de las fechas correspondientes para evitar asignaciones erróneas.
+       6. **Carga Manual de Asistencia (SuperAdmin - 20/10/2026)**:
+       - Modal dedicado para que usuarios con rol `SuperAdmin` puedan ingresar horas de asistencia de técnicos que no hayan podido fichar por fallas de conectividad, WiFi o problemas técnicos.
+       - Admite dos modos: **Jornada Completa** (Ingreso y Egreso simultáneo) o **Marca Individual** (Check-In, Check-Out, Break-Out, Break-In).
+       - Se persiste con origen `Manual (SuperAdmin: [Nombre])`, generando recálculo automático instantáneo de horas trabajadas y liquidación en el panel.
+       - Permite a `SuperAdmin` eliminar marcas manuales erróneas con confirmación.
 *   **Trazabilidad y Registro de Auditoría (`audit_logs`)**: Todas las acciones mutadoras en el panel de técnicos se graban de manera persistente en `quirofano.audit_logs`:
     - **Tarifas Globales (`UPDATE`)**: Registra cambios en valor hora, valor guardia, IP y correos, persistiendo los valores anteriores (`old`) y nuevos (`new`).
     - **Tarifas por Práctica (`CREATE` / `UPDATE` / `DELETE`)**: Guarda el código de práctica, montos modificados/eliminados y el usuario responsable.
     - **Vacaciones y Licencias (`CREATE` / `DELETE`)**: Guarda el técnico, fechas de inicio y fin, motivo y responsable.
     - **Cirugías Manuales y Co-asignaciones (`CREATE` / `DELETE`)**: Identifica paciente, técnico sumado o removido, y quién ejecutó la acción.
     - **Fichadas y Conformidades (`CREATE` / `STATUS_CHANGE`)**: Registra la IP, tipo de fichada o monto liquidado al momento de otorgar la conformidad mensual.
+    - **Asistencia Manual (`CREATE` / `DELETE`)**: Registra técnico beneficiario, modo de carga, fecha, horarios, motivo y el usuario SuperAdmin que la cargó o eliminó.
 
 ### Módulo de Stock, Farmacia Quirúrgica y Descuento en Cirugías (16/09/2026)
 *   **Sección Stock / Farmacia (`/stock`)**:

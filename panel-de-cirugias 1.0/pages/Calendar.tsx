@@ -1619,7 +1619,7 @@ const Calendar: React.FC = () => {
                                                                     {ev.isArt && <span className="px-1 py-0.5 rounded text-[8px] font-black bg-orange-600 text-white shrink-0 scale-90 mr-1 animate-pulse">ART</span>}
                                                                     {ev.patientUnableToAttend && <span className="material-symbols-outlined text-[10px] text-red-200 animate-pulse">person_off</span>}
                                                                     {ev.hasPendingReschedule && <span className="material-symbols-outlined text-[10px] text-amber-200 animate-pulse">event_repeat</span>}
-                                                                    {((user?.role === 'Internacion' || user?.role === 'SuperAdmin') && ev.internacionNotified === false && !ev.isArt) && (
+                                                                    {((user?.role === 'Internacion' || user?.role === 'SuperAdmin' || user?.role === 'Administrativo' || user?.role === 'Administrativo ART') && ev.internacionNotified === false && !ev.isArt) && (
                                                                         ev.originalSurgeryDate && ev.originalSurgeryDate !== ev.dateStr ? (
                                                                             <span className="material-symbols-outlined text-[16px] text-orange-400 animate-bounce mr-1 drop-shadow-[0_0_5px_rgba(0,0,0,0.8)] scale-125 align-middle" title={`Reprogramada (Orig: ${ev.originalSurgeryDate.split('-').reverse().slice(0, 2).join('/')})`}>event_repeat</span>
                                                                         ) : (
@@ -1671,7 +1671,7 @@ const Calendar: React.FC = () => {
                                                 </div>
                                             )}
 
-                                            {canAdd && (user?.role === 'Tecnico' || user?.role === 'SuperAdmin' || user?.role === 'Internacion') && !isMobile && (
+                                            {canAdd && (user?.role === 'Tecnico' || user?.role === 'SuperAdmin' || user?.role === 'Internacion' || user?.role === 'Administrativo' || user?.role === 'Administrativo ART') && !isMobile && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); openScheduleModal(dayDate); }}
                                                     className="absolute top-2 right-2 opacity-0 group-hover/cell:opacity-100 p-1 text-primary hover:bg-blue-50 rounded transition-opacity"
@@ -1841,7 +1841,7 @@ const Calendar: React.FC = () => {
                                 )}
 
                                 {weekDates.map((date, i) => {
-                                     const canAdd = isFutureOrToday(date) && (user?.role === 'Tecnico' || user?.role === 'SuperAdmin' || user?.role === 'Internacion');
+                                     const canAdd = isFutureOrToday(date) && (user?.role === 'Tecnico' || user?.role === 'SuperAdmin' || user?.role === 'Internacion' || user?.role === 'Administrativo' || user?.role === 'Administrativo ART');
                                      const y = date.getFullYear();
                                      const m = String(date.getMonth() + 1).padStart(2, '0');
                                      const d = String(date.getDate()).padStart(2, '0');
@@ -1942,7 +1942,7 @@ const Calendar: React.FC = () => {
                                                                      {ev.isArt && <span className="px-1 py-0.5 rounded text-[7px] font-black bg-orange-600 text-white shrink-0 scale-90 mr-1 animate-pulse inline-block">ART</span>}
                                                                      {ev.patientUnableToAttend && <span className="material-symbols-outlined text-[10px] text-red-600 animate-pulse inline-block align-middle mr-0.5">person_off</span>}
                                                                      {ev.hasPendingReschedule && <span className="material-symbols-outlined text-[10px] text-amber-600 animate-pulse inline-block align-middle mr-0.5">event_repeat</span>}
-                                                                     {(user?.role === 'Internacion' || user?.role === 'SuperAdmin') && ev.internacionNotified === false && !ev.isArt && (
+                                                                     {(user?.role === 'Internacion' || user?.role === 'SuperAdmin' || user?.role === 'Administrativo' || user?.role === 'Administrativo ART') && ev.internacionNotified === false && !ev.isArt && (
                                                                         ev.originalSurgeryDate && ev.originalSurgeryDate !== getLocalStr(date) ? (
                                                                             <span className="material-symbols-outlined text-[18px] text-orange-500 animate-bounce mr-1 inline-block align-middle" title={`Reprogramada (Orig: ${ev.originalSurgeryDate.split('-').reverse().slice(0, 2).join('/')})`}>event_repeat</span>
                                                                         ) : (
@@ -2001,7 +2001,7 @@ const Calendar: React.FC = () => {
     };
 
     const DayView = () => {
-        const canAdd = isFutureOrToday(currentDate) && (user?.role === 'Tecnico' || user?.role === 'SuperAdmin' || user?.role === 'Internacion');
+        const canAdd = isFutureOrToday(currentDate) && (user?.role === 'Tecnico' || user?.role === 'SuperAdmin' || user?.role === 'Internacion' || user?.role === 'Administrativo' || user?.role === 'Administrativo ART');
         const y = currentDate.getFullYear();
         const m = String(currentDate.getMonth() + 1).padStart(2, '0');
         const d = String(currentDate.getDate()).padStart(2, '0');
@@ -2313,7 +2313,7 @@ const Calendar: React.FC = () => {
                                             <h3 className="font-black text-slate-900 leading-tight mb-0.5 text-sm md:text-base truncate flex items-center gap-1">
                                                 {ev.isMySurgery && <span className="text-sm mr-0.5" title="Mi Cirugía">⭐</span>}
                                                 {ev.isArt && <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-orange-600 text-white mr-1 animate-pulse">ART</span>}
-                                                {(user?.role === 'Internacion' || user?.role === 'SuperAdmin') && ev.internacionNotified === false && !ev.isArt && (
+                                                {(user?.role === 'Internacion' || user?.role === 'SuperAdmin' || user?.role === 'Administrativo' || user?.role === 'Administrativo ART') && ev.internacionNotified === false && !ev.isArt && (
                                                     ev.originalSurgeryDate && ev.originalSurgeryDate !== dateStr ? (
                                                         <span className="material-symbols-outlined text-orange-500 animate-bounce text-4xl md:text-5xl align-middle drop-shadow-[0_0_20px_rgba(249,115,22,0.8)]" title={`Reprogramada (Orig: ${ev.originalSurgeryDate.split('-').reverse().slice(0, 2).join('/')})`}>event_repeat</span>
                                                     ) : (
@@ -2850,7 +2850,7 @@ const Calendar: React.FC = () => {
                                                                 <span className="text-[9px] font-black text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded w-fit mb-1 tracking-tighter uppercase">Prioridad ART</span>
                                                             )}
                                                             <p className="font-bold text-slate-900 text-sm truncate pr-2 flex items-center gap-1 uppercase">
-                                                                {((user?.role === 'Internacion' || user?.role === 'SuperAdmin') && surgery.internacionNotified === false && !surgery.isArt) && <span className="material-symbols-outlined text-cyan-500 animate-bounce text-4xl align-middle drop-shadow-[0_0_15px_rgba(6,182,212,0.7)]" title="Cirugía Nueva">fiber_new</span>}
+                                                                {((user?.role === 'Internacion' || user?.role === 'SuperAdmin' || user?.role === 'Administrativo' || user?.role === 'Administrativo ART') && surgery.internacionNotified === false && !surgery.isArt) && <span className="material-symbols-outlined text-cyan-500 animate-bounce text-4xl align-middle drop-shadow-[0_0_15px_rgba(6,182,212,0.7)]" title="Cirugía Nueva">fiber_new</span>}
                                                                 {surgery.name}
                                                             </p>
                                                         </div>

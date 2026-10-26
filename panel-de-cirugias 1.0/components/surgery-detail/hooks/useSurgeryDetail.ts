@@ -233,7 +233,9 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
                         isCovered: m.is_covered,
                         isConfirmed: m.is_confirmed,
                         observation: m.observation,
-                        procedureName: m.procedure_name
+                        procedureName: m.procedure_name,
+                        observedByName: m.observed_by_name || (m.observation ? data.ortho_validated_by_name : undefined),
+                        validatedByName: m.validated_by_name || (m.is_confirmed ? data.ortho_validated_by_name : undefined)
                     })));
                 }
             }
@@ -1006,7 +1008,32 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
                     observation: m.observation || '',
                     procedure_name: m.procedureName
                 }));
-                await supabase.from('surgery_materials').insert(matPayload);
+                const { data: insertedMats } = await supabase.from('surgery_materials').insert(matPayload).select('id, name, observation, is_covered, is_confirmed');
+
+                if (insertedMats && insertedMats.length > 0) {
+                    for (const im of insertedMats) {
+                        try {
+                            await supabase
+                                .from('audit_logs')
+                                .update({
+                                    description: `Carga/Validación de material: ${im.name || 'Ítem'}${im.observation ? ` [Obs: ${im.observation}]` : ''}`,
+                                    meta: {
+                                        name: im.name,
+                                        observation: im.observation,
+                                        surgery_id: currentSurgeryId,
+                                        is_covered: im.is_covered,
+                                        is_confirmed: im.is_confirmed,
+                                        patient_name: patientName,
+                                        patient_dni: documentNumber
+                                    }
+                                })
+                                .eq('resource_id', im.id)
+                                .eq('resource', 'surgery_materials');
+                        } catch (e) {
+                            console.warn('Could not enrich material audit log:', e);
+                        }
+                    }
+                }
             }
 
             // Sync Alerts

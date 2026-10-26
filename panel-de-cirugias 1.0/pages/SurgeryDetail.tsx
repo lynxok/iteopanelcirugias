@@ -534,6 +534,9 @@ export const SurgeryDetail: React.FC = () => {
                     nuc={nuc}
                     status={status}
                     canEditField={canEditField}
+                    orthoValidatedByName={orthoValidatedByName}
+                    orthoValidationDate={orthoValidationDate}
+                    orthoValidated={approvals.ortho}
                 />
                 </section>
             </div >

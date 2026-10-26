@@ -2,6 +2,12 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.19 [2026-10-26]**: Lanzada la versión **v3.13.19**.
+    *   **Régimen de Liquidación para Turno Mañana de Técnicos (`pages/TecnicoPanel.tsx`)**:
+        *   Identificación de Turno Mañana: Lunes a jueves de 06:00 a 15:00 hs y viernes de 06:00 a 14:00 hs.
+        *   Las horas presenciales registradas en el reloj de asistencia se liquidan al 100% y las cirugías asignadas computan el arancel de práctica nomenclada (`practiceRate`), pero el **tiempo quirúrgico no se computa (`timeCost = $0`)** ya que se encuentra abonado en la asistencia presencial.
+        *   En extensiones a la tarde que superan corte + tolerancia (15:15 L-J / 14:15 Vie), el tramo de la mañana es $0 y únicamente computa tiempo la fracción excedente que desborda a la tarde.
+        *   Actualización de grilla principal y reportes con badge distintivo `0m (T. Mañana)`, costo `$0` y notas explicativas.
 *   **v3.13.18 [2026-10-19]**: Lanzada la versión **v3.13.18**.
     *   **Paginación Completa de Cirugías e Internaciones en Resultados (`pages/ResultsDashboard.tsx`)**:
         *   Eliminado el límite de 1.000 registros impuesto por PostgREST/Supabase mediante consultas paginadas automáticas en lotes de 1.000 filas (`fetchAllSurgeries` y `fetchAllAdmissions`).

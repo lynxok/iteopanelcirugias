@@ -33,8 +33,12 @@
     *   **Ajuste Vertical y Ascendentes de Texto (`line-height`)**: El nombre del paciente en `PatientPrintLabel.tsx` debe mantener un `line-height: 1.25` y padding interno vertical (`padding: 2mm 10mm` en el contenedor wrapper) para prevenir que la parte superior de las letras mayúsculas se corte contra los bordes físico-térmicos del rollo de 30mm.
     *   **REGLA ESTRICTA DE INTOCABILIDAD ESTÉTICA**: Queda estrictamente prohibido alterar la estética visual, tipografías, colores, disposición o diseño de la plantilla de pulseras de paciente (`PatientPrintLabel.tsx`) sin la solicitud explícita y previa del usuario.
 
-### Servidor de Desarrollo y Paquetes
-*   **Servidor Vite**: Iniciado con `npm run dev`.
+### Servidor de Desarrollo y Despliegue Web
+*   **Servidor Vite Local**: Iniciado con `npm run dev`.
+*   **Despliegue Web a Producción (`cirugias.iteosrl.com.ar`)**: 
+    *   La versión web de producción **NO** está alojada en Hostinger ni Easypanel.
+    *   Se compila mediante `npm run build` (o `npx vite build`) generando la carpeta `dist/`.
+    *   El despliegue a producción se realiza subiendo manualmente los archivos de la carpeta `dist/` vía **FTP directo al servidor propio de la clínica (ITEO)**.
 *   **Gestor de Paquetes Exclusivo**: Se utiliza `npm` exclusivamente (`package-lock.json`). Evitar el uso de `pnpm` o `yarn` para no generar conflictos de dependencias en el espacio de trabajo.
 
 ### Integración con OBS Studio y Capturas de Pantalla

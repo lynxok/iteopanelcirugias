@@ -43,6 +43,7 @@ export interface Doctor {
   specialty: string;
   email: string; // Key for user filters
   active: boolean;
+  license_number?: string | null;
   does_guardias?: boolean;
 }
 
@@ -419,6 +420,8 @@ export interface SurgeryMaterial {
     isConfirmed?: boolean;
     observation?: string;
     procedureName?: string;
+    observedByName?: string;
+    validatedByName?: string;
 }
 
 export interface SurgeryDocument {

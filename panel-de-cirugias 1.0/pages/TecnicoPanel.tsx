@@ -198,6 +198,7 @@ export default function TecnicoPanel() {
         user?.role === 'JefaturaDeAdministracion';
 
     const isLevelAdmin = canValidateManualSurgeries;
+    const isSuperAdmin = user?.role === 'SuperAdmin';
 
     // Tabs
     const [activeTab, setActiveTab] = useState<'clock' | 'billing' | 'guards' | 'rates'>(
@@ -208,6 +209,18 @@ export default function TecnicoPanel() {
     const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
     const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth()); // 0-11
     const [selectedTecnicoId, setSelectedTecnicoId] = useState<string>(user?.role === 'Tecnico' ? user.id : '');
+
+    // Carga Manual de Asistencia (SuperAdmin)
+    const [isManualAttendanceModalOpen, setIsManualAttendanceModalOpen] = useState<boolean>(false);
+    const [manualAttendanceTecnicoId, setManualAttendanceTecnicoId] = useState<string>('');
+    const [manualAttendanceDate, setManualAttendanceDate] = useState<string>('');
+    const [manualAttendanceMode, setManualAttendanceMode] = useState<'full_shift' | 'single_mark'>('full_shift');
+    const [manualCheckInTime, setManualCheckInTime] = useState<string>('07:00');
+    const [manualCheckOutTime, setManualCheckOutTime] = useState<string>('15:00');
+    const [manualSingleType, setManualSingleType] = useState<'check_in' | 'break_out' | 'break_in' | 'check_out'>('check_in');
+    const [manualSingleTime, setManualSingleTime] = useState<string>('07:00');
+    const [manualAttendanceReason, setManualAttendanceReason] = useState<string>('Problemas técnicos con el reloj');
+    const [isSavingManualAttendance, setIsSavingManualAttendance] = useState<boolean>(false);
 
     // Listados de datos
     const [tecnicos, setTecnicos] = useState<any[]>([]);
@@ -909,6 +922,7 @@ export default function TecnicoPanel() {
             
             let isWithinTardeShift = false;
             let isExtendedIntoTarde = false;
+            let isTurnoManana = false;
             let isAfter19 = false;
             let tardeExtensionStartStr: string | null = null;
 
@@ -932,6 +946,7 @@ export default function TecnicoPanel() {
                 const isFromSept2026 = s.date >= '2026-09-01';
 
                 if (dayOfWeek >= 1 && dayOfWeek <= 4) {
+                    isTurnoManana = startHourFraction >= 6 && startHourFraction < 15;
                     const startedInTarde = startHourFraction >= 15 && startHourFraction < 19;
                     const extendedIntoTarde = isFromSept2026 && startHourFraction < 15 && endHourFraction !== null && endHourFraction > (15 + tolHours);
                     isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
@@ -943,6 +958,7 @@ export default function TecnicoPanel() {
                         tardeExtensionStartStr = `${String(effH).padStart(2, '0')}:${String(effM).padStart(2, '0')}`;
                     }
                 } else if (dayOfWeek === 5) {
+                    isTurnoManana = startHourFraction >= 6 && startHourFraction < 14;
                     const startedInTarde = startHourFraction >= 14 && startHourFraction < 19;
                     const extendedIntoTarde = isFromSept2026 && startHourFraction < 14 && endHourFraction !== null && endHourFraction > (14 + tolHours);
                     isWithinTardeShift = (startedInTarde || extendedIntoTarde) && startHourFraction < 19;
@@ -958,12 +974,23 @@ export default function TecnicoPanel() {
             }
 
             // Duración computable específica para este técnico (si es extensión, computa desde corte + tolerancia)
-            const effectiveDurationMin = (isExtendedIntoTarde && tardeExtensionStartStr && s.actual_end_time)
-                ? calculateDurationMinutes(tardeExtensionStartStr, s.actual_end_time)
-                : realMin;
-            const effectiveRoundedMin = getRoundedDurationMinutes(effectiveDurationMin);
+            // Regla Turno Mañana: Si la cirugía inicia en Turno Mañana (L-J 06:00 a 15:00 / Vie 06:00 a 14:00),
+            // el tiempo de cirugía NO se computa porque está cubierto por las horas de asistencia (fichadas).
+            // Solo computa tiempo la fracción que desborda a la tarde (a partir de la hora de corte + tolerancia).
+            let effectiveDurationMin = realMin;
+            if (isTurnoManana) {
+                if (isExtendedIntoTarde && tardeExtensionStartStr && s.actual_end_time) {
+                    effectiveDurationMin = calculateDurationMinutes(tardeExtensionStartStr, s.actual_end_time);
+                } else {
+                    effectiveDurationMin = 0;
+                }
+            } else if (isExtendedIntoTarde && tardeExtensionStartStr && s.actual_end_time) {
+                effectiveDurationMin = calculateDurationMinutes(tardeExtensionStartStr, s.actual_end_time);
+            }
+
+            const effectiveRoundedMin = effectiveDurationMin > 0 ? getRoundedDurationMinutes(effectiveDurationMin) : 0;
             const effectiveRoundedHrs = effectiveRoundedMin / 60;
-            const effectiveTimeCost = effectiveRoundedHrs * hourRate;
+            const effectiveTimeCost = effectiveRoundedHrs * (Number(hourRate) || 0);
             const effectiveTotalQx = practiceRate + effectiveTimeCost;
 
             // Verificar si el técnico fijo está de vacaciones o ausente en el turno tarde
@@ -1005,10 +1032,10 @@ export default function TecnicoPanel() {
             } else {
                 if (isCoAssigned) {
                     myShare = effectiveTotalQx / 2;
-                    shareNotes = "50% Coparticipada";
+                    shareNotes = isTurnoManana ? "50% Coparticipada (Turno Mañana)" : "50% Coparticipada";
                 } else {
                     myShare = effectiveTotalQx;
-                    shareNotes = "100% Asignado";
+                    shareNotes = isTurnoManana ? "100% Asignado (Turno Mañana)" : "100% Asignado";
                 }
             }
 
@@ -1031,6 +1058,7 @@ export default function TecnicoPanel() {
                 effectiveDurationMin,
                 effectiveRoundedMin,
                 isExtendedIntoTarde,
+                isTurnoManana,
                 practiceRate,
                 allPractices,
                 selectedPractices,
@@ -1559,6 +1587,173 @@ export default function TecnicoPanel() {
             fetchData();
         } catch (e: any) {
             alert('Error al fichar: ' + e.message);
+        }
+    };
+
+    // Funciones para Carga Manual de Asistencia (SuperAdmin)
+    const openManualAttendanceModal = () => {
+        const defaultDate = (selectedYear === new Date().getFullYear() && selectedMonth === new Date().getMonth())
+            ? getLocalStr(new Date())
+            : `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`;
+
+        setManualAttendanceTecnicoId(selectedTecnicoId || (tecnicos[0]?.id || ''));
+        setManualAttendanceDate(defaultDate);
+        setManualAttendanceMode('full_shift');
+        setManualCheckInTime('07:00');
+        setManualCheckOutTime('15:00');
+        setManualSingleType('check_in');
+        setManualSingleTime('07:00');
+        setManualAttendanceReason('Problemas técnicos con el reloj');
+        setIsManualAttendanceModalOpen(true);
+    };
+
+    const handleSaveManualAttendance = async () => {
+        if (!isSuperAdmin) {
+            alert('Solo usuarios con rol Superadmin pueden registrar horas de asistencia manual.');
+            return;
+        }
+        if (!manualAttendanceTecnicoId) {
+            alert('Por favor, seleccione un técnico.');
+            return;
+        }
+        if (!manualAttendanceDate) {
+            alert('Por favor, seleccione la fecha de asistencia.');
+            return;
+        }
+
+        const targetTecnico = tecnicos.find(t => t.id === manualAttendanceTecnicoId);
+        const adminLabel = `Manual (SuperAdmin: ${user?.name || user?.email || 'Admin'})`;
+
+        setIsSavingManualAttendance(true);
+        try {
+            const recordsToInsert: { user_id: string; type: string; timestamp: string; ip_address: string }[] = [];
+
+            if (manualAttendanceMode === 'full_shift') {
+                if (!manualCheckInTime || !manualCheckOutTime) {
+                    alert('Debe especificar tanto el horario de ingreso como el de egreso.');
+                    setIsSavingManualAttendance(false);
+                    return;
+                }
+                if (manualCheckInTime >= manualCheckOutTime) {
+                    if (!confirm('El horario de egreso es anterior o igual al de ingreso. ¿Desea continuar igualmente?')) {
+                        setIsSavingManualAttendance(false);
+                        return;
+                    }
+                }
+
+                const checkInIso = new Date(`${manualAttendanceDate}T${manualCheckInTime}:00`).toISOString();
+                const checkOutIso = new Date(`${manualAttendanceDate}T${manualCheckOutTime}:00`).toISOString();
+
+                recordsToInsert.push(
+                    {
+                        user_id: manualAttendanceTecnicoId,
+                        type: 'check_in',
+                        timestamp: checkInIso,
+                        ip_address: adminLabel
+                    },
+                    {
+                        user_id: manualAttendanceTecnicoId,
+                        type: 'check_out',
+                        timestamp: checkOutIso,
+                        ip_address: adminLabel
+                    }
+                );
+            } else {
+                if (!manualSingleTime) {
+                    alert('Debe especificar el horario de la marca.');
+                    setIsSavingManualAttendance(false);
+                    return;
+                }
+
+                const markIso = new Date(`${manualAttendanceDate}T${manualSingleTime}:00`).toISOString();
+                recordsToInsert.push({
+                    user_id: manualAttendanceTecnicoId,
+                    type: manualSingleType,
+                    timestamp: markIso,
+                    ip_address: adminLabel
+                });
+            }
+
+            const { error } = await supabase
+                .from('tecnico_attendance')
+                .insert(recordsToInsert);
+
+            if (error) throw error;
+
+            const summary = manualAttendanceMode === 'full_shift'
+                ? `Jornada completa ${manualAttendanceDate} (${manualCheckInTime} hs a ${manualCheckOutTime} hs)`
+                : `Marca ${manualSingleType} el ${manualAttendanceDate} a las ${manualSingleTime} hs`;
+
+            await logAudit(
+                'CREATE',
+                'Técnicos - Asistencia Manual',
+                manualAttendanceTecnicoId,
+                `${user?.name || 'SuperAdmin'} cargó asistencia manual para ${targetTecnico?.name || 'Técnico'}: ${summary}. Motivo: ${manualAttendanceReason || 'Sin motivo especificado'}.`,
+                {
+                    tecnico_id: manualAttendanceTecnicoId,
+                    tecnico_name: targetTecnico?.name,
+                    mode: manualAttendanceMode,
+                    date: manualAttendanceDate,
+                    reason: manualAttendanceReason,
+                    records: recordsToInsert
+                }
+            );
+
+            alert('Asistencia registrada con éxito.');
+            setIsManualAttendanceModalOpen(false);
+
+            // Si la fecha cargada no pertenece al mes/año actual en pantalla, sincronizar
+            const recordDate = new Date(`${manualAttendanceDate}T12:00:00`);
+            if (recordDate.getFullYear() !== selectedYear || recordDate.getMonth() !== selectedMonth) {
+                setSelectedYear(recordDate.getFullYear());
+                setSelectedMonth(recordDate.getMonth());
+            }
+
+            // Si el técnico cargado difiere del actualmente seleccionado en el panel, cambiar la selección
+            if (selectedTecnicoId !== manualAttendanceTecnicoId) {
+                setSelectedTecnicoId(manualAttendanceTecnicoId);
+            } else {
+                fetchData();
+            }
+        } catch (e: any) {
+            console.error('Error saving manual attendance:', e);
+            alert('Error al guardar asistencia manual: ' + e.message);
+        } finally {
+            setIsSavingManualAttendance(false);
+        }
+    };
+
+    const handleDeleteAttendance = async (attendanceId: string, logDesc: string) => {
+        if (!isSuperAdmin) {
+            alert('Solo usuarios con rol Superadmin pueden eliminar marcas de asistencia.');
+            return;
+        }
+        const targetTecnico = tecnicos.find(t => t.id === selectedTecnicoId);
+        if (!confirm(`¿Está seguro de eliminar esta marca de asistencia (${logDesc}) correspondiente a ${targetTecnico?.name || 'este técnico'}?`)) {
+            return;
+        }
+
+        try {
+            const { error } = await supabase
+                .from('tecnico_attendance')
+                .delete()
+                .eq('id', attendanceId);
+
+            if (error) throw error;
+
+            await logAudit(
+                'DELETE',
+                'Técnicos - Asistencia',
+                attendanceId,
+                `${user?.name || 'SuperAdmin'} eliminó la marca de asistencia (${logDesc}) de ${targetTecnico?.name || 'Técnico'}.`,
+                { attendanceId, logDesc, tecnico_id: selectedTecnicoId, tecnico_name: targetTecnico?.name }
+            );
+
+            alert('Marca de asistencia eliminada con éxito.');
+            fetchData();
+        } catch (e: any) {
+            console.error('Error deleting attendance:', e);
+            alert('Error al eliminar marca de asistencia: ' + e.message);
         }
     };
 
@@ -2150,6 +2345,20 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                             </button>
                         </>
                     )}
+
+                    {isSuperAdmin && (
+                        <>
+                            <div className="h-8 w-px bg-slate-200 hidden md:block"></div>
+                            <button
+                                onClick={openManualAttendanceModal}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-all active:scale-95 shadow-2xs"
+                                title="Cargar horas o marcas de asistencia manualmente para un técnico (SuperAdmin)"
+                            >
+                                <span className="material-symbols-outlined text-base text-indigo-600">more_time</span>
+                                <span>Cargar Asistencia</span>
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -2284,10 +2493,22 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
 
                         {/* Historial Logs */}
                         <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-                            <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-slate-400">history</span>
-                                Registro de Asistencia del Período
-                            </h3>
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-slate-400">history</span>
+                                    Registro de Asistencia del Período
+                                </h3>
+                                {isSuperAdmin && (
+                                    <button
+                                        onClick={openManualAttendanceModal}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-all active:scale-95 shadow-2xs"
+                                        title="Cargar asistencia manual (SuperAdmin)"
+                                    >
+                                        <span className="material-symbols-outlined text-base text-indigo-600">more_time</span>
+                                        <span>Cargar Asistencia Manual</span>
+                                    </button>
+                                )}
+                            </div>
 
                             {attendanceLogs.length === 0 ? (
                                 <div className="flex-1 flex flex-col items-center justify-center py-12 text-slate-400 text-sm font-semibold italic">
@@ -2296,9 +2517,9 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                             ) : (
                                 <div className="flex-1 overflow-y-auto max-h-[300px] divide-y divide-slate-100 custom-scrollbar pr-2">
                                     {attendanceHoursReport.displayLogs.map((log, idx) => (
-                                        <div key={log.id || idx} className="py-3 flex justify-between items-center text-sm">
-                                            <div className="flex items-center gap-3">
-                                                <span className={`material-symbols-outlined p-2 rounded-full ${
+                                        <div key={log.id || idx} className="py-3 flex justify-between items-center text-sm gap-2">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <span className={`material-symbols-outlined p-2 rounded-full shrink-0 ${
                                                     log.type === 'check_in' ? 'bg-emerald-50 text-emerald-600' :
                                                     log.type === 'check_out' ? (log.isAuto ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600') :
                                                     log.type === 'break_out' ? 'bg-amber-50 text-amber-600' :
@@ -2310,8 +2531,8 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                         log.type === 'break_out' ? 'pause' : 'play_arrow'
                                                     }
                                                 </span>
-                                                <div>
-                                                    <div className="flex items-center gap-2">
+                                                <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-1.5">
                                                         <p className="font-bold text-slate-800">
                                                             {
                                                                 log.type === 'check_in' ? 'Entrada Turno' :
@@ -2324,17 +2545,39 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                                 Cerrado por falta de marca
                                                             </span>
                                                         )}
+                                                        {log.ip_address && log.ip_address.includes('Manual') && (
+                                                            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[9px] font-black uppercase rounded-full border border-indigo-200 flex items-center gap-0.5 shadow-2xs">
+                                                                <span className="material-symbols-outlined text-[11px] text-indigo-600">admin_panel_settings</span>
+                                                                Carga Manual
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                    <p className="text-[10px] text-slate-400 font-mono">IP: {log.ip_address}</p>
+                                                    <p className="text-[10px] text-slate-400 font-mono truncate" title={log.ip_address}>
+                                                        {log.ip_address.startsWith('Manual') ? log.ip_address : `IP: ${log.ip_address}`}
+                                                    </p>
                                                 </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="font-bold text-slate-700">
-                                                    {new Date(log.timestamp).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                                                </p>
-                                                <p className="text-xs text-slate-500">
-                                                    {new Date(log.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} hs
-                                                </p>
+                                            <div className="flex items-center gap-3 shrink-0">
+                                                <div className="text-right">
+                                                    <p className="font-bold text-slate-700">
+                                                        {new Date(log.timestamp).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500">
+                                                        {new Date(log.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} hs
+                                                    </p>
+                                                </div>
+                                                {isSuperAdmin && !log.isAuto && (
+                                                    <button
+                                                        onClick={() => handleDeleteAttendance(
+                                                            log.id, 
+                                                            `${log.type === 'check_in' ? 'Entrada' : log.type === 'check_out' ? 'Salida' : log.type} (${new Date(log.timestamp).toLocaleDateString('es-ES')} ${new Date(log.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} hs)`
+                                                        )}
+                                                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                                        title="Eliminar marca de asistencia (SuperAdmin)"
+                                                    >
+                                                        <span className="material-symbols-outlined text-base">delete</span>
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -2498,6 +2741,15 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                                 (Ext. {s.effectiveRoundedMin}m de {s.realMin}m tot.)
                                                             </span>
                                                         </div>
+                                                    ) : s.isTurnoManana ? (
+                                                        <div className="flex flex-col items-center">
+                                                            <span className="text-slate-400 font-normal line-through text-xs" title={`Duración real Qx: ${s.realMin}m`}>
+                                                                {s.realMin}m
+                                                            </span>
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200" title="Tiempo de cirugía cubierto por horas de asistencia">
+                                                                0m (T. Mañana)
+                                                            </span>
+                                                        </div>
                                                     ) : (
                                                         <span>{s.realMin}m / <span className="text-indigo-600">{s.roundedMin}m</span></span>
                                                     )}
@@ -2584,7 +2836,13 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                         </div>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-medium text-slate-600">${s.timeCost.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-right font-medium text-slate-600">
+                                                    {s.isTurnoManana && !s.isExtendedIntoTarde ? (
+                                                        <span className="text-slate-400 text-xs font-semibold" title="Cubierto por horas de asistencia presencial">$0</span>
+                                                    ) : (
+                                                        `$${s.timeCost.toLocaleString()}`
+                                                    )}
+                                                </td>
                                                 <td className="px-6 py-4 text-right font-semibold bg-slate-50/50 text-slate-700">${s.totalCost.toLocaleString()}</td>
                                                 <td className="px-6 py-4 text-left text-xs font-bold text-slate-500">
                                                      <div className="flex flex-col gap-1">
@@ -4183,6 +4441,209 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                 </div>
             )}
 
+            {/* Modal de Carga Manual de Asistencia (SuperAdmin) */}
+            {isManualAttendanceModalOpen && isSuperAdmin && (
+                <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden animate-scaleUp flex flex-col max-h-[92vh]">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 p-5 text-white flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white/10 rounded-xl">
+                                    <span className="material-symbols-outlined text-2xl">more_time</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold">Carga Manual de Asistencia</h3>
+                                    <p className="text-xs text-indigo-100">Registro de horas por problemas técnicos o conectividad</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsManualAttendanceModalOpen(false)}
+                                className="p-1 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-xl">close</span>
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-6 space-y-4 overflow-y-auto">
+                            {/* Selector Técnico */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    Técnico / Instrumentador
+                                </label>
+                                <select
+                                    value={manualAttendanceTecnicoId}
+                                    onChange={e => setManualAttendanceTecnicoId(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                                >
+                                    <option value="">-- Seleccionar Técnico --</option>
+                                    {tecnicos.map(t => (
+                                        <option key={t.id} value={t.id}>
+                                            {t.name} {t.is_turno_tarde ? '(Fijo Tarde)' : '(Guardia)'}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Fecha */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    Fecha de la Asistencia
+                                </label>
+                                <input
+                                    type="date"
+                                    value={manualAttendanceDate}
+                                    onChange={e => setManualAttendanceDate(e.target.value)}
+                                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                                />
+                            </div>
+
+                            {/* Selector de Modo: Jornada Completa vs Marca Individual */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    Modalidad de Carga
+                                </label>
+                                <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
+                                    <button
+                                        type="button"
+                                        onClick={() => setManualAttendanceMode('full_shift')}
+                                        className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                            manualAttendanceMode === 'full_shift'
+                                                ? 'bg-white text-indigo-700 shadow-sm'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        <span className="material-symbols-outlined text-sm">schedule</span>
+                                        Jornada Completa
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setManualAttendanceMode('single_mark')}
+                                        className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                                            manualAttendanceMode === 'single_mark'
+                                                ? 'bg-white text-indigo-700 shadow-sm'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        <span className="material-symbols-outlined text-sm">touch_app</span>
+                                        Marca Individual
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Campos según modo */}
+                            {manualAttendanceMode === 'full_shift' ? (
+                                <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-100 space-y-3">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center gap-1">
+                                                <span className="material-symbols-outlined text-sm text-emerald-600">login</span>
+                                                Hora de Ingreso
+                                            </label>
+                                            <input
+                                                type="time"
+                                                value={manualCheckInTime}
+                                                onChange={e => setManualCheckInTime(e.target.value)}
+                                                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1 flex items-center gap-1">
+                                                <span className="material-symbols-outlined text-sm text-rose-600">logout</span>
+                                                Hora de Egreso
+                                            </label>
+                                            <input
+                                                type="time"
+                                                value={manualCheckOutTime}
+                                                onChange={e => setManualCheckOutTime(e.target.value)}
+                                                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-[11px] text-indigo-700 font-medium">
+                                        Generará automáticamente un registro de <strong>Ingreso</strong> y otro de <strong>Egreso</strong> en la fecha indicada para computar las horas trabajadas.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-100 space-y-3">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                                Tipo de Fichada
+                                            </label>
+                                            <select
+                                                value={manualSingleType}
+                                                onChange={e => setManualSingleType(e.target.value as any)}
+                                                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            >
+                                                <option value="check_in">Ingreso Turno (Check-In)</option>
+                                                <option value="check_out">Egreso Turno (Check-Out)</option>
+                                                <option value="break_out">Salida Temporal (Descanso)</option>
+                                                <option value="break_in">Reingreso Descanso</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                                Horario
+                                            </label>
+                                            <input
+                                                type="time"
+                                                value={manualSingleTime}
+                                                onChange={e => setManualSingleTime(e.target.value)}
+                                                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Motivo */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    Motivo / Justificación
+                                </label>
+                                <input
+                                    type="text"
+                                    value={manualAttendanceReason}
+                                    onChange={e => setManualAttendanceReason(e.target.value)}
+                                    placeholder="Ej: Problemas técnicos con el reloj, falla de WiFi, olvido..."
+                                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                                />
+                            </div>
+
+                            {/* Nota de Auditoría */}
+                            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                                <span className="material-symbols-outlined text-base text-amber-600 shrink-0 mt-0.5">verified_user</span>
+                                <p className="leading-relaxed">
+                                    <strong>Auditoría SuperAdmin:</strong> El registro quedará identificado como carga manual administrativa y se asentará en la auditoría general del sistema.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setIsManualAttendanceModalOpen(false)}
+                                disabled={isSavingManualAttendance}
+                                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSaveManualAttendance}
+                                disabled={isSavingManualAttendance || !manualAttendanceTecnicoId || !manualAttendanceDate}
+                                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 active:scale-95"
+                            >
+                                <span className="material-symbols-outlined text-sm">save</span>
+                                {isSavingManualAttendance ? 'Guardando...' : 'Guardar Asistencia'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Modal de Impresión de Resumen Mensual (A4 / PDF) */}
             {/* Modal de Vista Previa de Resumen Mensual */}
             {isPrintModalOpen && (
@@ -4347,7 +4808,19 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                             {formatTimeDisplay(s.startTime)} – {formatTimeDisplay(s.endTime)}
                                                         </td>
                                                         <td className="p-2.5 text-center text-slate-600 whitespace-nowrap">
-                                                            {s.realMin}m ({s.roundedMin}m)
+                                                            {s.isExtendedIntoTarde ? (
+                                                                <div>
+                                                                    <span>{s.effectiveDurationMin}m ({s.effectiveRoundedMin}m)</span>
+                                                                    <span className="block text-[9px] text-slate-400">tot: {s.realMin}m</span>
+                                                                </div>
+                                                            ) : s.isTurnoManana ? (
+                                                                <div>
+                                                                    <span className="text-slate-400 line-through text-[10px]">{s.realMin}m</span>
+                                                                    <span className="block text-[10px] text-blue-700 font-bold">0m (Asistencia)</span>
+                                                                </div>
+                                                            ) : (
+                                                                <span>{s.realMin}m ({s.roundedMin}m)</span>
+                                                            )}
                                                         </td>
                                                         <td className="p-2.5 text-slate-500 font-medium">
                                                             {s.notes}
@@ -4607,6 +5080,11 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                             <div>
                                                                 <span>{s.effectiveDurationMin}m ({s.effectiveRoundedMin}m)</span>
                                                                 <span className="block text-[9px] text-slate-400">tot: {s.realMin}m</span>
+                                                            </div>
+                                                        ) : s.isTurnoManana ? (
+                                                            <div>
+                                                                <span className="text-slate-400 line-through text-[10px]">{s.realMin}m</span>
+                                                                <span className="block text-[10px] text-blue-700 font-bold">0m (Asistencia)</span>
                                                             </div>
                                                         ) : (
                                                             <span>{s.realMin}m ({s.roundedMin}m)</span>

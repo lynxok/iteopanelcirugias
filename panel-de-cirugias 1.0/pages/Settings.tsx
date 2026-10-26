@@ -266,7 +266,7 @@ const Settings: React.FC = () => {
                                 setShowSpecialtiesModal={s.setShowSpecialtiesModal}
                                 openNewDoctorModal={() => {
                                     s.setIsEditingDoctor(false);
-                                    s.setDoctorForm({ name: '', specialty: 'Cirugía General', email: '', active: true });
+                                    s.setDoctorForm({ name: '', specialty: 'Cirugía General', email: '', active: true, license_number: '' });
                                     s.setShowDoctorModal(true);
                                 }}
                                 openEditDoctorModal={(doc) => {
