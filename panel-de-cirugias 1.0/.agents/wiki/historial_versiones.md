@@ -2,6 +2,10 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.20 [2026-10-26]**: Lanzada la versión **v3.13.20**.
+    *   **Fix RLS de Eliminación de Marcas de Asistencia Manuales (`pages/TecnicoPanel.tsx`, Supabase)**:
+        *   Aplicada política RLS `DELETE` en la tabla `quirofano.tecnico_attendance` para los roles `SuperAdmin` y `Direccion`.
+        *   Actualizado `handleDeleteAttendance` para verificar la cantidad efectiva de filas eliminadas con `.select()` y actualizar reactivamente el estado local (`setAttendanceLogs` y `setTodayUserLogs`), garantizando eliminación instantánea de marcas manuales y erróneas sin falsos positivos.
 *   **v3.13.19 [2026-10-26]**: Lanzada la versión **v3.13.19**.
     *   **Régimen de Liquidación para Turno Mañana de Técnicos (`pages/TecnicoPanel.tsx`)**:
         *   Identificación de Turno Mañana: Lunes a jueves de 06:00 a 15:00 hs y viernes de 06:00 a 14:00 hs.

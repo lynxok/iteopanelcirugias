@@ -1734,12 +1734,19 @@ export default function TecnicoPanel() {
         }
 
         try {
-            const { error } = await supabase
+            const { data, error } = await supabase
                 .from('tecnico_attendance')
                 .delete()
-                .eq('id', attendanceId);
+                .eq('id', attendanceId)
+                .select();
 
             if (error) throw error;
+            if (!data || data.length === 0) {
+                throw new Error('No se pudo eliminar el registro en la base de datos (0 filas afectadas).');
+            }
+
+            setAttendanceLogs(prev => prev.filter(log => log.id !== attendanceId));
+            setTodayUserLogs(prev => prev.filter(log => log.id !== attendanceId));
 
             await logAudit(
                 'DELETE',

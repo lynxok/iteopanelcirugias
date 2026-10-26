@@ -18,6 +18,11 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-10-26]`: **Fix RLS de Eliminación de Marcas de Asistencia en Panel de Técnicos (v3.13.20)**:
+    *   **Causa Raíz Identificada**: La tabla `quirofano.tecnico_attendance` tenía RLS activo pero carecía de una política de `DELETE` para usuarios autenticados. PostgREST ejecutaba la solicitud devolviendo 0 filas afectadas y `error: null`, provocando que el frontend emitiera el aviso de éxito mientras la fila persistía en la base de datos.
+    *   **Solución en Supabase**: Creada la política RLS `Eliminacion de asistencia para administradores` (`FOR DELETE TO authenticated`) para roles `SuperAdmin` y `Direccion`.
+    *   **Blindaje en Frontend (`TecnicoPanel.tsx`)**: Se modificó `handleDeleteAttendance` para usar `.select()`, validar que se afecte al menos 1 fila y actualizar optimistamente el estado local de fichadas en memoria.
+
 *   `[2026-10-26]`: **Régimen de Liquidación de Turno Mañana para Técnicos ([TecnicoPanel.tsx](file:///pages/TecnicoPanel.tsx))**:
     *   **Identificación de Turno Mañana**: Lunes a jueves de 06:00 a 15:00 hs y viernes de 06:00 a 14:00 hs.
     *   **Regla de Tiempo Quirúrgico**: Las horas presenciales registradas en el reloj de asistencia se liquidan al 100% y las cirugías computan el valor de la práctica nomenclada (`practiceRate`), pero el **tiempo quirúrgico no se computa (`timeCost = $0`)** para evitar duplicar el cobro de la misma hora.
