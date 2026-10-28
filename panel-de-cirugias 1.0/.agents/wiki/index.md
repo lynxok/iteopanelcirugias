@@ -18,6 +18,11 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-10-28]`: **Visualización de Cirugías Suspendidas y Canceladas en Calendario ([Calendar.tsx](file:///pages/Calendar.tsx))**:
+    *   **Inclusión en Datos del Día**: Las cirugías con estado `suspended` con fecha agendada ahora se indexan junto a las `cancelled` (`cancelledList`) para consulta histórica y registro visual del día agendado, trayendo `suspension_reason` y `suspension_observations`.
+    *   **Indicador Visual Dinámico en Celdas de Día**: Badge de conteo con color dinámico según la composición de la fecha: **Rojo** (solo canceladas), **Ámbar** (solo suspendidas) o **Degradado Rojo/Ámbar** (coexistencia de canceladas y suspendidas).
+    *   **Modal Unificado de Detalle**: Modal renombrado a "Cirugías Canceladas y Suspendidas" con badges individuales (`Cancelada` en rojo / `Suspendida` en ámbar), desglose del motivo y observaciones de suspensión, y botón para visualizar la ficha quirúrgica.
+
 *   `[2026-10-26]`: **Fix RLS de Eliminación de Marcas de Asistencia en Panel de Técnicos (v3.13.20)**:
     *   **Causa Raíz Identificada**: La tabla `quirofano.tecnico_attendance` tenía RLS activo pero carecía de una política de `DELETE` para usuarios autenticados. PostgREST ejecutaba la solicitud devolviendo 0 filas afectadas y `error: null`, provocando que el frontend emitiera el aviso de éxito mientras la fila persistía en la base de datos.
     *   **Solución en Supabase**: Creada la política RLS `Eliminacion de asistencia para administradores` (`FOR DELETE TO authenticated`) para roles `SuperAdmin` y `Direccion`.

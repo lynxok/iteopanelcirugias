@@ -837,7 +837,7 @@ const Calendar: React.FC = () => {
                     .eq('active', true),
                 supabase
                     .from('surgeries')
-                    .select('id, surgery_date, start_time, estimated_duration, procedure_name, status, operating_room_id, doctor_id, patient_id, anesthesiologist_id, vendor_id, authorization_date, patient_available_from, requires_prosthesis, ortho_validated, pre_op_date, consent_signed, priority, is_ambulatory, actual_start_time, actual_end_time, internacion_notified, original_surgery_date, original_start_time, is_guardia, suggested_date, patient_unable_to_attend, medical_coverage, created_at, doctor_priority_validated, patients(full_name), doctors!doctor_id(full_name), surgery_materials(id)')
+                    .select('id, surgery_date, start_time, estimated_duration, procedure_name, status, operating_room_id, doctor_id, patient_id, anesthesiologist_id, vendor_id, authorization_date, patient_available_from, requires_prosthesis, ortho_validated, pre_op_date, consent_signed, priority, is_ambulatory, actual_start_time, actual_end_time, internacion_notified, original_surgery_date, original_start_time, is_guardia, suggested_date, patient_unable_to_attend, medical_coverage, created_at, doctor_priority_validated, suspension_reason, suspension_observations, patients(full_name), doctors!doctor_id(full_name), surgery_materials(id)')
                     .or(`surgery_date.gte.${startStr},surgery_date.is.null`)
                     .or(`surgery_date.lte.${endStr},surgery_date.is.null`)
                     .order('surgery_date', { ascending: true })
@@ -1006,9 +1006,9 @@ const Calendar: React.FC = () => {
                 // Color logic for calendar - PRIORITY: COMPLETADA (Emerald)
                 let eventColor = 'bg-emerald-500'; // Default: Listo OK
 
-                if (s.status === 'cancelled') {
+                if (s.status === 'cancelled' || s.status === 'suspended') {
                     cancelledList.push(s);
-                } else if (s.surgery_date && s.status !== 'suspended') {
+                } else if (s.surgery_date) {
                     // Check for completion or past time
                     const now = new Date();
                     const [h, m] = s.start_time ? s.start_time.split(':').map(Number) : [7, 0];
@@ -1536,6 +1536,13 @@ const Calendar: React.FC = () => {
                                                         {(() => {
                                                             const dayCancelled = cancelledByDateMap.get(dateStr) || [];
                                                             if (dayCancelled.length === 0) return null;
+                                                            const hasCancelled = dayCancelled.some(s => s.status === 'cancelled');
+                                                            const hasSuspended = dayCancelled.some(s => s.status === 'suspended');
+                                                            const badgeColor = hasCancelled && hasSuspended 
+                                                                ? 'bg-gradient-to-r from-red-500 to-amber-500 hover:from-red-600 hover:to-amber-600'
+                                                                : hasSuspended 
+                                                                    ? 'bg-amber-500 hover:bg-amber-600' 
+                                                                    : 'bg-red-500 hover:bg-red-600';
                                                             return (
                                                                 <span 
                                                                     onClick={(e) => {
@@ -1543,8 +1550,8 @@ const Calendar: React.FC = () => {
                                                                         setSelectedCancelledDate(dateStr);
                                                                         setShowCancelledModal(true);
                                                                     }}
-                                                                    className="flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-red-500 hover:bg-red-600 text-white text-[9px] font-black transition-colors shadow-xs select-none"
-                                                                    title={`${dayCancelled.length} cirugías canceladas. Clic para ver.`}
+                                                                    className={`flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full ${badgeColor} text-white text-[9px] font-black transition-all shadow-xs select-none`}
+                                                                    title={`${dayCancelled.length} cirugías canceladas / suspendidas. Clic para ver.`}
                                                                 >
                                                                     {dayCancelled.length}
                                                                 </span>
@@ -3635,13 +3642,13 @@ const Calendar: React.FC = () => {
                     {/* Modal Content */}
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col border border-slate-200 z-10 animate-in zoom-in-95 duration-200">
                         {/* Header */}
-                        <div className="p-6 border-b border-slate-200 bg-red-50/50 flex justify-between items-center">
+                        <div className="p-6 border-b border-slate-200 bg-slate-50/70 flex justify-between items-center">
                             <div>
-                                <h3 className="text-base font-black text-red-950 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-red-600">cancel</span>
-                                    Cirugías Canceladas
+                                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-red-600">event_busy</span>
+                                    Cirugías Canceladas y Suspendidas
                                 </h3>
-                                <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest mt-0.5">
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
                                     {(() => {
                                         const [y, m, d] = selectedCancelledDate.split('-');
                                         return `${d}/${m}/${y}`;
@@ -3653,7 +3660,7 @@ const Calendar: React.FC = () => {
                                     setShowCancelledModal(false);
                                     setSelectedCancelledDate(null);
                                 }}
-                                className="size-8 flex items-center justify-center rounded-full hover:bg-red-100 text-red-800 transition-colors"
+                                className="size-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-700 transition-colors"
                             >
                                 <span className="material-symbols-outlined text-lg">close</span>
                             </button>
@@ -3667,22 +3674,23 @@ const Calendar: React.FC = () => {
                                     return (
                                         <div className="py-8 text-center text-slate-400">
                                             <span className="material-symbols-outlined text-4xl mb-2">info</span>
-                                            <p className="text-sm font-bold">No hay cirugías canceladas para este día.</p>
+                                            <p className="text-sm font-bold">No hay cirugías canceladas o suspendidas para este día.</p>
                                         </div>
                                     );
                                 }
                                 return dayCancelled.map(surgery => {
                                     const patientName = surgery.patients?.full_name || 'Paciente Desconocido';
                                     const doctorName = surgery.doctors?.full_name || 'Médico No Asignado';
+                                    const isSuspended = surgery.status === 'suspended';
                                     return (
                                         <div 
                                             key={surgery.id}
-                                            className="p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-all flex flex-col gap-2 relative group"
+                                            className={`p-4 rounded-xl transition-all flex flex-col gap-2 relative group border ${isSuspended ? 'bg-amber-50/40 border-amber-200 hover:border-amber-300' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}
                                         >
                                             <div className="flex justify-between items-start">
                                                 <div className="flex flex-col">
-                                                    <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 uppercase tracking-wider w-fit mb-1">
-                                                        Cancelada
+                                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider w-fit mb-1 ${isSuspended ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-red-600 bg-red-50 border-red-100'}`}>
+                                                        {isSuspended ? 'Suspendida' : 'Cancelada'}
                                                     </span>
                                                     <h4 className="text-sm font-extrabold text-slate-900 uppercase">
                                                         {patientName}
@@ -3711,6 +3719,16 @@ const Calendar: React.FC = () => {
                                                 </div>
                                             </div>
 
+                                            {surgery.suspension_reason && (
+                                                <div className="mt-1 pt-1.5 border-t border-slate-100 text-xs">
+                                                    <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5">Motivo</p>
+                                                    <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-1 rounded border border-amber-100">
+                                                        {surgery.suspension_reason}
+                                                        {surgery.suspension_observations ? ` - ${surgery.suspension_observations}` : ''}
+                                                    </p>
+                                                </div>
+                                            )}
+
                                             {/* Action button */}
                                             <div className="mt-2 flex justify-end">
                                                 <button
@@ -3720,11 +3738,12 @@ const Calendar: React.FC = () => {
                                                             title: surgery.procedure_name || 'Cirugía sin nombre',
                                                             start: new Date(`${selectedCancelledDate}T${surgery.start_time || '07:00'}:00`),
                                                             end: new Date(`${selectedCancelledDate}T${surgery.start_time || '07:00'}:00`),
-                                                            color: 'bg-red-600',
+                                                            color: isSuspended ? 'bg-amber-500' : 'bg-red-600',
                                                             orId: surgery.operating_room_id,
                                                             patientName: patientName,
                                                             originalDoctor: doctorName,
                                                             completed: false,
+                                                            suspended: isSuspended,
                                                             medicalCoverage: surgery.medical_coverage,
                                                             dateStr: selectedCancelledDate
                                                         });
