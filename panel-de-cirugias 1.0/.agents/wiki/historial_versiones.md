@@ -2,6 +2,12 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.21 [2026-10-28]**: Lanzada la versión **v3.13.21**.
+    *   **Visualización de Cirugías Suspendidas y Canceladas en Calendario (`pages/Calendar.tsx`)**:
+        *   Las cirugías suspendidas con fecha asignada ahora se indexan junto a las canceladas para registro visual del día agendado sin saturar la grilla horaria ni la lista de cirugías pendientes de fecha.
+        *   Badge interactivo dinámico en la celda del día: rojo (solo canceladas), ámbar (solo suspendidas) o degradado rojo/ámbar (ambos estados en la misma fecha).
+        *   Modal unificado *"Cirugías Canceladas y Suspendidas"* con identificación de estado, horario previsto, procedimiento, médico, y desglose destacado del motivo y observaciones de suspensión con acceso a la Ficha Quirúrgica.
+
 *   **v3.13.20 [2026-10-26]**: Lanzada la versión **v3.13.20**.
     *   **Fix RLS de Eliminación de Marcas de Asistencia Manuales (`pages/TecnicoPanel.tsx`, Supabase)**:
         *   Aplicada política RLS `DELETE` en la tabla `quirofano.tecnico_attendance` para los roles `SuperAdmin` y `Direccion`.
