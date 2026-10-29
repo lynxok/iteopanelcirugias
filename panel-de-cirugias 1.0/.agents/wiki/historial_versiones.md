@@ -2,6 +2,13 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.22 [2026-10-29]**: Lanzada la versión **v3.13.22**.
+    *   **Agenda de Cirugías Derivadas en Perfil Médico (`pages/DoctorPanel.tsx`)**:
+        *   Incorporación de la vista y desglose de cirugías derivadas para que cada profesional visualice desde su propia agenda cuándo operan a los pacientes derivados.
+        *   Selector de subsección integrado en la pestaña AGENDA: *"Mis Cirugías"* y *"Derivadas por Mí"*, con badges de conteo y badge *"Próxima"* para intervenciones pendientes o futuras.
+        *   Muestra explícita de fecha, estado, procedimiento, paciente, DNI, horario y cirujano responsable de la intervención.
+        *   Optimización de carga a 0 ms mediante consulta en paralelo en Supabase y persistencia en el cache de módulo (`doctorPanelCache`).
+
 *   **v3.13.21 [2026-10-28]**: Lanzada la versión **v3.13.21**.
     *   **Visualización de Cirugías Suspendidas y Canceladas en Calendario (`pages/Calendar.tsx`)**:
         *   Las cirugías suspendidas con fecha asignada ahora se indexan junto a las canceladas para registro visual del día agendado sin saturar la grilla horaria ni la lista de cirugías pendientes de fecha.

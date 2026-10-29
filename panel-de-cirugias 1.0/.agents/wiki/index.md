@@ -18,6 +18,11 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-10-29]`: **Subsección de Cirugías Derivadas en Agenda de Perfil Médico ([DoctorPanel.tsx](file:///pages/DoctorPanel.tsx)) (v3.13.22)**:
+    *   **Consulta y Cache**: Incorporada la lectura en paralelo de cirugías derivadas (`referring_doctor_id = selectedDoctorId` y `doctor_id != selectedDoctorId`) trayendo paciente y cirujano asignado con persistencia en `doctorPanelCache.referredSurgeries`.
+    *   **Segmentación en Pestaña Agenda**: Agregado selector de subsección con toggle entre *"Mis Cirugías"* y *"Derivadas por Mí"*, con conteo en vivo de cirugías asignadas y derivadas.
+    *   **Detalle de Derivaciones**: Visualización clara de fecha agendada, procedimiento, datos de paciente (nombre y DNI), estado actual (con tag de próxima si es a futuro) y profesional cirujano asignado con horario.
+
 *   `[2026-10-28]`: **Visualización de Cirugías Suspendidas y Canceladas en Calendario ([Calendar.tsx](file:///pages/Calendar.tsx))**:
     *   **Inclusión en Datos del Día**: Las cirugías con estado `suspended` con fecha agendada ahora se indexan junto a las `cancelled` (`cancelledList`) para consulta histórica y registro visual del día agendado, trayendo `suspension_reason` y `suspension_observations`.
     *   **Indicador Visual Dinámico en Celdas de Día**: Badge de conteo con color dinámico según la composición de la fecha: **Rojo** (solo canceladas), **Ámbar** (solo suspendidas) o **Degradado Rojo/Ámbar** (coexistencia de canceladas y suspendidas).

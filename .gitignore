@@ -25,6 +25,7 @@ panel-de-cirugias 1.0/*
 !panel-de-cirugias 1.0/.gitignore
 !panel-de-cirugias 1.0/README.md
 !panel-de-cirugias 1.0/pages/ResultsDashboard.tsx
+!panel-de-cirugias 1.0/pages/DoctorPanel.tsx
 !panel-de-cirugias 1.0/public/version.json
 
 # Ignorar carpetas pesadas dentro del panel por seguridad redundante
