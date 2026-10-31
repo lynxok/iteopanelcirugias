@@ -45,6 +45,7 @@ const Prequirurgicos = lazyWithRetry(() => import('./pages/Prequirurgicos'));
 // Componentes estáticos que son ligeros
 import { PatientPrintLabel } from './components/PatientPrintLabel';
 import { ObsBackgroundController } from './components/ObsBackgroundController';
+import { GlobalappBackgroundController } from './components/GlobalappBackgroundController';
 import { AmbulatoryAutoCompleter } from './components/AmbulatoryAutoCompleter';
 import { CommandPalette } from './components/CommandPalette';
 import { NetworkStatusBanner } from './components/NetworkStatusBanner';
@@ -191,6 +192,7 @@ const App: React.FC = () => {
         <UpdateNotification />
         <DependencyCheckerOverlay />
         <ObsBackgroundController />
+        <GlobalappBackgroundController />
         <AmbulatoryAutoCompleter />
         <NetworkStatusBanner />
         <HashRouter>

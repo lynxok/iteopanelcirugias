@@ -40,5 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteFile: (filePath) => ipcRenderer.invoke('delete-file', filePath),
     readFileBase64: (filePath) => ipcRenderer.invoke('read-file-base64', filePath),
     writeFileBase64: (filePath, base64Data) => ipcRenderer.invoke('write-file-base64', filePath, base64Data),
-    mergePrequirurgicosPdfs: (destPath, filePaths) => ipcRenderer.invoke('merge-prequirurgicos-pdfs', destPath, filePaths)
+    mergePrequirurgicosPdfs: (destPath, filePaths) => ipcRenderer.invoke('merge-prequirurgicos-pdfs', destPath, filePaths),
+    runGlobalappScraper: (payload) => ipcRenderer.invoke('run-globalapp-scraper', payload),
+    onGlobalappLog: (callback) => ipcRenderer.on('globalapp-log', (_event, message) => callback(message))
 });

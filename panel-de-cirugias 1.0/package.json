@@ -1,7 +1,7 @@
 {
   "name": "panel-de-cirugias",
   "private": true,
-  "version": "3.13.23",
+  "version": "3.13.24",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
@@ -75,6 +75,7 @@
       "preload.cjs",
       "package.json",
       "prequirurgicos_collector.py",
+      "globalapp_scraper.py",
       "node_modules/**/*",
       "CONFIGURAR_SINCRONIZADOR.bat"
     ],
@@ -82,6 +83,10 @@
       {
         "from": "prequirurgicos_collector.py",
         "to": "prequirurgicos_collector.py"
+      },
+      {
+        "from": "globalapp_scraper.py",
+        "to": "globalapp_scraper.py"
       },
       {
         "from": "sai-scraper/sai-scraper",

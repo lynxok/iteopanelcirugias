@@ -1404,5 +1404,118 @@ ipcMain.handle('write-file-base64', async (event, filePath, base64Data) => {
     }
 });
 
+// --- GLOBALAPP SCRAPER HANDLER ---
+let activeGlobalappProcess = null;
+
+function getGlobalappCredentials() {
+    return {
+        user: process.env.GLOBALAPP_USER || 'quirofano@correo.com',
+        password: process.env.GLOBALAPP_PASSWORD || '12345678'
+    };
+}
+
+ipcMain.handle('run-globalapp-scraper', async (event, payload) => {
+    await ensurePythonDependencies(event);
+    return new Promise((resolve) => {
+        try {
+            let scriptPath = path.join(__dirname, 'globalapp_scraper.py');
+            if (app.isPackaged) {
+                const resPath = path.join(process.resourcesPath, 'globalapp_scraper.py');
+                if (fs.existsSync(resPath)) {
+                    scriptPath = resPath;
+                } else {
+                    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'globalapp_scraper.py');
+                    if (fs.existsSync(unpackedPath)) scriptPath = unpackedPath;
+                }
+            }
+
+            if (!fs.existsSync(scriptPath)) {
+                return resolve({ success: false, error: `No se encontró globalapp_scraper.py en ${scriptPath}` });
+            }
+
+            const tempDir = app.getPath('temp');
+            const payloadFile = path.join(tempDir, `globalapp_payload_${Date.now()}.json`);
+            fs.writeFileSync(payloadFile, JSON.stringify(payload || {}, null, 2), 'utf8');
+
+            const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+            const creds = getGlobalappCredentials();
+
+            const proc = spawn(pythonCommand, ['-u', scriptPath, payloadFile], {
+                cwd: path.dirname(scriptPath),
+                env: {
+                    ...process.env,
+                    PYTHONUNBUFFERED: '1',
+                    PYTHONIOENCODING: 'utf-8',
+                    GLOBALAPP_USER: creds.user,
+                    GLOBALAPP_PASSWORD: creds.password
+                }
+            });
+
+            activeGlobalappProcess = proc;
+            let stdoutAcc = '';
+            let stderrAcc = '';
+
+            proc.stdout.on('data', (data) => {
+                const text = data.toString('utf8');
+                stdoutAcc += text;
+                text.split('\n').forEach(line => {
+                    const clean = line.trim();
+                    if (clean && !clean.startsWith('===GLOBALAPP_RESULT')) {
+                        console.log(clean);
+                        event.sender.send('globalapp-log', clean);
+                    }
+                });
+            });
+
+            proc.stderr.on('data', (data) => {
+                const text = data.toString('utf8');
+                stderrAcc += text;
+                text.split('\n').forEach(line => {
+                    const clean = line.trim();
+                    if (clean) {
+                        console.error(`[Globalapp Error] ${clean}`);
+                        event.sender.send('globalapp-log', `[Error] ${clean}`);
+                    }
+                });
+            });
+
+            proc.on('close', (code) => {
+                activeGlobalappProcess = null;
+                try {
+                    if (fs.existsSync(payloadFile)) fs.unlinkSync(payloadFile);
+                } catch (e) {}
+
+                try {
+                    const startMarker = '===GLOBALAPP_RESULT_START===';
+                    const endMarker = '===GLOBALAPP_RESULT_END===';
+                    if (stdoutAcc.includes(startMarker) && stdoutAcc.includes(endMarker)) {
+                        const jsonStr = stdoutAcc.split(startMarker)[1].split(endMarker)[0].trim();
+                        const parsed = JSON.parse(jsonStr);
+                        return resolve(parsed);
+                    }
+                } catch (e) {
+                    console.error('[Globalapp] Error parseando resultado JSON:', e);
+                }
+
+                if (code === 0) {
+                    resolve({ success: true });
+                } else {
+                    resolve({ success: false, error: stderrAcc || `El proceso de Globalapp finalizó con código ${code}` });
+                }
+            });
+
+            proc.on('error', (err) => {
+                activeGlobalappProcess = null;
+                try {
+                    if (fs.existsSync(payloadFile)) fs.unlinkSync(payloadFile);
+                } catch (e) {}
+                resolve({ success: false, error: err.message });
+            });
+        } catch (err) {
+            resolve({ success: false, error: err.message });
+        }
+    });
+});
+
 
 

@@ -4,6 +4,7 @@ import { supabase } from '../src/lib/supabase';
 import ProgressBar from '../components/ProgressBar';
 import { OperatingRoom, SurgeryStatus } from '../types';
 import { useAuth } from '../src/lib/AuthContext';
+import { triggerGlobalappSync } from '../src/lib/globalappSync';
 
 const SurgeryForm = lazy(() => import('../components/SurgeryForm'));
 
@@ -379,6 +380,11 @@ const Monitor: React.FC = () => {
             // Log Audit
             await logAction('UPDATE', id, `Cirugía iniciada manualmente en Monitor a las ${timeStr}`);
 
+            // Trigger Globalapp Stage 1 Sync (non-blocking)
+            triggerGlobalappSync(id, 'start').catch(err =>
+                console.error('[GlobalappSync] Error al disparar inicio:', err)
+            );
+
             fetchMonitorData();
         } catch (err) {
             console.error('Error starting surgery:', err);
@@ -423,6 +429,11 @@ const Monitor: React.FC = () => {
 
             // Log Audit
             await logAction('UPDATE', id, `Cirugía finalizada manualmente en Monitor a las ${timeStr}. Sincronizado con Ficha Técnica.`);
+
+            // Trigger Globalapp Stage 2 Sync (non-blocking)
+            triggerGlobalappSync(id, 'finish').catch(err =>
+                console.error('[GlobalappSync] Error al disparar finalización:', err)
+            );
 
             fetchMonitorData();
         } catch (err) {
