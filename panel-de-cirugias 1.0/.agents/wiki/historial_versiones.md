@@ -2,6 +2,12 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.23 [2026-10-31]**: Lanzada la versión **v3.13.23**.
+    *   **Filtro de Cirugías Pasadas y Buscador en Derivaciones (`pages/DoctorPanel.tsx`)**:
+        *   Las cirugías derivadas ya operadas (fecha previa a hoy, completadas o canceladas) quedan ocultas por defecto para no saturar la vista operativa.
+        *   Incorporado checkbox *"Ver cirugías ya realizadas / pasadas"* para acceder al archivo histórico cuando el médico lo requiera.
+        *   Buscador interactivo en tiempo real con filtrado multicriterio por nombre de paciente, DNI, procedimiento o cirujano responsable.
+
 *   **v3.13.22 [2026-10-29]**: Lanzada la versión **v3.13.22**.
     *   **Agenda de Cirugías Derivadas en Perfil Médico (`pages/DoctorPanel.tsx`)**:
         *   Incorporación de la vista y desglose de cirugías derivadas para que cada profesional visualice desde su propia agenda cuándo operan a los pacientes derivados.

@@ -18,6 +18,11 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-10-31]`: **Buscador y Filtro de Pasadas en Derivaciones de Perfil Médico ([DoctorPanel.tsx](file:///pages/DoctorPanel.tsx)) (v3.13.23)**:
+    *   **Ocultamiento por Defecto de Cirugías Pasadas**: En "Derivadas por Mí", las cirugías con fecha anterior al día de hoy, completadas o canceladas se ocultan por defecto para mantener la vista enfocada en lo próximo a operar.
+    *   **Checkbox de Consulta Histórica**: Se incorporó el control *"Ver cirugías ya realizadas / pasadas"* para revelar el historial completo a demanda.
+    *   **Buscador Integrado en Tiempo Real**: Input de búsqueda reactiva por nombre de paciente, DNI, procedimiento o nombre del cirujano asignado con botón de limpieza rápida.
+
 *   `[2026-10-29]`: **Subsección de Cirugías Derivadas en Agenda de Perfil Médico ([DoctorPanel.tsx](file:///pages/DoctorPanel.tsx)) (v3.13.22)**:
     *   **Consulta y Cache**: Incorporada la lectura en paralelo de cirugías derivadas (`referring_doctor_id = selectedDoctorId` y `doctor_id != selectedDoctorId`) trayendo paciente y cirujano asignado con persistencia en `doctorPanelCache.referredSurgeries`.
     *   **Segmentación en Pestaña Agenda**: Agregado selector de subsección con toggle entre *"Mis Cirugías"* y *"Derivadas por Mí"*, con conteo en vivo de cirugías asignadas y derivadas.

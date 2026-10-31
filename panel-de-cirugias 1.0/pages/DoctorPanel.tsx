@@ -53,6 +53,10 @@ const DoctorPanel: React.FC = () => {
     const [dischargeDate, setDischargeDate] = useState(new Date().toISOString().split('T')[0]);
     const [dischargeTime, setDischargeTime] = useState('10:00');
 
+    // Referred surgeries filter states
+    const [referredSearch, setReferredSearch] = useState('');
+    const [showPastReferred, setShowPastReferred] = useState(false);
+
     useEffect(() => {
         if (user?.role === 'SuperAdmin') {
             fetchAllDoctors();
@@ -516,16 +520,85 @@ const DoctorPanel: React.FC = () => {
                                 </div>
                             ) : (
                                 <div className="space-y-4">
-                                    {referredSurgeries.length === 0 ? (
-                                        <div className="py-20 text-center bg-white rounded-3xl border border-slate-100">
-                                            <span className="material-symbols-outlined text-5xl text-slate-200">forward_to_inbox</span>
-                                            <p className="text-slate-400 font-bold mt-2">No tienes cirugías derivadas registradas.</p>
-                                            <p className="text-slate-400 text-xs mt-1">Aquí aparecerán los pacientes que hayas derivado a otros colegas con su fecha y cirujano asignado.</p>
+                                    {/* Barra de filtros: Buscador y Checkbox de cirugías pasadas */}
+                                    <div className="bg-white p-3 md:p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                                        <div className="relative flex-1">
+                                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar por paciente, DNI, procedimiento o cirujano..."
+                                                value={referredSearch}
+                                                onChange={e => setReferredSearch(e.target.value)}
+                                                className="w-full pl-9 pr-8 py-2 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200/80 focus:border-primary rounded-xl text-xs font-medium text-slate-700 outline-none transition-all placeholder:text-slate-400"
+                                            />
+                                            {referredSearch && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setReferredSearch('')}
+                                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                                >
+                                                    <span className="material-symbols-outlined text-base">close</span>
+                                                </button>
+                                            )}
                                         </div>
-                                    ) : (
-                                        referredSurgeries.map(s => {
-                                            const todayStr = new Date().toISOString().split('T')[0];
-                                            const isFuture = s.surgery_date && s.surgery_date >= todayStr;
+
+                                        <label className="flex items-center gap-2 cursor-pointer select-none px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200/70 rounded-xl transition-colors">
+                                            <input
+                                                type="checkbox"
+                                                checked={showPastReferred}
+                                                onChange={e => setShowPastReferred(e.target.checked)}
+                                                className="w-4 h-4 rounded text-primary focus:ring-primary border-slate-300 cursor-pointer"
+                                            />
+                                            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">
+                                                Ver cirugías ya realizadas / pasadas
+                                            </span>
+                                        </label>
+                                    </div>
+
+                                    {(() => {
+                                        const todayStr = new Date().toISOString().split('T')[0];
+                                        const filtered = referredSurgeries.filter(s => {
+                                            // Filtro de pasadas / completadas
+                                            const isPastOrDone = (s.surgery_date && s.surgery_date < todayStr) || s.status === 'completed' || s.status === 'cancelled';
+                                            if (!showPastReferred && isPastOrDone) {
+                                                return false;
+                                            }
+
+                                            // Filtro de búsqueda
+                                            if (referredSearch.trim()) {
+                                                const q = referredSearch.toLowerCase().trim();
+                                                const patientName = (s.patient?.full_name || '').toLowerCase();
+                                                const patientDni = (s.patient?.document_number || '').toLowerCase();
+                                                const procedure = (s.procedure_name || '').toLowerCase();
+                                                const doctorName = (s.doctor?.full_name || '').toLowerCase();
+
+                                                return (
+                                                    patientName.includes(q) ||
+                                                    patientDni.includes(q) ||
+                                                    procedure.includes(q) ||
+                                                    doctorName.includes(q)
+                                                );
+                                            }
+
+                                            return true;
+                                        });
+
+                                        if (filtered.length === 0) {
+                                            return (
+                                                <div className="py-16 text-center bg-white rounded-3xl border border-slate-100">
+                                                    <span className="material-symbols-outlined text-5xl text-slate-200">filter_alt_off</span>
+                                                    <p className="text-slate-500 font-bold mt-2">No se encontraron cirugías derivadas con los filtros actuales.</p>
+                                                    <p className="text-slate-400 text-xs mt-1">
+                                                        {!showPastReferred 
+                                                            ? 'Por defecto solo se muestran próximas. Tilda "Ver cirugías ya realizadas / pasadas" para ver el histórico.' 
+                                                            : 'Intenta modificar el término de búsqueda.'}
+                                                    </p>
+                                                </div>
+                                            );
+                                        }
+
+                                        return filtered.map(s => {
+                                            const isFuture = s.surgery_date && s.surgery_date >= todayStr && s.status !== 'completed' && s.status !== 'cancelled';
                                             return (
                                                 <div key={s.id} className="p-6 bg-white rounded-3xl border border-slate-100 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 shadow-sm hover:shadow-md transition-all">
                                                     <div className="flex flex-row sm:flex-col items-center justify-center size-14 sm:size-16 bg-blue-50 border border-blue-100 rounded-2xl text-blue-600 flex-shrink-0 gap-2 sm:gap-0">
@@ -574,8 +647,8 @@ const DoctorPanel: React.FC = () => {
                                                     </div>
                                                 </div>
                                             );
-                                        })
-                                    )}
+                                        });
+                                    })()}
                                 </div>
                             )}
                         </div>
