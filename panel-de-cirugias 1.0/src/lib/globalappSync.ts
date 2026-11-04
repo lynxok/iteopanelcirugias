@@ -23,6 +23,7 @@ export interface GlobalappSyncPayload {
     anatomiaPatologica?: string;
     arcoEnC?: boolean;
     arcoEnCSynced?: boolean;
+    triggerPac?: boolean;
     showBrowser?: boolean;
 }
 
@@ -161,17 +162,22 @@ export async function triggerGlobalappSync(
 
     const electronAPI = (window as any).electronAPI;
 
-    // A. Acción exclusiva Arco en C (disparada tras 5 segundos de marcar el checkbox)
+    // A. Acción exclusiva Arco en C (disparada tras 5 segundos de marcar el checkbox en vivo)
     if (action === 'arco_en_c_only') {
+        const syncPayload = { ...payload, triggerPac: true };
         if (electronAPI && typeof electronAPI.runGlobalappScraper === 'function') {
             try {
-                console.log('[GlobalappSync] Ejecutando scraper de Arco en C localmente en Electron...', payload);
-                const res = await electronAPI.runGlobalappScraper(payload);
+                console.log('[GlobalappSync] Ejecutando scraper de Arco en C localmente en Electron (con PAC)...', syncPayload);
+                const res = await electronAPI.runGlobalappScraper(syncPayload);
                 if (res?.success) {
                     await supabase
                         .from('surgery_forms')
-                        .update({ arco_en_c_synced: true, updated_at: new Date().toISOString() })
-                        .eq('surgery_id', surgeryId);
+                        .upsert({
+                            surgery_id: surgeryId,
+                            arco_en_c: true,
+                            arco_en_c_synced: true,
+                            updated_at: new Date().toISOString()
+                        }, { onConflict: 'surgery_id' });
                 }
                 return res;
             } catch (err: any) {
@@ -181,14 +187,14 @@ export async function triggerGlobalappSync(
 
         // Si se ejecuta desde Web/Tablet sin Electron directo: delegar a la PC de Quirófano mediante Supabase Broadcast
         try {
-            console.log('[GlobalappSync] Delegando Arco en C a PC Quirófano vía Supabase Broadcast...', payload);
+            console.log('[GlobalappSync] Delegando Arco en C a PC Quirófano vía Supabase Broadcast (con PAC)...', syncPayload);
             const channel = supabase.channel('globalapp-sync-bridge');
             await channel.send({
                 type: 'broadcast',
                 event: 'RUN_GLOBALAPP_SYNC',
                 payload: {
                     requestId: `arco-en-c-${surgeryId}-${Date.now()}`,
-                    syncPayload: payload
+                    syncPayload
                 }
             });
             return { success: true, delegated: true, mode: 'delegated_to_pc' };
@@ -199,15 +205,20 @@ export async function triggerGlobalappSync(
 
     // A2. Reversión / Eliminación de Arco en C (disparada tras destildar el checkbox)
     if (action === 'arco_en_c_revert') {
+        const syncPayload = { ...payload, action: 'arco_en_c_revert' as const };
         if (electronAPI && typeof electronAPI.runGlobalappScraper === 'function') {
             try {
-                console.log('[GlobalappSync] Ejecutando eliminación de Arco en C localmente en Electron...', payload);
-                const res = await electronAPI.runGlobalappScraper(payload);
+                console.log('[GlobalappSync] Ejecutando eliminación de Arco en C localmente en Electron...', syncPayload);
+                const res = await electronAPI.runGlobalappScraper(syncPayload);
                 if (res?.success) {
                     await supabase
                         .from('surgery_forms')
-                        .update({ arco_en_c: false, arco_en_c_synced: false, updated_at: new Date().toISOString() })
-                        .eq('surgery_id', surgeryId);
+                        .upsert({
+                            surgery_id: surgeryId,
+                            arco_en_c: false,
+                            arco_en_c_synced: false,
+                            updated_at: new Date().toISOString()
+                        }, { onConflict: 'surgery_id' });
                 }
                 return res;
             } catch (err: any) {
@@ -216,14 +227,14 @@ export async function triggerGlobalappSync(
         }
 
         try {
-            console.log('[GlobalappSync] Delegando eliminación de Arco en C a PC Quirófano...', payload);
+            console.log('[GlobalappSync] Delegando eliminación de Arco en C a PC Quirófano...', syncPayload);
             const channel = supabase.channel('globalapp-sync-bridge');
             await channel.send({
                 type: 'broadcast',
                 event: 'RUN_GLOBALAPP_SYNC',
                 payload: {
                     requestId: `arco-en-c-revert-${surgeryId}-${Date.now()}`,
-                    syncPayload: payload
+                    syncPayload
                 }
             });
             return { success: true, delegated: true, mode: 'delegated_to_pc' };
@@ -251,15 +262,22 @@ export async function triggerGlobalappSync(
                 diff: { payload, result: cloudRes }
             });
 
-            // Si está tildado Arco en C y aún no se sincronizó, procesarlo en la PC de Quirófano
-            if (payload.arcoEnC && !payload.arcoEnCSynced) {
+            // Al guardar la ficha técnica:
+            // REGLA ESTRICTA: Se chequea si la prestación 340907 está cargada (y se agrega si falta),
+            // pero NUNCA se pulsa el botón PAC (triggerPac: false), ya que PAC es exclusivamente para enviar el worklist al tildar en vivo.
+            if (payload.arcoEnC) {
+                const arcoPayload = { ...payload, action: 'arco_en_c_only' as const, triggerPac: false };
                 if (electronAPI && typeof electronAPI.runGlobalappScraper === 'function') {
-                    electronAPI.runGlobalappScraper({ ...payload, action: 'arco_en_c_only' }).then(async (arcoRes: any) => {
+                    electronAPI.runGlobalappScraper(arcoPayload).then(async (arcoRes: any) => {
                         if (arcoRes?.success) {
                             await supabase
                                 .from('surgery_forms')
-                                .update({ arco_en_c_synced: true, updated_at: new Date().toISOString() })
-                                .eq('surgery_id', surgeryId);
+                                .upsert({
+                                    surgery_id: surgeryId,
+                                    arco_en_c: true,
+                                    arco_en_c_synced: true,
+                                    updated_at: new Date().toISOString()
+                                }, { onConflict: 'surgery_id' });
                         }
                     }).catch(console.error);
                 } else {
@@ -268,20 +286,25 @@ export async function triggerGlobalappSync(
                         type: 'broadcast',
                         event: 'RUN_GLOBALAPP_SYNC',
                         payload: {
-                            requestId: `arco-en-c-${surgeryId}-${Date.now()}`,
-                            syncPayload: { ...payload, action: 'arco_en_c_only' }
+                            requestId: `arco-en-c-check-${surgeryId}-${Date.now()}`,
+                            syncPayload: arcoPayload
                         }
                     }).catch(console.error);
                 }
             } else if (!payload.arcoEnC && payload.arcoEnCSynced) {
                 // Si fue destildado y estaba sincronizado previamente, revertir/eliminar en GlobalApp
+                const revertPayload = { ...payload, action: 'arco_en_c_revert' as const };
                 if (electronAPI && typeof electronAPI.runGlobalappScraper === 'function') {
-                    electronAPI.runGlobalappScraper({ ...payload, action: 'arco_en_c_revert' }).then(async (arcoRes: any) => {
+                    electronAPI.runGlobalappScraper(revertPayload).then(async (arcoRes: any) => {
                         if (arcoRes?.success) {
                             await supabase
                                 .from('surgery_forms')
-                                .update({ arco_en_c: false, arco_en_c_synced: false, updated_at: new Date().toISOString() })
-                                .eq('surgery_id', surgeryId);
+                                .upsert({
+                                    surgery_id: surgeryId,
+                                    arco_en_c: false,
+                                    arco_en_c_synced: false,
+                                    updated_at: new Date().toISOString()
+                                }, { onConflict: 'surgery_id' });
                         }
                     }).catch(console.error);
                 } else {
@@ -291,7 +314,7 @@ export async function triggerGlobalappSync(
                         event: 'RUN_GLOBALAPP_SYNC',
                         payload: {
                             requestId: `arco-en-c-revert-${surgeryId}-${Date.now()}`,
-                            syncPayload: { ...payload, action: 'arco_en_c_revert' }
+                            syncPayload: revertPayload
                         }
                     }).catch(console.error);
                 }

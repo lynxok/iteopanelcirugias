@@ -159,8 +159,11 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                 try {
                     await supabase
                         .from('surgery_forms')
-                        .update({ arco_en_c: false, updated_at: new Date().toISOString() })
-                        .eq('surgery_id', surgery.id);
+                        .upsert({
+                            surgery_id: surgery.id,
+                            arco_en_c: false,
+                            updated_at: new Date().toISOString()
+                        }, { onConflict: 'surgery_id' });
 
                     const res = await triggerGlobalappSync(surgery.id, 'arco_en_c_revert');
                     if (res?.success) {
@@ -168,8 +171,12 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                         setArcoEnCStatusMsg('Arco en C eliminado de GlobalApp');
                         await supabase
                             .from('surgery_forms')
-                            .update({ arco_en_c: false, arco_en_c_synced: false })
-                            .eq('surgery_id', surgery.id);
+                            .upsert({
+                                surgery_id: surgery.id,
+                                arco_en_c: false,
+                                arco_en_c_synced: false,
+                                updated_at: new Date().toISOString()
+                            }, { onConflict: 'surgery_id' });
                         setTimeout(() => setArcoEnCStatusMsg(null), 4000);
                     } else {
                         setArcoEnCStatusMsg(res?.error || 'Aviso al revertir en GlobalApp');
@@ -209,14 +216,17 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
         arcoEnCTimerRef.current = setTimeout(async () => {
             if (arcoEnCIntervalRef.current) clearInterval(arcoEnCIntervalRef.current);
             setArcoEnCSyncTimer(null);
-            setArcoEnCStatusMsg('Cargando en GlobalApp...');
+            setArcoEnCStatusMsg('Cargando en GlobalApp (con PAC)...');
 
             try {
-                // Persistir estado en la base de datos de inmediato
+                // Persistir estado en la base de datos de inmediato con upsert
                 await supabase
                     .from('surgery_forms')
-                    .update({ arco_en_c: true, updated_at: new Date().toISOString() })
-                    .eq('surgery_id', surgery.id);
+                    .upsert({
+                        surgery_id: surgery.id,
+                        arco_en_c: true,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'surgery_id' });
 
                 const res = await triggerGlobalappSync(surgery.id, 'arco_en_c_only');
                 if (res?.success) {
@@ -224,8 +234,12 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                     setArcoEnCStatusMsg('Cargado en GlobalApp (PAC)');
                     await supabase
                         .from('surgery_forms')
-                        .update({ arco_en_c: true, arco_en_c_synced: true })
-                        .eq('surgery_id', surgery.id);
+                        .upsert({
+                            surgery_id: surgery.id,
+                            arco_en_c: true,
+                            arco_en_c_synced: true,
+                            updated_at: new Date().toISOString()
+                        }, { onConflict: 'surgery_id' });
                 } else {
                     setArcoEnCStatusMsg(res?.error || 'Aviso en GlobalApp');
                 }

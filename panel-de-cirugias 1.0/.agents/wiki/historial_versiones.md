@@ -2,6 +2,12 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.27 [2026-11-04]**: Lanzada la versión **v3.13.27**.
+    *   **Refactorización y Desacople de Botón PAC en Arco en C (`SurgeryForm.tsx`, `globalapp_scraper.py`, `globalappSync.ts`, `GlobalappBackgroundController.tsx`)**:
+        *   **Regla Estricta de PAC**: El botón de PAC se ejecuta **única y exclusivamente** cuando el usuario marca el checkbox en tiempo real durante la intervención (para disparar el worklist al equipo de rayos).
+        *   **Guardado de Ficha Técnica (Sin PAC)**: Al presionar "Guardar" en la ficha técnica, el sistema verifica que la práctica `340907` esté cargada en GlobalApp (la agrega con 121212/121212 si aún faltaba), pero **NO presiona el botón de PAC** para no enviar listas de trabajo redundantes o desfasadas.
+        *   **Persistencia Resiliente con Upsert**: El toggle de Arco en C y los listeners de fondo persisten con `upsert(..., { onConflict: 'surgery_id' })`, asegurando que fichas quirúrgicas que aún no habían sido guardadas por primera vez registren y sincronicen el estado correctamente sin depender de filas preexistentes.
+
 *   **v3.13.26 [2026-11-04]**: Lanzada la versión **v3.13.26**.
     *   **Integración de Arco en C (Práctica 340907 con PAC) en Ficha Quirúrgica y GlobalApp (`SurgeryForm.tsx`, `globalapp_scraper.py`, `globalappSync.ts`)**:
         *   **Selector en Ficha Técnica**: Checkbox *"¿Se utilizó Arco en C?"* en la sección Muestras & Equipamiento con persistencia directa en `quirofano.surgery_forms.arco_en_c` y `arco_en_c_synced`.

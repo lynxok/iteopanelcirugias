@@ -516,7 +516,8 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         log("[Arco en C] No se proporcionó DNI del paciente para buscar internación.")
         return {"success": False, "error": "No se proporcionó DNI del paciente."}
 
-    log(f"[Arco en C] Buscando internación para DNI {dni} en Globalapp...")
+    trigger_pac = bool(payload.get("triggerPac", False)) if "triggerPac" in payload else (payload.get("action") == "arco_en_c_only")
+    log(f"[Arco en C] Buscando internación para DNI {dni} en Globalapp (triggerPac: {trigger_pac})...")
     try:
         # 1. Navegar al módulo Internaciones
         page.get_by_role("link", name="Internaciones").click()
@@ -565,19 +566,23 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         grid_340907 = page.get_by_role("gridcell", name="340907")
         if grid_340907.count() > 0:
             log("[Arco en C] La práctica 340907 ya se encuentra cargada en la internación. Se omite para evitar duplicados.")
-            try:
-                grid_340907.first.click()
-                page.wait_for_timeout(500)
-                pac_btn = page.get_by_role("button", name=re.compile(r"PAC"))
-                if pac_btn.count() > 0 and pac_btn.first.is_visible():
-                    pac_btn.first.click()
-                    page.wait_for_timeout(1000)
-                    confirm_btn = page.get_by_role("button", name=re.compile(r"Aceptar|Confirmar|S[íi]", re.I))
-                    if confirm_btn.count() > 0 and confirm_btn.first.is_visible():
-                        confirm_btn.first.click()
-                        page.wait_for_timeout(800)
-            except Exception as e:
-                log(f"[Arco en C] Aviso asegurando PAC en registro previo: {e}")
+            if trigger_pac:
+                try:
+                    grid_340907.first.click()
+                    page.wait_for_timeout(500)
+                    pac_btn = page.get_by_role("button", name=re.compile(r"PAC"))
+                    if pac_btn.count() > 0 and pac_btn.first.is_visible():
+                        log("[Arco en C] Pulsando botón PAC a solicitud del checkbox en vivo...")
+                        pac_btn.first.click()
+                        page.wait_for_timeout(1000)
+                        confirm_btn = page.get_by_role("button", name=re.compile(r"Aceptar|Confirmar|S[íi]", re.I))
+                        if confirm_btn.count() > 0 and confirm_btn.first.is_visible():
+                            confirm_btn.first.click()
+                            page.wait_for_timeout(800)
+                except Exception as e:
+                    log(f"[Arco en C] Aviso asegurando PAC en registro previo: {e}")
+            else:
+                log("[Arco en C] Verificación al guardar ficha: práctica presente. NO se pulsa PAC (worklist solo al tildar checkbox).")
 
             try:
                 salir_btn = page.get_by_role("main").get_by_role("button", name=re.compile(r"Salir", re.I))
@@ -634,21 +639,24 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         page.get_by_role("button", name="Guardar").click()
         page.wait_for_timeout(2500)
 
-        # 7. Seleccionar fila 340907 y presionar PAC
-        cell_340907 = page.get_by_role("gridcell", name="340907")
-        if cell_340907.count() > 0:
-            cell_340907.first.click()
-            page.wait_for_timeout(800)
-
-        pac_btn = page.get_by_role("button", name=re.compile(r"PAC"))
-        if pac_btn.count() > 0:
-            log("[Arco en C] Pulsando botón PAC...")
-            pac_btn.first.click()
-            page.wait_for_timeout(1200)
-            confirm_btn = page.get_by_role("button", name=re.compile(r"Aceptar|Confirmar|S[íi]", re.I))
-            if confirm_btn.count() > 0 and confirm_btn.first.is_visible():
-                confirm_btn.first.click()
+        # 7. Seleccionar fila 340907 y presionar PAC ÚNICAMENTE si trigger_pac es True (disparado desde checkbox)
+        if trigger_pac:
+            cell_340907 = page.get_by_role("gridcell", name="340907")
+            if cell_340907.count() > 0:
+                cell_340907.first.click()
                 page.wait_for_timeout(800)
+
+            pac_btn = page.get_by_role("button", name=re.compile(r"PAC"))
+            if pac_btn.count() > 0:
+                log("[Arco en C] Pulsando botón PAC a solicitud del checkbox en vivo...")
+                pac_btn.first.click()
+                page.wait_for_timeout(1200)
+                confirm_btn = page.get_by_role("button", name=re.compile(r"Aceptar|Confirmar|S[íi]", re.I))
+                if confirm_btn.count() > 0 and confirm_btn.first.is_visible():
+                    confirm_btn.first.click()
+                    page.wait_for_timeout(800)
+        else:
+            log("[Arco en C] Práctica 340907 cargada con éxito. NO se pulsa PAC (guardado de ficha técnica).")
 
         # 8. Salir de Prestaciones
         try:
@@ -659,7 +667,7 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         except Exception:
             pass
 
-        log("[Arco en C] Carga y PAC completados con éxito.")
+        log("[Arco en C] Carga completada con éxito.")
         return {"success": True, "created": True}
 
     except Exception as e:

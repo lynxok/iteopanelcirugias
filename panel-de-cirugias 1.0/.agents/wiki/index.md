@@ -18,6 +18,11 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-11-04]`: **Desacople de Botón PAC en Arco en C y Persistencia Resiliente (`SurgeryForm.tsx`, `globalapp_scraper.py`, `globalappSync.ts`, `GlobalappBackgroundController.tsx`) (v3.13.27)**:
+    *   **Pulsación Exclusiva de PAC**: El botón PAC en GlobalApp solo se presiona cuando el instrumentador marca el checkbox "¿Se utilizó Arco en C?" en tiempo real (para enviar el worklist al equipo).
+    *   **Guardado de Ficha Técnica (Sin PAC)**: Al presionar "Guardar" en la ficha técnica, se comprueba si la práctica `340907` existe (cargándola si no estuviera), pero se omite estrictamente la pulsación de PAC (`triggerPac: false`).
+    *   **Persistencia Segura con Upsert**: Actualizado el almacenamiento a `upsert({ onConflict: 'surgery_id' })` para que el estado de Arco en C se guarde y sincronice correctamente aún si la ficha técnica todavía no fue guardada por primera vez.
+
 *   `[2026-11-04]`: **Integración de Arco en C (Práctica 340907 con PAC) en Ficha Técnica y GlobalApp (`SurgeryForm.tsx`, `globalapp_scraper.py`, `globalappSync.ts`)**:
     *   **Checkbox en Ficha Quirúrgica**: Añadido selector "¿Se utilizó Arco en C?" en la sección Muestras & Equipamiento de `SurgeryForm.tsx` con persistencia en Supabase (`quirofano.surgery_forms.arco_en_c` y `arco_en_c_synced`).
     *   **Temporizador Reactivo de 5 Segundos**: Al marcar el checkbox, se inicia una cuenta regresiva de 5 segundos con badge visual informativo. Si transcurren los 5s (o al pulsar "Guardar Ficha" antes de ese lapso), se dispara la sincronización a GlobalApp.

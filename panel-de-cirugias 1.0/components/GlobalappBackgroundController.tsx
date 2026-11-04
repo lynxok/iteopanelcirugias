@@ -42,13 +42,21 @@ export const GlobalappBackgroundController: React.FC = () => {
                         if (syncPayload.action === 'arco_en_c_revert') {
                             await supabase
                                 .from('surgery_forms')
-                                .update({ arco_en_c: false, arco_en_c_synced: false, updated_at: new Date().toISOString() })
-                                .eq('surgery_id', syncPayload.surgeryId);
+                                .upsert({
+                                    surgery_id: syncPayload.surgeryId,
+                                    arco_en_c: false,
+                                    arco_en_c_synced: false,
+                                    updated_at: new Date().toISOString()
+                                }, { onConflict: 'surgery_id' });
                         } else if (syncPayload.arcoEnC || syncPayload.action === 'arco_en_c_only') {
                             await supabase
                                 .from('surgery_forms')
-                                .update({ arco_en_c_synced: true, updated_at: new Date().toISOString() })
-                                .eq('surgery_id', syncPayload.surgeryId);
+                                .upsert({
+                                    surgery_id: syncPayload.surgeryId,
+                                    arco_en_c: true,
+                                    arco_en_c_synced: true,
+                                    updated_at: new Date().toISOString()
+                                }, { onConflict: 'surgery_id' });
                         }
                     }
 
