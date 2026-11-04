@@ -80,6 +80,12 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
     const [anesthesiologistId, setAnesthesiologistId] = useState(surgery.anesthesiologistId || '');
     const [anatomiaPatologica, setAnatomiaPatologica] = useState('');
     const [cultivo, setCultivo] = useState('');
+    const [arcoEnC, setArcoEnC] = useState(false);
+    const [arcoEnCSynced, setArcoEnCSynced] = useState(false);
+    const [arcoEnCSyncTimer, setArcoEnCSyncTimer] = useState<number | null>(null);
+    const [arcoEnCStatusMsg, setArcoEnCStatusMsg] = useState<string | null>(null);
+    const arcoEnCTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const arcoEnCIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const [patientMetadata, setPatientMetadata] = useState<any>(null);
     const [surgeryMetadata, setSurgeryMetadata] = useState<any>(null);
     const [procedimientoEfectuado, setProcedimientoEfectuado] = useState('');
@@ -103,6 +109,139 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
         }
         return age;
     };
+
+    // Manejo de Checkbox de Arco en C con disparo programado a 5s o al guardar (Alta y Reversión)
+    const handleToggleArcoEnC = (checked: boolean) => {
+        if (isReadOnly) return;
+        setArcoEnC(checked);
+        setIsDirty(true);
+
+        // Cancelar temporizadores previos activos
+        if (arcoEnCTimerRef.current) {
+            clearTimeout(arcoEnCTimerRef.current);
+            arcoEnCTimerRef.current = null;
+        }
+        if (arcoEnCIntervalRef.current) {
+            clearInterval(arcoEnCIntervalRef.current);
+            arcoEnCIntervalRef.current = null;
+        }
+
+        // CASO 1: SE DESTILDA
+        if (!checked) {
+            // Si nunca se había sincronizado con GlobalApp, cancelar cuenta regresiva y limpiar
+            if (!arcoEnCSynced) {
+                setArcoEnCSyncTimer(null);
+                setArcoEnCStatusMsg(null);
+                return;
+            }
+
+            // Si YA estaba sincronizado con GlobalApp, iniciar cuenta regresiva de 5s para ELIMINAR en GlobalApp
+            let remaining = 5;
+            setArcoEnCSyncTimer(remaining);
+            setArcoEnCStatusMsg(`Eliminando de GlobalApp en ${remaining}s...`);
+
+            arcoEnCIntervalRef.current = setInterval(() => {
+                remaining -= 1;
+                if (remaining > 0) {
+                    setArcoEnCSyncTimer(remaining);
+                    setArcoEnCStatusMsg(`Eliminando de GlobalApp en ${remaining}s...`);
+                } else {
+                    if (arcoEnCIntervalRef.current) clearInterval(arcoEnCIntervalRef.current);
+                    setArcoEnCSyncTimer(null);
+                }
+            }, 1000);
+
+            arcoEnCTimerRef.current = setTimeout(async () => {
+                if (arcoEnCIntervalRef.current) clearInterval(arcoEnCIntervalRef.current);
+                setArcoEnCSyncTimer(null);
+                setArcoEnCStatusMsg('Eliminando en GlobalApp...');
+
+                try {
+                    await supabase
+                        .from('surgery_forms')
+                        .update({ arco_en_c: false, updated_at: new Date().toISOString() })
+                        .eq('surgery_id', surgery.id);
+
+                    const res = await triggerGlobalappSync(surgery.id, 'arco_en_c_revert');
+                    if (res?.success) {
+                        setArcoEnCSynced(false);
+                        setArcoEnCStatusMsg('Arco en C eliminado de GlobalApp');
+                        await supabase
+                            .from('surgery_forms')
+                            .update({ arco_en_c: false, arco_en_c_synced: false })
+                            .eq('surgery_id', surgery.id);
+                        setTimeout(() => setArcoEnCStatusMsg(null), 4000);
+                    } else {
+                        setArcoEnCStatusMsg(res?.error || 'Aviso al revertir en GlobalApp');
+                    }
+                } catch (err: any) {
+                    console.error('[ArcoEnC] Error al revertir:', err);
+                    setArcoEnCStatusMsg('Error al conectar con GlobalApp');
+                }
+            }, 5000);
+            return;
+        }
+
+        // CASO 2: SE TILDA
+        // Si ya fue sincronizado previamente en GlobalApp, no volver a disparar para evitar duplicados
+        if (arcoEnCSynced) {
+            setArcoEnCSyncTimer(null);
+            setArcoEnCStatusMsg('Ya cargado en GlobalApp');
+            return;
+        }
+
+        // Iniciar cuenta regresiva de 5 segundos para cargar en GlobalApp
+        let remaining = 5;
+        setArcoEnCSyncTimer(remaining);
+        setArcoEnCStatusMsg(`Sincronizando con GlobalApp en ${remaining}s...`);
+
+        arcoEnCIntervalRef.current = setInterval(() => {
+            remaining -= 1;
+            if (remaining > 0) {
+                setArcoEnCSyncTimer(remaining);
+                setArcoEnCStatusMsg(`Sincronizando con GlobalApp en ${remaining}s...`);
+            } else {
+                if (arcoEnCIntervalRef.current) clearInterval(arcoEnCIntervalRef.current);
+                setArcoEnCSyncTimer(null);
+            }
+        }, 1000);
+
+        arcoEnCTimerRef.current = setTimeout(async () => {
+            if (arcoEnCIntervalRef.current) clearInterval(arcoEnCIntervalRef.current);
+            setArcoEnCSyncTimer(null);
+            setArcoEnCStatusMsg('Cargando en GlobalApp...');
+
+            try {
+                // Persistir estado en la base de datos de inmediato
+                await supabase
+                    .from('surgery_forms')
+                    .update({ arco_en_c: true, updated_at: new Date().toISOString() })
+                    .eq('surgery_id', surgery.id);
+
+                const res = await triggerGlobalappSync(surgery.id, 'arco_en_c_only');
+                if (res?.success) {
+                    setArcoEnCSynced(true);
+                    setArcoEnCStatusMsg('Cargado en GlobalApp (PAC)');
+                    await supabase
+                        .from('surgery_forms')
+                        .update({ arco_en_c: true, arco_en_c_synced: true })
+                        .eq('surgery_id', surgery.id);
+                } else {
+                    setArcoEnCStatusMsg(res?.error || 'Aviso en GlobalApp');
+                }
+            } catch (err: any) {
+                console.error('[ArcoEnC] Error al sincronizar:', err);
+                setArcoEnCStatusMsg('Error de conexión');
+            }
+        }, 5000);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (arcoEnCTimerRef.current) clearTimeout(arcoEnCTimerRef.current);
+            if (arcoEnCIntervalRef.current) clearInterval(arcoEnCIntervalRef.current);
+        };
+    }, []);
 
     // Items States
     const [items, setItems] = useState<FormItem[]>([]);
@@ -283,6 +422,8 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                 setHfc(formatTimeHHmm(form.cirugia_fin) || dbHfc || formatTimeHHmm(surgery.actualEndTime));
                 setAnatomiaPatologica(form.anatomia_patologica || '');
                 setCultivo(form.cultivo || '');
+                setArcoEnC(Boolean(form.arco_en_c));
+                setArcoEnCSynced(Boolean(form.arco_en_c_synced));
                 setProcedimientoEfectuado(form.procedimiento_efectuado || '');
                 setSignature(form.anesthesiologist_signature || null);
                 setSurgeonSignature(form.surgeon_signature || null);
@@ -466,6 +607,17 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
 
             setLoading(true);
 
+            // Cancelar cualquier cuenta regresiva pendiente de Arco en C para evitar carreras
+            if (arcoEnCTimerRef.current) {
+                clearTimeout(arcoEnCTimerRef.current);
+                arcoEnCTimerRef.current = null;
+            }
+            if (arcoEnCIntervalRef.current) {
+                clearInterval(arcoEnCIntervalRef.current);
+                arcoEnCIntervalRef.current = null;
+            }
+            setArcoEnCSyncTimer(null);
+
             // Safety check: Don't allow saving if fetch failed initially
             if (!isLoaded && formId) {
                 alert('Error de Seguridad: La ficha técnica no se cargó correctamente al abrirse. Para evitar pérdida de datos, el guardado está deshabilitado. Por favor, recargue la página.');
@@ -533,6 +685,8 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                 cirugia_fin: tHfcEffective || null,
                 anatomia_patologica: anatomiaPatologica,
                 cultivo: cultivo,
+                arco_en_c: arcoEnC,
+                arco_en_c_synced: arcoEnCSynced,
                 procedimiento_efectuado: procedimientoEfectuado,
                 anesthesiologist_signature: signature,
                 surgeon_signature: surgeonSignature,
@@ -719,6 +873,9 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                 .then(res => {
                     if (res && !res.success && res.error) {
                         alert(`⚠️ Aviso Globalapp:\n${res.error}\n\n(La Ficha Quirúrgica se guardó normalmente en el Panel de Cirugías).`);
+                    } else if (res && res.success) {
+                        if (arcoEnC && !arcoEnCSynced) setArcoEnCSynced(true);
+                        else if (!arcoEnC && arcoEnCSynced) setArcoEnCSynced(false);
                     }
                 })
                 .catch(err => console.error('[GlobalappSync] Error al sincronizar desde Ficha Técnica:', err));
@@ -894,6 +1051,9 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                                             </div>
                                             <div className="flex-1 flex justify-between border-b border-dotted border-gray-400">
                                                 <span className="font-semibold">Cultivos:</span><span className="uppercase font-bold">{cultivo || 'NO'}</span>
+                                            </div>
+                                            <div className="flex-1 flex justify-between border-b border-dotted border-gray-400">
+                                                <span className="font-semibold">Arco en C:</span><span className="uppercase font-bold">{arcoEnC ? 'SÍ' : 'NO'}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1218,7 +1378,7 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                             </div>
                             <div className="space-y-4">
                                 <h4 className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-[0.2em]">
-                                    <span className="material-symbols-outlined text-sm">biotech</span> Muestras & Cultivos
+                                    <span className="material-symbols-outlined text-sm">biotech</span> Muestras & Equipamiento
                                 </h4>
                                 <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-100">
                                     <div className="space-y-1">
@@ -1228,6 +1388,53 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                                     <div className="space-y-1">
                                         <label className="block text-[10px] font-bold text-slate-500 uppercase">Cultivo</label>
                                         <input value={cultivo} onChange={e => { setCultivo(e.target.value); setIsDirty(true); }} disabled={isReadOnly} className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-900 disabled:opacity-75" placeholder="¿Se envió cultivo? Detalle..." />
+                                    </div>
+
+                                    {/* Checkbox: ¿Se utilizó Arco en C? */}
+                                    <div className="pt-2.5 border-t border-slate-200">
+                                        <label className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer select-none ${
+                                            arcoEnC 
+                                                ? 'bg-indigo-50/80 border-indigo-200 shadow-sm' 
+                                                : 'bg-white border-slate-200 hover:bg-slate-100/50'
+                                        }`}>
+                                            <div className="flex items-center gap-2.5">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={arcoEnC}
+                                                    onChange={e => handleToggleArcoEnC(e.target.checked)}
+                                                    disabled={isReadOnly}
+                                                    className="size-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50 cursor-pointer"
+                                                />
+                                                <div>
+                                                    <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                                                        ¿Se utilizó Arco en C?
+                                                    </span>
+                                                    <p className="text-[10px] font-semibold text-slate-400">
+                                                        Práctica 340907 con Gastos y PAC en GlobalApp
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {/* Badges de Estado */}
+                                            <div className="shrink-0">
+                                                {arcoEnCSynced && !arcoEnCSyncTimer && (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                        <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                                                        Cargado en GlobalApp
+                                                    </span>
+                                                )}
+                                                {arcoEnCSyncTimer !== null && (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+                                                        <span className="material-symbols-outlined text-[13px] animate-spin">timelapse</span>
+                                                        {arcoEnCStatusMsg}
+                                                    </span>
+                                                )}
+                                                {!arcoEnCSynced && arcoEnCSyncTimer === null && arcoEnCStatusMsg && (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-slate-200 text-slate-700">
+                                                        {arcoEnCStatusMsg}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </label>
                                     </div>
                                 </div>
                             </div>

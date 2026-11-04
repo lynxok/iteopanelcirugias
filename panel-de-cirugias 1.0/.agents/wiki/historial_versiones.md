@@ -2,6 +2,15 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.26 [2026-11-04]**: Lanzada la versión **v3.13.26**.
+    *   **Integración de Arco en C (Práctica 340907 con PAC) en Ficha Quirúrgica y GlobalApp (`SurgeryForm.tsx`, `globalapp_scraper.py`, `globalappSync.ts`)**:
+        *   **Selector en Ficha Técnica**: Checkbox *"¿Se utilizó Arco en C?"* en la sección Muestras & Equipamiento con persistencia directa en `quirofano.surgery_forms.arco_en_c` y `arco_en_c_synced`.
+        *   **Temporizador Reactivo de 5s**: Al tildar, se activa una cuenta regresiva de 5s con badge de progreso que dispara la carga en GlobalApp (o se ejecuta al pulsar "Guardar Ficha" si no se cumplieron los 5s).
+        *   **Carga en GlobalApp**: Búsqueda por DNI en Internaciones, apertura de Prestaciones, carga de práctica `340907` con Especialista `121212` (`Esp Especialista`), Gastos `121212` (`Gas Gastos`), guardado y aplicación de **PAC**.
+        *   **Control Anti-Duplicados**: Si la práctica `340907` ya está presente en las prestaciones del paciente, se omite cualquier adición redundante.
+        *   **Reversión Segura al Destildar**: Si se desmarca habiendo estado sincronizado previamente, tras 5s (o al guardar) localiza y elimina única y estrictamente la fila `340907`, sin tocar ninguna otra práctica.
+        *   **Visualización en Ficha y PDF**: Reflejo del estado de Arco en C (`SÍ` / `NO`) en la vista de impresión y reporte oficial.
+
 *   **v3.13.25 [2026-11-04]**: Lanzada la versión **v3.13.25**.
     *   **Refactorización de Asignación en Turno Tarde y Circulantes en Panel de Técnicos (`pages/TecnicoPanel.tsx`)**:
         *   **Presencia Real por Horario Efectivo (`isTecnicoPresentForSurgery`)**: Verificación precisa del intervalo de permanencia del técnico en el reloj de asistencia (`check_in` a `check_out`) cotejado contra la hora real de inicio de la cirugía (`actual_start_time`). Se eliminó la asignación indebida de cirugías vespertinas a técnicos del turno mañana que ya se retiraron.

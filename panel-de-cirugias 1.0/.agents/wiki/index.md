@@ -18,6 +18,13 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-11-04]`: **Integración de Arco en C (Práctica 340907 con PAC) en Ficha Técnica y GlobalApp (`SurgeryForm.tsx`, `globalapp_scraper.py`, `globalappSync.ts`)**:
+    *   **Checkbox en Ficha Quirúrgica**: Añadido selector "¿Se utilizó Arco en C?" en la sección Muestras & Equipamiento de `SurgeryForm.tsx` con persistencia en Supabase (`quirofano.surgery_forms.arco_en_c` y `arco_en_c_synced`).
+    *   **Temporizador Reactivo de 5 Segundos**: Al marcar el checkbox, se inicia una cuenta regresiva de 5 segundos con badge visual informativo. Si transcurren los 5s (o al pulsar "Guardar Ficha" antes de ese lapso), se dispara la sincronización a GlobalApp.
+    *   **Carga en GlobalApp**: Ingresa a Internaciones por DNI, abre Prestaciones, y carga la práctica `340907` con Especialista `121212` (`Esp Especialista`), Gastos `121212` (`Gas Gastos`), guarda y aplica **PAC** sobre la práctica.
+    *   **Blindaje Anti-Duplicados**: Si `340907` ya existe en las prestaciones del paciente, se omite cualquier adición redundante.
+    *   **Reversión Segura al Destildar**: Si se destilda habiendo estado sincronizado previamente, tras 5s (o al guardar) ingresa a Prestaciones y elimina única y estrictamente la fila `340907`, garantizando no tocar ninguna otra prestación.
+
 *   `[2026-11-04]`: **Refactorización de Asignación de Turno Tarde y Circulantes en Panel de Técnicos ([TecnicoPanel.tsx](file:///pages/TecnicoPanel.tsx))**:
     *   **Causa Raíz Identificada**: Cirugías de la tarde eran asignadas indebidamente a técnicos de la mañana (ej. Victoria Delaloye) porque el filtro solo evaluaba si hubo un `check_in` en algún momento del día (`hasCheckedInOnDate`), ignorando que el técnico ya se había retirado a las 15:00 hs y que la ficha técnica ya tenía designada a otra instrumentadora (`RIEGERT Patricia`).
     *   **Detección de Presencia por Intervalo Real (`isTecnicoPresentForSurgery`)**: Se evalúa si el horario real de inicio de la cirugía (`actual_start_time`) cae dentro del intervalo de fichada (`check_in` a `check_out` con tolerancia de 15 min), o si la permanencia cubre la franja del Turno Tarde.

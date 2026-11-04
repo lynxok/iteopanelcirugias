@@ -38,6 +38,20 @@ export const GlobalappBackgroundController: React.FC = () => {
                     console.log('[GlobalappBridge] Ejecutando sincronización recibida desde Tablet/Web:', syncPayload);
                     const res = await (window as any).electronAPI.runGlobalappScraper(syncPayload);
 
+                    if (res?.success) {
+                        if (syncPayload.action === 'arco_en_c_revert') {
+                            await supabase
+                                .from('surgery_forms')
+                                .update({ arco_en_c: false, arco_en_c_synced: false, updated_at: new Date().toISOString() })
+                                .eq('surgery_id', syncPayload.surgeryId);
+                        } else if (syncPayload.arcoEnC || syncPayload.action === 'arco_en_c_only') {
+                            await supabase
+                                .from('surgery_forms')
+                                .update({ arco_en_c_synced: true, updated_at: new Date().toISOString() })
+                                .eq('surgery_id', syncPayload.surgeryId);
+                        }
+                    }
+
                     await supabase.from('audit_logs').insert({
                         user_name: 'Puente Globalapp (Tablet -> PC)',
                         user_role: 'Quirofano',

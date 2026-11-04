@@ -18,6 +18,7 @@ Handles:
 
 import sys
 import os
+import re
 import json
 import time
 import unicodedata
@@ -502,16 +503,287 @@ def update_existing_surgery_in_globalapp(page, payload: dict) -> bool:
     log("Cirugía actualizada y sincronizada con éxito en Globalapp.")
     return True
 
+def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
+    """
+    Automates registration of practice 340907 (Arco en C) inside Internaciones -> Prestaciones:
+    - Filters by patient DNI (Nro. Documento).
+    - Checks in situ if 340907 is already loaded to strictly prevent duplicate entries.
+    - If not present: adds 340907 with Professional 121212 (Esp Especialista) and Gasto 121212 (Gas Gastos).
+    - Saves and executes PAC action on the practice.
+    """
+    dni = str(payload.get("patientDni", "")).strip()
+    if not dni:
+        log("[Arco en C] No se proporcionó DNI del paciente para buscar internación.")
+        return {"success": False, "error": "No se proporcionó DNI del paciente."}
+
+    log(f"[Arco en C] Buscando internación para DNI {dni} en Globalapp...")
+    try:
+        # 1. Navegar al módulo Internaciones
+        page.get_by_role("link", name="Internaciones").click()
+        page.wait_for_timeout(1800)
+        page.get_by_role("button", name="Abrir").first.click()
+        page.wait_for_timeout(2500)
+
+        # 2. Configurar filtro de búsqueda por "Nro. Documento"
+        try:
+            combos = page.locator("[id^='vs'][id$='__combobox']")
+            if combos.count() > 0:
+                combos.first.click()
+                page.wait_for_timeout(400)
+                doc_opt = page.get_by_role("option", name="Nro. Documento")
+                if doc_opt.count() > 0:
+                    doc_opt.first.click()
+                    page.wait_for_timeout(400)
+        except Exception as e:
+            log(f"[Arco en C] Aviso seleccionando selector Nro. Documento: {e}")
+
+        # 3. Llenar campo de búsqueda con el DNI
+        search_box = page.get_by_role("textbox", name="Buscar internación...")
+        if search_box.count() == 0:
+            search_box = page.locator("input[placeholder*='Buscar'], input[placeholder*='internaci']").first
+        
+        if search_box.count() == 0:
+            return {"success": False, "error": "No se encontró el buscador de internaciones."}
+
+        search_box.click()
+        search_box.fill(dni)
+        page.wait_for_timeout(300)
+
+        page.get_by_role("button", name=re.compile(r"Buscar")).click()
+        page.wait_for_timeout(3000)
+
+        # 4. Localizar botón Prestaciones de la internación encontrada
+        prestac_btn = page.get_by_role("button", name=re.compile(r"Prestac", re.I))
+        if prestac_btn.count() == 0:
+            log(f"[Arco en C] No se encontró internación para el DNI {dni} en GlobalApp.")
+            return {"success": False, "warning": f"No se encontró internación activa en GlobalApp para el DNI {dni}."}
+
+        prestac_btn.first.click()
+        page.wait_for_timeout(3000)
+
+        # 5. CONTROL ANTI-DUPLICADOS ESTRICTO EN SITIO
+        grid_340907 = page.get_by_role("gridcell", name="340907")
+        if grid_340907.count() > 0:
+            log("[Arco en C] La práctica 340907 ya se encuentra cargada en la internación. Se omite para evitar duplicados.")
+            try:
+                grid_340907.first.click()
+                page.wait_for_timeout(500)
+                pac_btn = page.get_by_role("button", name=re.compile(r"PAC"))
+                if pac_btn.count() > 0 and pac_btn.first.is_visible():
+                    pac_btn.first.click()
+                    page.wait_for_timeout(1000)
+                    confirm_btn = page.get_by_role("button", name=re.compile(r"Aceptar|Confirmar|S[íi]", re.I))
+                    if confirm_btn.count() > 0 and confirm_btn.first.is_visible():
+                        confirm_btn.first.click()
+                        page.wait_for_timeout(800)
+            except Exception as e:
+                log(f"[Arco en C] Aviso asegurando PAC en registro previo: {e}")
+
+            try:
+                salir_btn = page.get_by_role("main").get_by_role("button", name=re.compile(r"Salir", re.I))
+                if salir_btn.count() > 0:
+                    salir_btn.first.click()
+            except Exception:
+                pass
+            return {"success": True, "alreadyExisted": True}
+
+        # 6. Si no existe, agregar práctica 340907
+        log("[Arco en C] Agregando nueva práctica 340907...")
+        add_btn = page.get_by_role("main").get_by_role("button", name=re.compile(r"Agregar", re.I))
+        if add_btn.count() == 0:
+            return {"success": False, "error": "No se encontró el botón Agregar en Prestaciones."}
+        add_btn.first.click()
+        page.wait_for_timeout(1800)
+
+        # Campo Código Práctica: 340907
+        practice_input = page.get_by_role("textbox").nth(2)
+        practice_input.click()
+        practice_input.fill("340907")
+        practice_input.press("Enter")
+        page.wait_for_timeout(1000)
+
+        # Profesional: 121212 -> seleccionar Esp Especialista
+        prof_input = page.get_by_role("textbox").nth(4)
+        prof_input.click()
+        prof_input.fill("121212")
+        prof_input.press("Enter")
+        page.wait_for_timeout(800)
+        esp_opt = page.get_by_text(re.compile(r"Esp\s+Especialista", re.I))
+        if esp_opt.count() > 0:
+            esp_opt.first.click()
+            page.wait_for_timeout(500)
+
+        # Concepto de Gasto: 121212 -> seleccionar Gas Gastos
+        gasto_box = page.locator("div:nth-child(8) > div > .flex.space-x-2.items-center > .gmed-input-suggest > .flex.space-x-2 > .vs-component.vs-con-input-label.vs-input.w-30 > .vs-con-input > .vs-inputx")
+        if gasto_box.count() == 0:
+            gasto_box = page.locator(".vs-component.vs-con-input-label.vs-input.w-30 > .vs-con-input > .vs-inputx").last
+        gasto_box.click()
+        gasto_box.fill("121212")
+        gasto_box.press("Enter")
+        page.wait_for_timeout(800)
+        gas_opt = page.get_by_text(re.compile(r"Gas\s+Gastos", re.I))
+        if gas_opt.count() > 0:
+            gas_opt.first.click()
+            page.wait_for_timeout(500)
+
+        # Pulsar botón Agregar (renglón)
+        page.get_by_role("button", name="Agregar", exact=True).click()
+        page.wait_for_timeout(1200)
+
+        # Pulsar Guardar
+        page.get_by_role("button", name="Guardar").click()
+        page.wait_for_timeout(2500)
+
+        # 7. Seleccionar fila 340907 y presionar PAC
+        cell_340907 = page.get_by_role("gridcell", name="340907")
+        if cell_340907.count() > 0:
+            cell_340907.first.click()
+            page.wait_for_timeout(800)
+
+        pac_btn = page.get_by_role("button", name=re.compile(r"PAC"))
+        if pac_btn.count() > 0:
+            log("[Arco en C] Pulsando botón PAC...")
+            pac_btn.first.click()
+            page.wait_for_timeout(1200)
+            confirm_btn = page.get_by_role("button", name=re.compile(r"Aceptar|Confirmar|S[íi]", re.I))
+            if confirm_btn.count() > 0 and confirm_btn.first.is_visible():
+                confirm_btn.first.click()
+                page.wait_for_timeout(800)
+
+        # 8. Salir de Prestaciones
+        try:
+            salir_btn = page.get_by_role("main").get_by_role("button", name=re.compile(r"Salir", re.I))
+            if salir_btn.count() > 0:
+                salir_btn.first.click()
+                page.wait_for_timeout(800)
+        except Exception:
+            pass
+
+        log("[Arco en C] Carga y PAC completados con éxito.")
+        return {"success": True, "created": True}
+
+    except Exception as e:
+        log(f"[Arco en C] Excepción durante la carga: {e}")
+        return {"success": False, "error": str(e)}
+
+def revert_arco_en_c_in_internaciones(page, payload: dict) -> dict:
+    """
+    Automates reverting/deleting practice 340907 (Arco en C) inside Internaciones -> Prestaciones:
+    - Filters by patient DNI.
+    - STRICT SECURITY RULE: Locates and selects ONLY the gridcell whose practice code is strictly 340907.
+    - If 340907 is not found, does NOT click or delete anything.
+    - If 340907 is found, clicks Eliminar and confirms deletion.
+    """
+    dni = str(payload.get("patientDni", "")).strip()
+    if not dni:
+        log("[Arco en C Revert] No se proporcionó DNI del paciente.")
+        return {"success": False, "error": "No se proporcionó DNI del paciente."}
+
+    log(f"[Arco en C Revert] Buscando internación para DNI {dni} para eliminar práctica 340907...")
+    try:
+        # 1. Navegar a Internaciones
+        page.get_by_role("link", name="Internaciones").click()
+        page.wait_for_timeout(1800)
+        page.get_by_role("button", name="Abrir").first.click()
+        page.wait_for_timeout(2500)
+
+        # 2. Selector Nro. Documento
+        try:
+            combos = page.locator("[id^='vs'][id$='__combobox']")
+            if combos.count() > 0:
+                combos.first.click()
+                page.wait_for_timeout(400)
+                doc_opt = page.get_by_role("option", name="Nro. Documento")
+                if doc_opt.count() > 0:
+                    doc_opt.first.click()
+                    page.wait_for_timeout(400)
+        except Exception as e:
+            log(f"[Arco en C Revert] Aviso selector Nro. Documento: {e}")
+
+        # 3. Llenar campo de búsqueda con el DNI
+        search_box = page.get_by_role("textbox", name="Buscar internación...")
+        if search_box.count() == 0:
+            search_box = page.locator("input[placeholder*='Buscar'], input[placeholder*='internaci']").first
+        
+        if search_box.count() == 0:
+            return {"success": False, "error": "No se encontró el buscador de internaciones."}
+
+        search_box.click()
+        search_box.fill(dni)
+        page.wait_for_timeout(300)
+        search_box.press("Enter")
+        page.wait_for_timeout(2500)
+
+        # 4. Localizar botón Prestaciones
+        prestac_btn = page.get_by_role("button", name=re.compile(r"Prestac", re.I))
+        if prestac_btn.count() == 0:
+            log(f"[Arco en C Revert] No se encontró internación para el DNI {dni} en GlobalApp.")
+            return {"success": True, "warning": f"No se encontró internación en GlobalApp para DNI {dni}."}
+
+        prestac_btn.first.click()
+        page.wait_for_timeout(3000)
+
+        # 5. REGLA ESTRICTA DE SEGURIDAD:
+        # Seleccionar ÚNICAMENTE la celda con el código exacto '340907'. Si no existe, no tocar nada.
+        target_cell = page.get_by_role("gridcell", name="340907", exact=True)
+        if target_cell.count() == 0:
+            target_cell = page.locator("div[role='gridcell'], td").filter(has_text=re.compile(r"^340907$"))
+
+        if target_cell.count() == 0:
+            log("[Arco en C Revert] La práctica 340907 no existe en las prestaciones. No se realiza ninguna acción por seguridad.")
+            try:
+                salir_btn = page.get_by_role("main").get_by_role("button", name=re.compile(r"Salir", re.I))
+                if salir_btn.count() > 0:
+                    salir_btn.first.click()
+            except Exception:
+                pass
+            return {"success": True, "notFound": True}
+
+        log("[Arco en C Revert] Práctica 340907 localizada exclusivamente. Procediendo a eliminar...")
+        target_cell.first.click()
+        page.wait_for_timeout(800)
+
+        del_btn = page.get_by_role("button", name=re.compile(r"Eliminar", re.I))
+        if del_btn.count() == 0:
+            return {"success": False, "error": "No se encontró botón Eliminar en prestaciones."}
+
+        del_btn.first.click()
+        page.wait_for_timeout(1000)
+
+        # Confirmar en popup
+        confirm_btn = page.get_by_role("button", name="Eliminar", exact=True)
+        if confirm_btn.count() > 0 and confirm_btn.first.is_visible():
+            confirm_btn.first.click()
+            page.wait_for_timeout(1500)
+            log("[Arco en C Revert] Práctica 340907 eliminada con éxito.")
+
+        # Salir
+        try:
+            salir_btn = page.get_by_role("main").get_by_role("button", name=re.compile(r"Salir", re.I))
+            if salir_btn.count() > 0:
+                salir_btn.first.click()
+                page.wait_for_timeout(800)
+        except Exception:
+            pass
+
+        return {"success": True, "deleted": True}
+
+    except Exception as e:
+        log(f"[Arco en C Revert] Excepción al eliminar: {e}")
+        return {"success": False, "error": str(e)}
+
 def run_sync(payload: dict):
     user_email = os.environ.get("GLOBALAPP_USER", "quirofano@correo.com")
     user_password = os.environ.get("GLOBALAPP_PASSWORD", "12345678")
     show_browser = bool(payload.get("showBrowser", False))
-    action = payload.get("action", "sync")  # 'start', 'finish', or 'sync'
+    action = payload.get("action", "sync")  # 'start', 'finish', 'sync', 'arco_en_c_only', or 'arco_en_c_revert'
 
     dni = str(payload.get("patientDni", "")).strip()
     patient_name = payload.get("patientName", "")
     surgery_date = payload.get("surgeryDate", datetime.now().strftime("%Y-%m-%d"))
     specialty = payload.get("specialty", "TRAUMATOLOGIA")
+    arco_en_c = bool(payload.get("arcoEnC", False))
+    arco_en_c_synced = bool(payload.get("arcoEnCSynced", False))
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=not show_browser)
@@ -526,21 +798,46 @@ def run_sync(payload: dict):
             page.get_by_role("button", name="Ingresar").click()
             page.wait_for_timeout(3000)
 
-            log("Ingresando al módulo Quirofanos...")
-            page.get_by_role("link", name="Quirofanos").click()
-            page.wait_for_timeout(2000)
-            page.get_by_role("button", name="Abrir").nth(1).click()
-            page.wait_for_timeout(2500)
+            result = {"success": True, "action": action}
 
-            # Always check if the surgery already exists for this patient + date to avoid duplicates
-            exists = find_existing_surgery_in_globalapp(page, dni, patient_name, surgery_date, specialty)
+            # 1. Si es únicamente sincronización de Arco en C (disparado tras 5s del checkbox)
+            if action == "arco_en_c_only":
+                arco_res = sync_arco_en_c_in_internaciones(page, payload)
+                result.update(arco_res)
+                result["mode"] = "arco_en_c_only"
 
-            if exists:
-                update_existing_surgery_in_globalapp(page, payload)
-                result = {"success": True, "mode": "updated", "action": action}
+            # 2. Si es reversión/eliminación de Arco en C (disparado tras destildar el checkbox)
+            elif action == "arco_en_c_revert":
+                arco_res = revert_arco_en_c_in_internaciones(page, payload)
+                result.update(arco_res)
+                result["mode"] = "arco_en_c_revert"
+
             else:
-                create_new_surgery_in_globalapp(page, payload)
-                result = {"success": True, "mode": "created", "action": action}
+                # Flujo normal de Quirófanos
+                log("Ingresando al módulo Quirofanos...")
+                page.get_by_role("link", name="Quirofanos").click()
+                page.wait_for_timeout(2000)
+                page.get_by_role("button", name="Abrir").nth(1).click()
+                page.wait_for_timeout(2500)
+
+                # Always check if the surgery already exists for this patient + date to avoid duplicates
+                exists = find_existing_surgery_in_globalapp(page, dni, patient_name, surgery_date, specialty)
+
+                if exists:
+                    update_existing_surgery_in_globalapp(page, payload)
+                    result["mode"] = "updated"
+                else:
+                    create_new_surgery_in_globalapp(page, payload)
+                    result["mode"] = "created"
+
+                # Si está tildado Arco en C y aún no se sincronizó, procesarlo a continuación
+                if arco_en_c and not arco_en_c_synced:
+                    arco_res = sync_arco_en_c_in_internaciones(page, payload)
+                    result["arcoEnCResult"] = arco_res
+                # Si está destildado pero estaba sincronizado previamente, eliminarlo
+                elif not arco_en_c and arco_en_c_synced:
+                    arco_res = revert_arco_en_c_in_internaciones(page, payload)
+                    result["arcoEnCRevertResult"] = arco_res
 
             print("===GLOBALAPP_RESULT_START===", flush=True)
             print(json.dumps(result, ensure_ascii=False), flush=True)
