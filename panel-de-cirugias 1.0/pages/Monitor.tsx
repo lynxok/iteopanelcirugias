@@ -380,10 +380,14 @@ const Monitor: React.FC = () => {
             // Log Audit
             await logAction('UPDATE', id, `Cirugía iniciada manualmente en Monitor a las ${timeStr}`);
 
-            // Trigger Globalapp Stage 1 Sync (non-blocking)
-            triggerGlobalappSync(id, 'start').catch(err =>
-                console.error('[GlobalappSync] Error al disparar inicio:', err)
-            );
+            // Trigger Globalapp Stage 1 Sync (non-blocking for Monitor, alerts user if Globalapp skips sync)
+            triggerGlobalappSync(id, 'start')
+                .then(res => {
+                    if (res && !res.success && res.error) {
+                        alert(`⚠️ Aviso Globalapp:\n${res.error}\n\n(La cirugía continúa normalmente en el Panel de Cirugías).`);
+                    }
+                })
+                .catch(err => console.error('[GlobalappSync] Error al disparar inicio:', err));
 
             fetchMonitorData();
         } catch (err) {
@@ -430,10 +434,14 @@ const Monitor: React.FC = () => {
             // Log Audit
             await logAction('UPDATE', id, `Cirugía finalizada manualmente en Monitor a las ${timeStr}. Sincronizado con Ficha Técnica.`);
 
-            // Trigger Globalapp Stage 2 Sync (non-blocking)
-            triggerGlobalappSync(id, 'finish').catch(err =>
-                console.error('[GlobalappSync] Error al disparar finalización:', err)
-            );
+            // Trigger Globalapp Stage 2 Sync (non-blocking for Monitor, alerts user if Globalapp skips sync)
+            triggerGlobalappSync(id, 'finish')
+                .then(res => {
+                    if (res && !res.success && res.error) {
+                        alert(`⚠️ Aviso Globalapp:\n${res.error}\n\n(La cirugía finalizó normalmente en el Panel de Cirugías).`);
+                    }
+                })
+                .catch(err => console.error('[GlobalappSync] Error al disparar finalización:', err));
 
             fetchMonitorData();
         } catch (err) {

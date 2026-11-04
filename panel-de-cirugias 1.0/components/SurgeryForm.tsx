@@ -114,6 +114,7 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
     const [filteredCatalog, setFilteredCatalog] = useState<CatalogItem[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [stockConsumptionEnabled, setStockConsumptionEnabled] = useState<boolean>(false);
+    const [unlistedWarningItem, setUnlistedWarningItem] = useState<{ name: string, unit: string, quantity: number, type: 'anesthesia' | 'surgery' } | null>(null);
 
     // Editing states for in-line edit
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -303,14 +304,12 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
     };
 
 
-    const handleAddItem = () => {
-        if (!newItem.name || newItem.quantity <= 0) return;
-
-        const matchedCatalog = catalogItems.find(c => c.name.toLowerCase() === newItem.name.toLowerCase());
+    const executeAddItem = (itemToAdd: { name: string, unit: string, quantity: number, type: 'anesthesia' | 'surgery' }) => {
+        const matchedCatalog = catalogItems.find(c => c.name.toLowerCase() === itemToAdd.name.toLowerCase());
 
         const item: FormItem = {
             id: `temp-${Date.now()}`,
-            ...newItem,
+            ...itemToAdd,
             descontar_stock: true,
             stock_descontado: false,
             catalog_item_id: matchedCatalog ? matchedCatalog.id : null
@@ -319,6 +318,22 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
         setItems([...items, item]);
         setNewItem({ ...newItem, name: '', quantity: 1 });
         setIsDirty(true);
+        setUnlistedWarningItem(null);
+    };
+
+    const handleAddItem = () => {
+        if (!newItem.name || newItem.quantity <= 0) return;
+
+        const trimmedName = newItem.name.trim();
+        const matchedCatalog = catalogItems.find(c => c.name.toLowerCase() === trimmedName.toLowerCase());
+
+        // Si no coincide exactamente con ningún elemento del catálogo, advertir al usuario
+        if (!matchedCatalog) {
+            setUnlistedWarningItem({ ...newItem, name: trimmedName });
+            return;
+        }
+
+        executeAddItem({ ...newItem, name: matchedCatalog.name });
     };
 
     const toggleItemDescontar = (id: string) => {
@@ -700,9 +715,13 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
             setShowSuccess(true);
 
             // Trigger Globalapp Sync to review & update all fields in Globalapp (non-blocking)
-            triggerGlobalappSync(surgery.id, 'sync').catch(err =>
-                console.error('[GlobalappSync] Error al sincronizar desde Ficha Técnica:', err)
-            );
+            triggerGlobalappSync(surgery.id, 'sync')
+                .then(res => {
+                    if (res && !res.success && res.error) {
+                        alert(`⚠️ Aviso Globalapp:\n${res.error}\n\n(La Ficha Quirúrgica se guardó normalmente en el Panel de Cirugías).`);
+                    }
+                })
+                .catch(err => console.error('[GlobalappSync] Error al sincronizar desde Ficha Técnica:', err));
 
             if (autoClose) {
                 // Wait 2 seconds showing the success message then close automatically
@@ -994,7 +1013,10 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                                         if (res?.success) {
                                             setGlobalappStatusMsg(res.delegated ? 'Enviado a PC Quirófano' : 'Globalapp Sincronizado');
                                         } else {
-                                            setGlobalappStatusMsg('Error al sincronizar');
+                                            setGlobalappStatusMsg('No sincronizado');
+                                            if (res?.error) {
+                                                alert(`⚠️ Aviso Globalapp:\n${res.error}`);
+                                            }
                                         }
                                     } catch (err) {
                                         setGlobalappStatusMsg('Error al sincronizar');
@@ -1779,6 +1801,50 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                                     ) : 'Validar'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Advertencia para Ítems no incluidos en el Listado Habitual */}
+            {unlistedWarningItem && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-fadeIn">
+                    <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-amber-200 animate-scaleUp">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="size-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0">
+                                <span className="material-symbols-outlined text-2xl">help</span>
+                            </div>
+                            <div>
+                                <h3 className="text-base font-black text-slate-800">Elemento no Habitual</h3>
+                                <p className="text-xs text-slate-500">Confirmación de carga manual</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-amber-50/70 border border-amber-200/60 rounded-xl p-3.5 mb-5 text-sm text-slate-700">
+                            <p className="mb-2">
+                                El elemento <strong className="text-amber-900 font-bold bg-amber-100/70 px-1.5 py-0.5 rounded">"{unlistedWarningItem.name}"</strong> no se encuentra en el listado ni en el vademécum habitual de quirófano.
+                            </p>
+                            <p className="text-xs text-amber-800 font-medium">
+                                ¿Desea agregarlo de todas formas aunque no esté en el catálogo oficial?
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setUnlistedWarningItem(null)}
+                                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 font-bold text-xs text-slate-700 hover:bg-slate-100 transition-colors"
+                            >
+                                Volver y corregir
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => executeAddItem(unlistedWarningItem)}
+                                className="flex-1 py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 font-bold text-xs text-white shadow-lg shadow-amber-600/20 transition-all flex items-center justify-center gap-1.5"
+                            >
+                                <span className="material-symbols-outlined text-sm">check</span>
+                                Sí, agregar igual
+                            </button>
                         </div>
                     </div>
                 </div>

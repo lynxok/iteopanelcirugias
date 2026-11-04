@@ -342,6 +342,7 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
             setInternacionNotified(false);
             setPatientName('');
             setDocumentNumber('');
+            setNuc('');
             setDiagnosis('');
             setSelectedProcedures([]);
             setApprovals({ ortho: false, admission: false, or: false });
@@ -542,7 +543,9 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
     const handleSelectPatient = (patient: any) => {
         setPatientName(patient.full_name);
         setDocumentNumber(patient.document_number);
-        setNuc(patient.nuc ? String(patient.nuc) : '');
+        if (isNew) {
+            setNuc('');
+        }
         setMedicalRecordNumber(patient.medical_record_number || '');
         setBirthDate(patient.birth_date || '');
         setPhone(patient.phone || '');

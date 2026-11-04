@@ -40,6 +40,7 @@ export const useSettings = () => {
     const [nomencladorItems, setNomencladorItems] = useState<NomencladorItem[]>([]);
     const [nomencladorCatalogs, setNomencladorCatalogs] = useState<NomencladorCatalog[]>(DEFAULT_NOMENCLADOR_CATALOGS);
     const [specialties, setSpecialties] = useState<string[]>([]);
+    const [globalappPatologias, setGlobalappPatologias] = useState<string[]>(['TRAUMATOLOGIA', 'NEUROLOGÍA', 'MAXILOFACIAL']);
     
     // --- LOADING & SAVING STATE ---
     const [isLoading, setIsLoading] = useState(false);
@@ -81,10 +82,11 @@ export const useSettings = () => {
         notificationPreferences: { delays: true, daily_summary: true, status_changes: true, vendor_assignments: true }
     });
     const [newUserSpecialty, setNewUserSpecialty] = useState<string>('');
+    const [newUserGlobalappPatologia, setNewUserGlobalappPatologia] = useState<string>('TRAUMATOLOGIA');
     const [isEditingUser, setIsEditingUser] = useState(false);
 
     const [showDoctorModal, setShowDoctorModal] = useState(false);
-    const [doctorForm, setDoctorForm] = useState<Partial<Doctor>>({ name: '', specialty: 'Cirugía General', email: '', active: true });
+    const [doctorForm, setDoctorForm] = useState<Partial<Doctor>>({ name: '', specialty: 'Cirugía General', globalapp_patologia: 'TRAUMATOLOGIA', email: '', active: true });
     const [isEditingDoctor, setIsEditingDoctor] = useState(false);
 
     const [showVendorModal, setShowVendorModal] = useState(false);
@@ -144,6 +146,10 @@ export const useSettings = () => {
     const [specialtyForm, setSpecialtyForm] = useState('');
     const [editingSpecialtyOriginal, setEditingSpecialtyOriginal] = useState<string | null>(null);
 
+    const [showGlobalappPatologiasModal, setShowGlobalappPatologiasModal] = useState(false);
+    const [globalappPatologiaForm, setGlobalappPatologiaForm] = useState('');
+    const [editingGlobalappPatologiaOriginal, setEditingGlobalappPatologiaOriginal] = useState<string | null>(null);
+
     const [showOserSyncModal, setShowOserSyncModal] = useState(false);
     const [oserResults, setOserResults] = useState<any[]>([]);
     const [oserLogs, setOserLogs] = useState<string[]>([]);
@@ -198,6 +204,7 @@ export const useSettings = () => {
         if (!error && data) {
             setDoctors(data.map(d => ({
                 id: d.id, name: d.full_name, specialty: d.specialty || 'Cirugía General',
+                globalapp_patologia: d.globalapp_patologia || 'TRAUMATOLOGIA',
                 email: d.email || '', active: d.active, does_guardias: d.does_guardias,
                 license_number: d.license_number || null
             })));
@@ -242,6 +249,13 @@ export const useSettings = () => {
     const fetchSpecialties = useCallback(async () => {
         const { data, error } = await supabase.from('specialties').select('name').order('name');
         if (!error && data) setSpecialties(data.map((s: any) => s.name));
+    }, []);
+
+    const fetchGlobalappPatologias = useCallback(async () => {
+        const { data, error } = await supabase.from('globalapp_patologias').select('name').order('name');
+        if (!error && data && data.length > 0) {
+            setGlobalappPatologias(data.map((p: any) => p.name));
+        }
     }, []);
 
     const fetchCategories = useCallback(async () => {
@@ -372,12 +386,12 @@ export const useSettings = () => {
         setIsLoading(true);
         await Promise.all([
             fetchUsers(), fetchDoctors(), fetchOperatingRooms(), fetchVendors(),
-            fetchCoverages(), fetchProcedures(), fetchSpecialties(), fetchCategories(),
+            fetchCoverages(), fetchProcedures(), fetchSpecialties(), fetchGlobalappPatologias(), fetchCategories(),
             fetchGlobalSettings(), fetchCatalogItems(), fetchRolePermissions(), fetchCie10Items(),
             fetchNomencladorItems(), fetchSystemFields()
         ]);
         setIsLoading(false);
-    }, [fetchUsers, fetchDoctors, fetchOperatingRooms, fetchVendors, fetchCoverages, fetchProcedures, fetchSpecialties, fetchCategories, fetchGlobalSettings, fetchCatalogItems, fetchRolePermissions, fetchCie10Items, fetchNomencladorItems, fetchSystemFields]);
+    }, [fetchUsers, fetchDoctors, fetchOperatingRooms, fetchVendors, fetchCoverages, fetchProcedures, fetchSpecialties, fetchGlobalappPatologias, fetchCategories, fetchGlobalSettings, fetchCatalogItems, fetchRolePermissions, fetchCie10Items, fetchNomencladorItems, fetchSystemFields]);
 
     useEffect(() => {
         fetchInitialData();
@@ -401,6 +415,7 @@ export const useSettings = () => {
                     full_name: newUser.name,
                     email: newUser.email,
                     specialty: newUser.role === 'Anestesista' ? 'Anestesiología' : (newUser.role === 'Residente' ? 'Residencia' : newUserSpecialty),
+                    globalapp_patologia: newUser.role === 'Medico' ? (newUserGlobalappPatologia || 'TRAUMATOLOGIA') : 'TRAUMATOLOGIA',
                     active: newUser.active,
                     license_number: newUser.license_number || null,
                     does_guardias: ((newUser.role === 'Medico' && (newUserSpecialty === 'Cirugía General' || newUserSpecialty === 'Cirujano')) || newUser.role === 'Anestesista') ? newUser.does_guardias : false
@@ -480,7 +495,8 @@ export const useSettings = () => {
         try {
             const payload = { 
                 full_name: doctorForm.name, 
-                specialty: doctorForm.specialty, 
+                specialty: doctorForm.specialty,
+                globalapp_patologia: doctorForm.globalapp_patologia || 'TRAUMATOLOGIA',
                 email: doctorForm.email, 
                 active: doctorForm.active,
                 license_number: doctorForm.license_number || null,
@@ -987,11 +1003,11 @@ export const useSettings = () => {
 
     return {
         user, activeTab, setActiveTab, isPrintingBlank, setIsPrintingBlank, materialPagesCount, setMaterialPagesCount,
-        vendors, coverages, users, doctors, ors, procedures, categories, catalogItems, cie10Items, nomencladorItems, nomencladorCatalogs, specialties,
+        vendors, coverages, users, doctors, ors, procedures, categories, catalogItems, cie10Items, nomencladorItems, nomencladorCatalogs, specialties, globalappPatologias,
         isLoading, isLoadingCatalog, isLoadingNomenclador, isSavingNomenclador, isSavingCatalogType, isSavingPermissions, isSavingSmtp, isSavingSignature,
         rolePermissions, telegramGlobalEnabled, bccEnabled, cie10Enabled, stockConsumptionEnabled, isTogglingStockConsumption, smtpSettings, setSmtpSettings,
         signaturePin, setSignaturePin, currentSignature, setCurrentSignature, signatureRef, setSignatureRef,
-        showUserModal, setShowUserModal, newUser, setNewUser, newUserSpecialty, setNewUserSpecialty, isEditingUser, setIsEditingUser,
+        showUserModal, setShowUserModal, newUser, setNewUser, newUserSpecialty, setNewUserSpecialty, newUserGlobalappPatologia, setNewUserGlobalappPatologia, isEditingUser, setIsEditingUser,
         systemFields, handleAddSystemField, handleDeleteSystemField,
         showDoctorModal, setShowDoctorModal, doctorForm, setDoctorForm, isEditingDoctor, setIsEditingDoctor,
         showVendorModal, setShowVendorModal, vendorForm, setVendorForm, isEditingVendor, setIsEditingVendor,
@@ -1003,6 +1019,7 @@ export const useSettings = () => {
         showNomencladorModal, setShowNomencladorModal, nomencladorForm, setNomencladorForm, isEditingNomenclador, setIsEditingNomenclador,
         showManageCatalogsModal, setShowManageCatalogsModal, handleSaveNomencladorCatalog, handleDeleteNomencladorCatalog,
         showSpecialtiesModal, setShowSpecialtiesModal, specialtyForm, setSpecialtyForm, editingSpecialtyOriginal, setEditingSpecialtyOriginal,
+        showGlobalappPatologiasModal, setShowGlobalappPatologiasModal, globalappPatologiaForm, setGlobalappPatologiaForm, editingGlobalappPatologiaOriginal, setEditingGlobalappPatologiaOriginal,
         showOserSyncModal, setShowOserSyncModal, oserResults, setOserResults, oserLogs, setOserLogs,
         searchUsers, setSearchUsers, searchDoctors, setSearchDoctors, searchCoverage, setSearchCoverage, searchCatalog, setSearchCatalog, searchCie10, setSearchCie10, searchNomenclador, setSearchNomenclador,
         nomencladorFilterType, setNomencladorFilterType,
@@ -1131,6 +1148,26 @@ export const useSettings = () => {
             if (window.confirm(`¿Eliminar la especialidad "${spec}"?`)) {
                 await supabase.from('specialties').delete().eq('name', spec);
                 fetchSpecialties();
+            }
+        },
+        handleSaveGlobalappPatologia: async () => {
+            const cleanVal = globalappPatologiaForm.trim().toUpperCase();
+            if (!cleanVal) return;
+            if (editingGlobalappPatologiaOriginal) {
+                await supabase.from('globalapp_patologias').update({ name: cleanVal }).eq('name', editingGlobalappPatologiaOriginal);
+                await supabase.from('doctors').update({ globalapp_patologia: cleanVal }).eq('globalapp_patologia', editingGlobalappPatologiaOriginal);
+                setEditingGlobalappPatologiaOriginal(null);
+            } else {
+                await supabase.from('globalapp_patologias').insert({ name: cleanVal });
+            }
+            setGlobalappPatologiaForm('');
+            fetchGlobalappPatologias();
+            fetchDoctors();
+        },
+        handleDeleteGlobalappPatologia: async (pat: string) => {
+            if (window.confirm(`¿Eliminar la patología Globalapp "${pat}"?`)) {
+                await supabase.from('globalapp_patologias').delete().eq('name', pat);
+                fetchGlobalappPatologias();
             }
         },
         handleSaveMaterial: async () => {

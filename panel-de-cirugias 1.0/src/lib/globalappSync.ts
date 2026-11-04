@@ -68,7 +68,7 @@ export async function buildGlobalappPayload(
         // 3. Fetch active users/doctors to resolve license numbers for ayudante_1 / ayudante_2 if needed
         const { data: usersList } = await supabase
             .from('users')
-            .select('name, license_number, doctor_id, doctors(name, full_name, license_number, specialty)')
+            .select('name, license_number, doctor_id, doctors(name, full_name, license_number, specialty, globalapp_patologia)')
             .eq('active', true);
 
         const findLicenseByName = (name?: string | null): string => {
@@ -99,7 +99,7 @@ export async function buildGlobalappPayload(
 
         const doctorName = sx.doctor?.full_name || sx.doctor?.name || sx.doctor_name || '';
         const doctorLicense = sx.doctor?.license_number || findLicenseByName(doctorName);
-        const specialty = sx.doctor?.specialty || 'TRAUMATOLOGIA';
+        const specialty = sx.doctor?.globalapp_patologia || sx.doctor?.specialty || 'TRAUMATOLOGIA';
 
         let anesthetistName = sx.anesthesiologist?.full_name || sx.anesthesiologist?.name || sx.anesthesiologist_name || '';
         let anesthetistLicense = sx.anesthesiologist?.license_number || '';

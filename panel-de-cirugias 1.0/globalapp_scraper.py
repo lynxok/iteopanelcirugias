@@ -76,7 +76,7 @@ def has_anatomia_patologica(val: str) -> bool:
     return True
 
 def extract_search_tokens(person_name: str, license_number: str = "") -> list:
-    """Returns ordered search candidates for Globalapp professional lookup."""
+    """Returns ordered search candidates for Globalapp professional lookup (strictly license or surname)."""
     candidates = []
     if license_number and str(license_number).strip():
         candidates.append(str(license_number).strip())
@@ -84,11 +84,8 @@ def extract_search_tokens(person_name: str, license_number: str = "") -> list:
         clean = person_name.replace("Dr.", "").replace("Dra.", "").replace("Dr", "").replace("Dra", "").replace(",", " ").strip()
         parts = [p.strip() for p in clean.split() if len(p.strip()) >= 2]
         if parts:
-            # First word (usually surname or first name)
+            # Only search by primary surname (parts[0]); never by given name alone
             candidates.append(parts[0])
-            if len(parts) > 1:
-                candidates.append(parts[-1])
-            candidates.append(" ".join(parts[:2]))
     return candidates
 
 def select_vs_combobox_option(page, combobox_selector: str, option_text: str):
@@ -158,7 +155,8 @@ def search_and_add_professional(page, role_label: str, person_name: str, license
                 if "\n" in txt or len(txt) > 80:
                     continue
                 norm_txt = normalize_str(txt)
-                if "-" in norm_txt and any(w in norm_txt for w in norm_full_words):
+                primary_surname = norm_full_words[0] if norm_full_words else ""
+                if "-" in norm_txt and primary_surname and primary_surname in norm_txt.split():
                     matched_item = items.nth(idx)
                     break
 

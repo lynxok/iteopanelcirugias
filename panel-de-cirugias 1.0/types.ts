@@ -41,6 +41,7 @@ export interface Doctor {
   id: string;
   name: string;
   specialty: string;
+  globalapp_patologia?: string;
   email: string; // Key for user filters
   active: boolean;
   license_number?: string | null;

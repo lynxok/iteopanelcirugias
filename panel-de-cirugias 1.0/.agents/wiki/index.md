@@ -18,6 +18,20 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-11-04]`: **Refactorización de Asignación de Turno Tarde y Circulantes en Panel de Técnicos ([TecnicoPanel.tsx](file:///pages/TecnicoPanel.tsx))**:
+    *   **Causa Raíz Identificada**: Cirugías de la tarde eran asignadas indebidamente a técnicos de la mañana (ej. Victoria Delaloye) porque el filtro solo evaluaba si hubo un `check_in` en algún momento del día (`hasCheckedInOnDate`), ignorando que el técnico ya se había retirado a las 15:00 hs y que la ficha técnica ya tenía designada a otra instrumentadora (`RIEGERT Patricia`).
+    *   **Detección de Presencia por Intervalo Real (`isTecnicoPresentForSurgery`)**: Se evalúa si el horario real de inicio de la cirugía (`actual_start_time`) cae dentro del intervalo de fichada (`check_in` a `check_out` con tolerancia de 15 min), o si la permanencia cubre la franja del Turno Tarde.
+    *   **Regla de Exclusividad de Ficha Técnica**: Si la ficha técnica ya tiene una instrumentadora explícitamente registrada que pertenece al equipo de guardia y difiere del técnico seleccionado, se descarta para los demás técnicos de guardia.
+    *   **Asignación Inteligente de Circulante / Colaboradora en Turno Tarde**:
+        *   Si solo una técnica de guardia estuvo presente durante la cirugía, se le asigna automáticamente por defecto.
+        *   Si ambas estuvieron presentes (ej. Patricia y Victoria), se asigna por defecto a la que esté de guardia oficial según el cronograma.
+        *   Se habilitó el botón `+ Colaboradora` para permitir asignar o cambiar a la colaboradora en cualquier intervención vespertina.
+
+*   `[2026-11-02]`: **Corrección de Cobertura Ficticia de Turno Tarde en Panel de Técnicos ([TecnicoPanel.tsx](file:///pages/TecnicoPanel.tsx)) (v3.13.25)**:
+    *   **Causa Raíz**: En `fetchData()`, la consulta a `quirofano.tecnico_attendance` filtraba por `.eq('user_id', targetTecnicoId)`, restringiendo las fichadas en memoria únicamente al técnico seleccionado en pantalla. Al evaluar a un técnico con guardia (ej. Victoria Delaloye), la función `hasCheckedInOnDate(fijoTec.id, date)` devolvía `false` al no tener en memoria las fichadas de la técnica fija (Dulce Lanzi), interpretando erróneamente que el turno tarde estaba vacante y asignando la cobertura a los técnicos con guardia presentes a la mañana.
+    *   **Solución Aplicada**: Se desacopló la consulta general del mes eliminando el filtro de usuario para poblar `allMonthAttendance` con las fichadas de todo el personal técnico, permitiendo que la verificación de presencia del técnico fijo (`fijoTec`) funcione correctamente.
+    *   **Aislamiento de Asistencia Personal**: Se mantiene filtrado `userAttLogs = allAttLogs.filter(a => a.user_id === targetTecnicoId)` para la vista individual de fichadas y el cómputo de horas trabajadas, preservando la visualización personal sin alterar los cálculos de cobertura cruzada.
+
 *   `[2026-10-31]`: **Buscador y Filtro de Pasadas en Derivaciones de Perfil Médico ([DoctorPanel.tsx](file:///pages/DoctorPanel.tsx)) (v3.13.23)**:
     *   **Ocultamiento por Defecto de Cirugías Pasadas**: En "Derivadas por Mí", las cirugías con fecha anterior al día de hoy, completadas o canceladas se ocultan por defecto para mantener la vista enfocada en lo próximo a operar.
     *   **Checkbox de Consulta Histórica**: Se incorporó el control *"Ver cirugías ya realizadas / pasadas"* para revelar el historial completo a demanda.

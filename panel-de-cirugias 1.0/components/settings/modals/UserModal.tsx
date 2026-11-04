@@ -13,11 +13,19 @@ interface UserModalProps {
     specialties: string[];
     newUserSpecialty: string;
     setNewUserSpecialty: (spec: string) => void;
+    globalappPatologias?: string[];
+    newUserGlobalappPatologia?: string;
+    setNewUserGlobalappPatologia?: (pat: string) => void;
+    onOpenGlobalappPatologiasModal?: () => void;
 }
 
 const UserModal: React.FC<UserModalProps> = ({
     show, onClose, onSave, newUser, setNewUser, isEditing, 
-    vendors, specialties, newUserSpecialty, setNewUserSpecialty
+    vendors, specialties, newUserSpecialty, setNewUserSpecialty,
+    globalappPatologias = ['TRAUMATOLOGIA', 'NEUROLOGÍA', 'MAXILOFACIAL'],
+    newUserGlobalappPatologia = 'TRAUMATOLOGIA',
+    setNewUserGlobalappPatologia,
+    onOpenGlobalappPatologiasModal
 }) => {
     if (!show) return null;
 
@@ -376,6 +384,39 @@ const UserModal: React.FC<UserModalProps> = ({
                                     * Se creará automáticamente un perfil en la "Base de Médicos" con esta especialidad.
                                 </p>
                             </div>
+
+                            {setNewUserGlobalappPatologia && (
+                                <div className="pt-2 border-t border-blue-200/60">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label className="block text-xs font-bold text-indigo-700 uppercase flex items-center gap-1">
+                                            <span className="material-symbols-outlined text-sm">cloud_sync</span>
+                                            Patología / Servicio Globalapp
+                                        </label>
+                                        {onOpenGlobalappPatologiasModal && (
+                                            <button
+                                                type="button"
+                                                onClick={onOpenGlobalappPatologiasModal}
+                                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline flex items-center gap-0.5"
+                                            >
+                                                <span className="material-symbols-outlined text-xs">add_circle</span>
+                                                Gestionar opciones
+                                            </button>
+                                        )}
+                                    </div>
+                                    <select
+                                        className="w-full bg-white text-slate-900 rounded-lg border-indigo-300 focus:ring-indigo-500 focus:border-indigo-500 px-3 py-2 text-sm font-medium"
+                                        value={newUserGlobalappPatologia || 'TRAUMATOLOGIA'}
+                                        onChange={e => setNewUserGlobalappPatologia(e.target.value)}
+                                    >
+                                        {globalappPatologias.map(pat => (
+                                            <option key={pat} value={pat}>{pat}</option>
+                                        ))}
+                                    </select>
+                                    <p className="text-[10px] text-indigo-600 mt-1 leading-tight">
+                                        Define la patología que se enviará a Globalapp sin afectar permisos del usuario.
+                                    </p>
+                                </div>
+                            )}
 
                             <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200 animate-fadeIn">
                                 <label className="flex items-center gap-3 cursor-pointer group">

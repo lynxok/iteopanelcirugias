@@ -479,13 +479,12 @@ export default function TecnicoPanel() {
                     .lte('surgery_date', surgEndStr)
                     .order('surgery_date', { ascending: true })
                     .order('actual_start_time', { ascending: true }),
-                targetTecnicoId ? supabase
+                supabase
                     .from('tecnico_attendance')
                     .select('*')
-                    .eq('user_id', targetTecnicoId)
                     .gte('timestamp', startStr)
                     .lte('timestamp', endStr)
-                    .order('timestamp', { ascending: false }) : Promise.resolve({ data: [] }),
+                    .order('timestamp', { ascending: false }),
                 targetTecnicoId ? supabase
                     .from('tecnico_monthly_consents')
                     .select('*')
@@ -587,12 +586,14 @@ export default function TecnicoPanel() {
             }
 
             // Procesar Asistencia / Fichadas (Unificado: resuelve mes, cálculo y fichadas de hoy en 1 sola consulta)
-            const attLogs: Attendance[] = (attendanceRes?.data as Attendance[]) || [];
-            setAttendanceLogs(attLogs);
-            setAllMonthAttendance(attLogs);
+            const allAttLogs: Attendance[] = (attendanceRes?.data as Attendance[]) || [];
+            setAllMonthAttendance(allAttLogs);
+
+            const userAttLogs = targetTecnicoId ? allAttLogs.filter(a => a.user_id === targetTecnicoId) : allAttLogs;
+            setAttendanceLogs(userAttLogs);
 
             const todayStr = new Date().toDateString();
-            const todayLogs = attLogs.filter((log: Attendance) => new Date(log.timestamp).toDateString() === todayStr);
+            const todayLogs = userAttLogs.filter((log: Attendance) => new Date(log.timestamp).toDateString() === todayStr);
             setTodayUserLogs(todayLogs);
 
             // Procesar Consentimiento
@@ -661,6 +662,59 @@ export default function TecnicoPanel() {
             const attDateStr = getLocalStr(new Date(att.timestamp));
             return attDateStr === dateStr;
         });
+    }, [allMonthAttendance]);
+
+    // Helper: Verificar si un técnico estuvo presente durante una cirugía específica o franja horaria
+    const isTecnicoPresentForSurgery = useCallback((userId: string, dateStr: string, actualStartTime?: string | null, isTarde?: boolean, dayOfWeek?: number) => {
+        if (!userId || !dateStr || !allMonthAttendance.length) return false;
+
+        const userLogs = allMonthAttendance.filter(att => {
+            if (att.user_id !== userId) return false;
+            const attDateStr = getLocalStr(new Date(att.timestamp));
+            return attDateStr === dateStr;
+        }).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+        if (userLogs.length === 0) return false;
+
+        const intervals: Array<{ startHour: number; endHour: number }> = [];
+        let currentInDate: Date | null = null;
+
+        userLogs.forEach(log => {
+            const d = new Date(log.timestamp);
+            const hourFraction = d.getHours() + d.getMinutes() / 60;
+            if (log.type === 'check_in') {
+                currentInDate = d;
+            } else if (log.type === 'check_out') {
+                if (currentInDate) {
+                    const inFraction = currentInDate.getHours() + currentInDate.getMinutes() / 60;
+                    intervals.push({ startHour: inFraction, endHour: hourFraction });
+                    currentInDate = null;
+                }
+            }
+        });
+
+        if (currentInDate) {
+            const inFraction = currentInDate.getHours() + currentInDate.getMinutes() / 60;
+            intervals.push({ startHour: inFraction, endHour: 23.99 });
+        }
+
+        if (intervals.length === 0) return false;
+
+        // 1. Si la cirugía tiene horario real de inicio, validar que caiga en su intervalo de trabajo (tolerancia 15 min)
+        if (actualStartTime) {
+            const [h, m] = actualStartTime.split(':').map(Number);
+            const targetHour = h + (m || 0) / 60;
+            return intervals.some(iv => targetHour >= (iv.startHour - 0.25) && targetHour <= (iv.endHour + 0.25));
+        }
+
+        // 2. Si es Turno Tarde pero sin horario exacto de inicio:
+        if (isTarde) {
+            const tardeStart = (dayOfWeek === 5) ? 14 : 15;
+            const tardeEnd = 19;
+            return intervals.some(iv => iv.endHour > (tardeStart + 0.5) && iv.startHour < tardeEnd);
+        }
+
+        return true;
     }, [allMonthAttendance]);
 
     // Cálculo de horas reales trabajadas (fichadas) en el mes
@@ -789,6 +843,13 @@ export default function TecnicoPanel() {
             // Si está explícitamente asignado/a en la ficha técnica, registrar de todos modos
             if (isAssignedInForm) return true;
 
+            // Verificar si la ficha técnica asignó explícitamente a otro técnico del equipo
+            const otherAssignedTec = tecnicos.find(t => {
+                if (t.id === selectedTecnicoId) return false;
+                const n = normalizeStr(t.name);
+                return normForm !== '' && n !== '' && (normForm.includes(n) || n.includes(normForm) || (normForm.includes('yuskowich') && n.includes('yuskowich')));
+            });
+
             const surgDate = new Date(`${s.date}T12:00:00`);
             const dayOfWeek = surgDate.getDay(); // 0 = Dom, 6 = Sab
             
@@ -840,27 +901,44 @@ export default function TecnicoPanel() {
             const onDutyTec = getOnDutyTecnicoForDate(s.date);
             const isGuardia = onDutyTec && onDutyTec.id === selectedTecnicoId;
 
+            // REGLA DE EXCLUSIVIDAD: Si la ficha técnica tiene explícitamente a otro técnico que NO es el fijo de la tarde,
+            // esa cirugía pertenece a ese instrumentador específico (ej. Patricia Riegert).
+            // No puede asignársele a otro técnico de guardia (ej. Victoria Delaloye).
+            if (otherAssignedTec && !otherAssignedTec.is_turno_tarde && !isFijo) {
+                return false;
+            }
+
             // Fines de semana, luego de las 19:00 hs o antes de las 06:00 AM (Guardia Nocturna) -> Solo al que está de guardia
             if (dayOfWeek === 0 || dayOfWeek === 6 || isAfter19 || isBefore6) {
                 return isGuardia;
             }
 
             // En el turno tarde:
-            // Participan Fijo y Guardia si marcaron ingreso.
-            // Si el técnico fijo está de vacaciones o ausente, los técnicos con guardia o asignados que marcaron presente cubren el turno tarde.
             if (isWithinTardeShift) {
-                const checkedIn = hasCheckedInOnDate(selectedTecnicoId, s.date);
-                if (!checkedIn) return false;
+                // Verificar si este técnico estuvo presente durante la cirugía / tarde
+                const isPresent = isTecnicoPresentForSurgery(selectedTecnicoId, s.date, s.actual_start_time, true, dayOfWeek);
+                if (!isPresent) return false;
 
-                if (isFijo || isGuardia) {
-                    return true;
+                // El técnico fijo de la tarde participa si estuvo presente
+                if (isFijo) return true;
+
+                // Para los técnicos de guardia / circulantes:
+                // Evaluamos qué técnicos de guardia estuvieron presentes durante la cirugía
+                const guardiaTecs = tecnicos.filter(t => t.does_guardias);
+                const presentGuardiaTecs = guardiaTecs.filter(t => 
+                    isTecnicoPresentForSurgery(t.id, s.date, s.actual_start_time, true, dayOfWeek)
+                );
+
+                // Si solo UNA técnica de guardia estuvo presente (ej. solo Patricia o solo Victoria):
+                // Se asigna automáticamente por defecto a la que estuvo presente
+                if (presentGuardiaTecs.length === 1) {
+                    return presentGuardiaTecs[0].id === selectedTecnicoId;
                 }
 
-                // Si este técnico hace guardias o figura en ficha, y el técnico fijo está de vacaciones o no marcó presente:
-                const fijoTec = tecnicos.find(t => t.is_turno_tarde);
-                const isFijoAbsentOrOnLeave = !fijoTec || isTecnicoOnLeave(fijoTec.id, s.date) || !hasCheckedInOnDate(fijoTec.id, s.date);
-                if (isFijoAbsentOrOnLeave && (tec.does_guardias || isAssignedInForm)) {
-                    return true;
+                // Si AMBAS estuvieron presentes:
+                // Por defecto se asigna a la que estaba de guardia oficial en el cronograma
+                if (presentGuardiaTecs.length > 1) {
+                    return isGuardia;
                 }
 
                 return false;
@@ -869,7 +947,7 @@ export default function TecnicoPanel() {
             // En el Turno Mañana (06:00 a 14:00/15:00 hs) de días hábiles, no se imputa al de guardia salvo en la ficha técnica
             return false;
         });
-    }, [surgeries, selectedTecnicoId, tecnicos, getOnDutyTecnicoForDate, manualSurgeryIds, hasCheckedInOnDate, isTecnicoOnLeave]);
+    }, [surgeries, selectedTecnicoId, tecnicos, getOnDutyTecnicoForDate, manualSurgeryIds, isTecnicoPresentForSurgery]);
 
     // Cálculo del Costo de las Cirugías
     const surgeriesReport = useMemo(() => {
@@ -995,7 +1073,7 @@ export default function TecnicoPanel() {
 
             // Verificar si el técnico fijo está de vacaciones o ausente en el turno tarde
             const fijoTec = isWithinTardeShift ? tecnicos.find(t => t.is_turno_tarde) : null;
-            const isFijoAbsentOrOnLeave = isWithinTardeShift && (!fijoTec || isTecnicoOnLeave(fijoTec.id, s.date) || !hasCheckedInOnDate(fijoTec.id, s.date));
+            const isFijoAbsentOrOnLeave = isWithinTardeShift && (!fijoTec || isTecnicoOnLeave(fijoTec.id, s.date) || !isTecnicoPresentForSurgery(fijoTec.id, s.date, s.actual_start_time, true, dayOfWeek));
             const isCoveringFijo = isWithinTardeShift && isFijoAbsentOrOnLeave && (tec.does_guardias || isGuardia);
 
             // Verificar si el técnico asignado en la Ficha Técnica difiere de guardia/turno tarde
@@ -1086,7 +1164,7 @@ export default function TecnicoPanel() {
             const timeB = b.startTime || '';
             return timeA.localeCompare(timeB);
         });
-    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate, overtimeTolerance, selectedPracticesMap, isTecnicoOnLeave, hasCheckedInOnDate]);
+    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate, overtimeTolerance, selectedPracticesMap, isTecnicoOnLeave, isTecnicoPresentForSurgery]);
 
     const totalSurgeriesAmount = useMemo(() => {
         return surgeriesReport.reduce((acc, curr) => acc + curr.share, 0);
@@ -2955,18 +3033,18 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                             )
                                                         )}
 
-                                                        {/* Botón Sumar Técnico */}
-                                                        {s.isSingleAssignee && (!s.isManual || s.manualStatus === 'approved') && (
+                                                        {/* Botón Sumar Técnico / Colaboradora */}
+                                                        {(s.isSingleAssignee || isLevelAdmin || canValidateManualSurgeries) && (!s.isManual || s.manualStatus === 'approved') && (
                                                             <button
                                                                 onClick={() => {
                                                                     setCoAssignSurgeryId(s.id);
                                                                     setIsCoAssignModalOpen(true);
                                                                 }}
                                                                 className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
-                                                                title="Sumar a otro técnico a esta cirugía"
+                                                                title="Sumar o asignar colaboradora a esta cirugía"
                                                             >
                                                                 <span className="material-symbols-outlined text-base">person_add</span>
-                                                                <span className="hidden xl:inline">+ Sumar Técnico</span>
+                                                                <span className="hidden xl:inline">+ Colaboradora</span>
                                                             </button>
                                                         )}
 

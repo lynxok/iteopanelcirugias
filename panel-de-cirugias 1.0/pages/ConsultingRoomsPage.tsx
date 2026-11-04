@@ -2013,6 +2013,59 @@ export const ConsultingRoomsPage: React.FC = () => {
                             ex.start_date <= dateStr && ex.end_date >= dateStr
                           );
 
+                          // Cálculo de ocupación del día
+                          const dayDate = new Date(year, month, day);
+                          const dayOfWeek = dayDate.getDay(); // 0: Dom, 1: Lun, ..., 6: Sáb
+                          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+                          let occupiedRoomsCount = 0;
+                          let totalDayHours = 0;
+                          let dayOccupancyPercent = 0;
+
+                          if (!isWeekend && !hol) {
+                            // Turnos regulares para este día de la semana (1 = Lun .. 5 = Vie)
+                            const baseDaySchedules = schedules.filter(s => s.day_of_week === dayOfWeek);
+
+                            // IDs de profesionales con novedades que liberan consultorio (vacaciones/ausencia sin reemplazo)
+                            const absentProfIds = new Set(
+                              dayExceptions
+                                .filter(ex => ex.exception_type === 'vacaciones' || ex.exception_type === 'ausencia')
+                                .map(ex => ex.professional_id)
+                            );
+
+                            // Consultorios efectivamente ocupados
+                            const activeConsultingRooms = new Set<string>();
+                            let totalMinutes = 0;
+
+                            baseDaySchedules.forEach(s => {
+                              // Si el profesional está ausente y no hay excepción de reemplazo específica, no suma ocupación
+                              if (!absentProfIds.has(s.professional_id)) {
+                                activeConsultingRooms.add(s.consulting_room_id);
+                                const diff = Math.max(0, timeToMinutes(s.end_time) - timeToMinutes(s.start_time));
+                                totalMinutes += diff;
+                              }
+                            });
+
+                            // Sumar reemplazos o turnos especiales asignados en exceptions
+                            dayExceptions.forEach(ex => {
+                              if (ex.exception_type === 'reemplazo' && ex.consulting_room_id) {
+                                activeConsultingRooms.add(ex.consulting_room_id);
+                                if (ex.start_time && ex.end_time) {
+                                  totalMinutes += Math.max(0, timeToMinutes(ex.end_time) - timeToMinutes(ex.start_time));
+                                }
+                              }
+                            });
+
+                            occupiedRoomsCount = activeConsultingRooms.size;
+                            totalDayHours = Math.round((totalMinutes / 60) * 10) / 10;
+
+                            const activeRoomsTotal = rooms.filter(r => r.active).length;
+                            const totalAvailableHours = activeRoomsTotal * 14; // 14hs diarias (07:00 a 21:00)
+                            dayOccupancyPercent = totalAvailableHours > 0
+                              ? Math.min(100, Math.round((totalDayHours / totalAvailableHours) * 100))
+                              : 0;
+                          }
+
                           cells.push(
                             <div
                               key={day}
@@ -2046,12 +2099,53 @@ export const ConsultingRoomsPage: React.FC = () => {
                                       {hol.holiday_type === 'sanidad' ? 'Sanidad' : 'Feriado'}
                                     </span>
                                   )}
+
+                                  {!hol && !isWeekend && (
+                                    <span
+                                      className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                                        dayOccupancyPercent >= 70
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : dayOccupancyPercent >= 40
+                                          ? 'bg-blue-100 text-blue-800'
+                                          : dayOccupancyPercent > 0
+                                          ? 'bg-amber-100 text-amber-800'
+                                          : 'bg-slate-100 text-slate-500'
+                                      }`}
+                                      title={`${occupiedRoomsCount} consultorios con turnos (${totalDayHours} hs)`}
+                                    >
+                                      {dayOccupancyPercent}% ocupado
+                                    </span>
+                                  )}
                                 </div>
 
                                 {hol && (
                                   <p className="text-[10px] text-rose-700 font-bold truncate mt-1" title={hol.name}>
                                     {hol.name}
                                   </p>
+                                )}
+
+                                {!hol && !isWeekend && occupiedRoomsCount > 0 && (
+                                  <div className="mt-1.5 space-y-1">
+                                    <div className="flex items-center justify-between text-[10px] text-slate-500">
+                                      <span className="flex items-center gap-1">
+                                        <span className="material-symbols-outlined text-[11px] text-slate-400">meeting_room</span>
+                                        <strong className="text-slate-700">{occupiedRoomsCount}</strong>/{rooms.filter(r => r.active).length} cons.
+                                      </span>
+                                      <span className="font-semibold text-slate-600">{totalDayHours}h</span>
+                                    </div>
+                                    <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full transition-all ${
+                                          dayOccupancyPercent >= 70
+                                            ? 'bg-emerald-500'
+                                            : dayOccupancyPercent >= 40
+                                            ? 'bg-blue-500'
+                                            : 'bg-amber-500'
+                                        }`}
+                                        style={{ width: `${dayOccupancyPercent}%` }}
+                                      />
+                                    </div>
+                                  </div>
                                 )}
 
                                 {/* Lista compacta de novedades */}

@@ -231,6 +231,8 @@ const Settings: React.FC = () => {
                                 vendors={s.vendors}
                                 handleOpenNewUser={() => {
                                     s.setIsEditingUser(false);
+                                    s.setNewUserSpecialty('Cirujano');
+                                    s.setNewUserGlobalappPatologia('TRAUMATOLOGIA');
                                     s.setNewUser({
                                         role: 'Medico',
                                         active: true,
@@ -241,6 +243,14 @@ const Settings: React.FC = () => {
                                 }}
                                 handleOpenEditUser={(user) => {
                                     s.setIsEditingUser(true);
+                                    const matchedDoc = s.doctors.find(d => d.id === user.doctorId || (d.email && user.email && d.email.toLowerCase() === user.email.toLowerCase()));
+                                    if (matchedDoc) {
+                                        s.setNewUserSpecialty(matchedDoc.specialty || 'Cirujano');
+                                        s.setNewUserGlobalappPatologia(matchedDoc.globalapp_patologia || 'TRAUMATOLOGIA');
+                                    } else {
+                                        s.setNewUserSpecialty('Cirujano');
+                                        s.setNewUserGlobalappPatologia('TRAUMATOLOGIA');
+                                    }
                                     const latestHistory = user.resident_level_history && user.resident_level_history.length > 0
                                         ? user.resident_level_history[user.resident_level_history.length - 1]
                                         : null;
@@ -264,14 +274,15 @@ const Settings: React.FC = () => {
                                 searchDoctors={s.searchDoctors}
                                 setSearchDoctors={s.setSearchDoctors}
                                 setShowSpecialtiesModal={s.setShowSpecialtiesModal}
+                                setShowGlobalappPatologiasModal={s.setShowGlobalappPatologiasModal}
                                 openNewDoctorModal={() => {
                                     s.setIsEditingDoctor(false);
-                                    s.setDoctorForm({ name: '', specialty: 'Cirugía General', email: '', active: true, license_number: '' });
+                                    s.setDoctorForm({ name: '', specialty: 'Cirugía General', globalapp_patologia: 'TRAUMATOLOGIA', email: '', active: true, license_number: '' });
                                     s.setShowDoctorModal(true);
                                 }}
                                 openEditDoctorModal={(doc) => {
                                     s.setIsEditingDoctor(true);
-                                    s.setDoctorForm(doc);
+                                    s.setDoctorForm({ ...doc, globalapp_patologia: doc.globalapp_patologia || 'TRAUMATOLOGIA' });
                                     s.setShowDoctorModal(true);
                                 }}
                                 handleDeleteDoctor={s.handleDeleteDoctor}
@@ -523,6 +534,10 @@ const Settings: React.FC = () => {
                 setNewUser={s.setNewUser}
                 newUserSpecialty={s.newUserSpecialty}
                 setNewUserSpecialty={s.setNewUserSpecialty}
+                globalappPatologias={s.globalappPatologias}
+                newUserGlobalappPatologia={s.newUserGlobalappPatologia}
+                setNewUserGlobalappPatologia={s.setNewUserGlobalappPatologia}
+                onOpenGlobalappPatologiasModal={() => s.setShowGlobalappPatologiasModal(true)}
                 isEditing={s.isEditingUser}
                 vendors={s.vendors}
                 specialties={s.specialties}
@@ -536,6 +551,8 @@ const Settings: React.FC = () => {
                 setDoctorForm={s.setDoctorForm}
                 isEditing={s.isEditingDoctor}
                 specialties={s.specialties}
+                globalappPatologias={s.globalappPatologias}
+                onOpenGlobalappPatologiasModal={() => s.setShowGlobalappPatologiasModal(true)}
             />
 
             <VendorModal 
@@ -652,6 +669,29 @@ const Settings: React.FC = () => {
                     s.setEditingSpecialtyOriginal(spec);
                 }}
                 onDelete={s.handleDeleteSpecialty}
+            />
+
+            <SpecialtiesModal 
+                show={s.showGlobalappPatologiasModal}
+                onClose={() => {
+                    s.setShowGlobalappPatologiasModal(false);
+                    s.setEditingGlobalappPatologiaOriginal(null);
+                    s.setGlobalappPatologiaForm('');
+                }}
+                title="Patologías / Servicios Globalapp"
+                itemLabel="Patología Globalapp"
+                placeholder="Ej: NEUROCIRUGIA"
+                specialtyForm={s.globalappPatologiaForm}
+                setSpecialtyForm={s.setGlobalappPatologiaForm}
+                onSave={s.handleSaveGlobalappPatologia}
+                editingOriginal={s.editingGlobalappPatologiaOriginal}
+                setEditingOriginal={s.setEditingGlobalappPatologiaOriginal}
+                specialties={s.globalappPatologias}
+                onEdit={(pat) => {
+                    s.setGlobalappPatologiaForm(pat);
+                    s.setEditingGlobalappPatologiaOriginal(pat);
+                }}
+                onDelete={s.handleDeleteGlobalappPatologia}
             />
 
         </div>

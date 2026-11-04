@@ -2,6 +2,18 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.25 [2026-11-04]**: Lanzada la versión **v3.13.25**.
+    *   **Refactorización de Asignación en Turno Tarde y Circulantes en Panel de Técnicos (`pages/TecnicoPanel.tsx`)**:
+        *   **Presencia Real por Horario Efectivo (`isTecnicoPresentForSurgery`)**: Verificación precisa del intervalo de permanencia del técnico en el reloj de asistencia (`check_in` a `check_out`) cotejado contra la hora real de inicio de la cirugía (`actual_start_time`). Se eliminó la asignación indebida de cirugías vespertinas a técnicos del turno mañana que ya se retiraron.
+        *   **Exclusividad de la Ficha Técnica**: Si una cirugía vespertina ya tiene una instrumentadora asignada nominalmente en `surgery_forms` y es del equipo de guardia (ej. Patricia Riegert), queda blindada y reservada a ella sin imputarse a otros técnicos de guardia.
+        *   **Asignación de Circulante / Colaboradora**: Cuando en la ficha figura la técnica fija, si solo una técnica de guardia estuvo presente durante la intervención, se le asigna a ella automáticamente por defecto. Si ambas estuvieron presentes, se asigna por defecto a la de guardia oficial del cronograma semanal y se habilita el botón `+ Colaboradora` para conmutar o co-asignar a la otra técnica.
+
+*   **[2026-11-01]**:
+    *   **Normalización Ortográfica de Vademécum y Descartables (`constants/surgeryItems.ts`, `components/SurgeryForm.tsx`, Supabase)**:
+        *   Ampliación de `SURGERY_ITEMS` de 96 a 174 ítems estándar con ortografía médica corregida, tildes y concentraciones estandarizadas.
+        *   Depuración y unificación de 19 ítems duplicados redundantes en `quirofano.catalog_items` (plurales/singulares, espacios dobles, variantes de ampolla/comprimido), re-vinculando todos los consumos históricos en `surgery_form_items` y movimientos de stock. Catálogo consolidado en 303 ítems únicos.
+        *   Modal de advertencia interactivo en `SurgeryForm.tsx`: confirmación explícita previa requerida si se intenta ingresar un ítem fuera del listado habitual para evitar la reintroducción de errores de tipeo.
+
 *   **v3.13.23 [2026-10-31]**: Lanzada la versión **v3.13.23**.
     *   **Filtro de Cirugías Pasadas y Buscador en Derivaciones (`pages/DoctorPanel.tsx`)**:
         *   Las cirugías derivadas ya operadas (fecha previa a hoy, completadas o canceladas) quedan ocultas por defecto para no saturar la vista operativa.
