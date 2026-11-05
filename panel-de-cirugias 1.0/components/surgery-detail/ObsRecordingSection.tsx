@@ -30,6 +30,8 @@ export const ObsRecordingSection: React.FC<ObsRecordingSectionProps> = ({
     const confirmTimeoutRef = useRef<any>(null);
     const channelRef = useRef<any>(null);
     const reconnectTimeoutRef = useRef<any>(null);
+    const isResubscribingRef = useRef<boolean>(false);
+    const unmountedRef = useRef<boolean>(false);
 
     const isElectron = !!(window as any).electronAPI;
 
@@ -113,20 +115,35 @@ export const ObsRecordingSection: React.FC<ObsRecordingSectionProps> = ({
         };
     }, [isElectron]);
 
-    // MODO 2: En Web / Tablet -> Suscripción al canal de Supabase Realtime con auto-reconexión y visibilitychange
-    const subscribeWebChannel = useCallback(() => {
-        if (isElectron || !operatingRoomId || !hasAccess) return;
+    // MODO 2: En Web / Tablet -> Suscripción al canal de Supabase Realtime con eliminación previa garantizada
+    const subscribeWebChannel = useCallback(async () => {
+        if (unmountedRef.current || isElectron || !operatingRoomId || !hasAccess) return;
+
+        if (isResubscribingRef.current) {
+            console.log(`[OBS Realtime UI] Suscripción en curso, ignorando llamada solapada.`);
+            return;
+        }
+        isResubscribingRef.current = true;
 
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
             reconnectTimeoutRef.current = null;
         }
 
+        // Si ya hay un canal previo, esperar explícitamente su remoción antes de suscribir el nuevo
         if (channelRef.current) {
-            try {
-                supabase.removeChannel(channelRef.current);
-            } catch (e) {}
+            const oldChannel = channelRef.current;
             channelRef.current = null;
+            try {
+                await supabase.removeChannel(oldChannel);
+            } catch (e) {
+                console.warn('[OBS Realtime UI] Error al remover canal anterior:', e);
+            }
+        }
+
+        if (unmountedRef.current) {
+            isResubscribingRef.current = false;
+            return;
         }
 
         console.log(`[OBS Realtime UI] Suscribiéndose al canal Supabase para quirófano: ${operatingRoomId}`);
@@ -135,6 +152,8 @@ export const ObsRecordingSection: React.FC<ObsRecordingSectionProps> = ({
 
         channel
             .on('broadcast', { event: 'status' }, (payload: any) => {
+                if (channel !== channelRef.current || unmountedRef.current) return;
+
                 const { state: rxState, msg, secs } = payload.payload || {};
                 if (rxState) setRecordState(rxState);
                 if (typeof secs === 'number') setDuration(secs);
@@ -153,17 +172,29 @@ export const ObsRecordingSection: React.FC<ObsRecordingSectionProps> = ({
                 }
             })
             .on('broadcast', { event: 'heartbeat' }, () => {
+                if (channel !== channelRef.current || unmountedRef.current) return;
                 setPcOnline(true);
                 setLastHeartbeat(Date.now());
             })
             .subscribe((subStatus, err) => {
+                // Ignorar callbacks disparados por canales anteriores removidos (ej. CLOSED)
+                if (channel !== channelRef.current || unmountedRef.current) {
+                    return;
+                }
+
                 console.log(`[OBS Realtime UI] Canal quirófano ${operatingRoomId}: ${subStatus}`, err || '');
-                if (subStatus === 'CHANNEL_ERROR' || subStatus === 'TIMED_OUT' || subStatus === 'CLOSED') {
-                    if (!reconnectTimeoutRef.current) {
+
+                if (subStatus === 'SUBSCRIBED') {
+                    isResubscribingRef.current = false;
+                } else if (subStatus === 'CHANNEL_ERROR' || subStatus === 'TIMED_OUT' || subStatus === 'CLOSED') {
+                    isResubscribingRef.current = false;
+                    if (!reconnectTimeoutRef.current && !unmountedRef.current) {
                         reconnectTimeoutRef.current = setTimeout(() => {
                             reconnectTimeoutRef.current = null;
-                            console.log(`[OBS Realtime UI] Reintentando suscripción a canal tras estado: ${subStatus}`);
-                            subscribeWebChannel();
+                            if (!unmountedRef.current) {
+                                console.log(`[OBS Realtime UI] Reintentando suscripción a canal tras estado: ${subStatus}`);
+                                subscribeWebChannel();
+                            }
                         }, 2500);
                     }
                 }
@@ -172,12 +203,13 @@ export const ObsRecordingSection: React.FC<ObsRecordingSectionProps> = ({
 
     useEffect(() => {
         if (isElectron || !operatingRoomId || !hasAccess) return;
+        unmountedRef.current = false;
 
         subscribeWebChannel();
 
         // Al volver el foco a la app / despertar tablet de suspensión, resuscribirse si el canal se cayó
         const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
+            if (document.visibilityState === 'visible' && !unmountedRef.current) {
                 const st = channelRef.current?.state;
                 if (!channelRef.current || (st !== 'joined' && st !== 'joining')) {
                     console.log(`[OBS Realtime UI] Tablet reanudada (visibilityState: visible). Resuscribiendo canal...`);
@@ -187,21 +219,31 @@ export const ObsRecordingSection: React.FC<ObsRecordingSectionProps> = ({
         };
 
         const handleOnline = () => {
-            console.log(`[OBS Realtime UI] Red restablecida (online). Resuscribiendo canal...`);
-            subscribeWebChannel();
+            if (!unmountedRef.current) {
+                console.log(`[OBS Realtime UI] Red restablecida (online). Resuscribiendo canal...`);
+                subscribeWebChannel();
+            }
         };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
         window.addEventListener('online', handleOnline);
 
         return () => {
+            unmountedRef.current = true;
+            isResubscribingRef.current = false;
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             window.removeEventListener('online', handleOnline);
-            if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+                reconnectTimeoutRef.current = null;
+            }
+
             if (channelRef.current) {
-                console.log(`[OBS Realtime UI] Desuscribiendo canal quirófano: ${operatingRoomId}`);
-                supabase.removeChannel(channelRef.current);
+                const toRemove = channelRef.current;
                 channelRef.current = null;
+                console.log(`[OBS Realtime UI] Desuscribiendo canal quirófano: ${operatingRoomId}`);
+                supabase.removeChannel(toRemove).catch(() => {});
             }
         };
     }, [isElectron, operatingRoomId, hasAccess, subscribeWebChannel]);

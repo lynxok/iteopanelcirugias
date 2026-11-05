@@ -15,6 +15,7 @@ export const ObsBackgroundController: React.FC = () => {
     const durationRef = useRef<number>(0);
     const recordStateRef = useRef<'stopped' | 'recording' | 'paused'>('stopped');
     const isConnectingRef = useRef<boolean>(false);
+    const isResubscribingRef = useRef<boolean>(false);
     const lastPingOkRef = useRef<boolean>(false);
     const channelRetryTimeoutRef = useRef<any>(null);
 
@@ -152,6 +153,14 @@ export const ObsBackgroundController: React.FC = () => {
                 } else {
                     recordStateRef.current = 'stopped';
                     stopDurationTimer(true);
+
+                    // Si OBS reporta que NO está grabando y existe obs_active_recording, descartarlo
+                    if (localStorage.getItem('obs_active_recording') || activeRecordingRef.current) {
+                        localStorage.removeItem('obs_active_recording');
+                        activeRecordingRef.current = null;
+                        addLog('Se descartaron datos de una grabación anterior que no está activa');
+                    }
+
                     addLog('Estado inicial de OBS detectado: Detenido');
                     broadcastStatus('stopped', { text: 'PC de Quirófano en línea y conectada a OBS', type: 'success' }, 0);
                 }
@@ -265,7 +274,7 @@ export const ObsBackgroundController: React.FC = () => {
                     }
                 } else {
                     if (!recordingData) {
-                        addLog('Aviso: Grabación de OBS finalizada sin datos de paciente/médico (posiblemente iniciada directo desde OBS). Archivo original: ' + (data.outputPath || 'N/A'));
+                        addLog('Aviso: Grabación de OBS finalizada sin datos de paciente/médico (iniciada directo desde OBS o sin datos de cirugía). Archivo original: ' + (data.outputPath || 'N/A'));
                     } else if (!globalFolder) {
                         addLog('Aviso: Grabación finalizada pero falta configurar la carpeta global de videos en Ajustes.');
                     }
@@ -340,6 +349,7 @@ export const ObsBackgroundController: React.FC = () => {
                         patientName: patientName || 'Paciente_No_Especificado',
                         doctorName: doctorName || 'Medico_No_Especificado'
                     };
+                    // Sobrescribir siempre al recibir START
                     activeRecordingRef.current = recData;
                     localStorage.setItem('obs_active_recording', JSON.stringify(recData));
 
@@ -410,18 +420,30 @@ export const ObsBackgroundController: React.FC = () => {
         };
         window.addEventListener('obs:command', handleLocalCommand as EventListener);
 
-        // Suscripción al canal de Supabase Realtime
-        const setupChannel = (roomId: string) => {
+        // Suscripción asíncrona al canal de Supabase Realtime con eliminación previa garantizada
+        const setupChannel = async (roomId: string) => {
+            if (!roomId) return;
+
+            if (isResubscribingRef.current) {
+                addLog('setupChannel: Resuscripción ya en curso, ignorando solicitud solapada.');
+                return;
+            }
+            isResubscribingRef.current = true;
+
             if (channelRetryTimeoutRef.current) {
                 clearTimeout(channelRetryTimeoutRef.current);
                 channelRetryTimeoutRef.current = null;
             }
 
+            // Si hay un canal anterior, esperar explícitamente a que realtime-js lo remueva de socket.channels
             if (channelRef.current) {
-                try {
-                    supabase.removeChannel(channelRef.current);
-                } catch (e) {}
+                const oldChannel = channelRef.current;
                 channelRef.current = null;
+                try {
+                    await supabase.removeChannel(oldChannel);
+                } catch (e) {
+                    console.warn('[OBS Background] Error al remover canal anterior:', e);
+                }
             }
 
             addLog('Suscribiendo canal de control remoto Supabase para sala ID: ' + roomId);
@@ -430,13 +452,25 @@ export const ObsBackgroundController: React.FC = () => {
 
             channel
                 .on('broadcast', { event: 'command' }, (payload: any) => {
+                    // Ignorar comandos provenientes de instancias viejas de canal
+                    if (channel !== channelRef.current) return;
+
                     const { action, patientName, doctorName } = payload.payload || {};
                     addLog('Comando Supabase recibido: ' + action + ' (Paciente: ' + patientName + ', Médico: ' + doctorName + ')');
                     executeCommand(action, patientName, doctorName);
                 })
                 .subscribe((status, err) => {
+                    // Ignorar callbacks disparados por canales anteriores (ej. CLOSED del canal removido)
+                    if (channel !== channelRef.current) {
+                        return;
+                    }
+
                     addLog('Estado de canal Supabase [' + roomId + ']: ' + status + (err?.message ? ' - ' + err.message : ''));
-                    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+
+                    if (status === 'SUBSCRIBED') {
+                        isResubscribingRef.current = false;
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                        isResubscribingRef.current = false;
                         if (!channelRetryTimeoutRef.current) {
                             channelRetryTimeoutRef.current = setTimeout(() => {
                                 channelRetryTimeoutRef.current = null;
@@ -445,7 +479,7 @@ export const ObsBackgroundController: React.FC = () => {
                                     addLog('Reintentando suscripción a canal Supabase tras estado ' + status);
                                     setupChannel(currentRoom);
                                 }
-                            }, 3000);
+                            }, 2500);
                         }
                     }
                 });
@@ -508,7 +542,7 @@ export const ObsBackgroundController: React.FC = () => {
         }, 3000);
 
         // Bucle de chequeo de ajustes locales y Watchdog de canal Supabase (cada 5 segundos)
-        connectInterval = setInterval(() => {
+        connectInterval = setInterval(async () => {
             const newIp = localStorage.getItem('obs_ip') || 'localhost';
             const newPort = localStorage.getItem('obs_port') || '4455';
             const newPassword = localStorage.getItem('obs_password') || '';
@@ -530,11 +564,12 @@ export const ObsBackgroundController: React.FC = () => {
                 obs.disconnect().catch(() => {});
 
                 if (roomChanged && newAssociatedOrId) {
-                    setupChannel(newAssociatedOrId);
+                    await setupChannel(newAssociatedOrId);
                 } else if (roomChanged && !newAssociatedOrId) {
                     if (channelRef.current) {
-                        supabase.removeChannel(channelRef.current);
+                        const toRemove = channelRef.current;
                         channelRef.current = null;
+                        await supabase.removeChannel(toRemove).catch(() => {});
                     }
                     addLog('PC desvinculada del quirófano. Canal Supabase cerrado.');
                 }
@@ -548,8 +583,8 @@ export const ObsBackgroundController: React.FC = () => {
                     connectOBS();
                 }
 
-                // Watchdog del canal Supabase: si no está joined ni joining, resuscribir
-                if (associatedOrId) {
+                // Watchdog del canal Supabase: si no está joined ni joining y no está resuscribiendo, resuscribir
+                if (associatedOrId && !isResubscribingRef.current) {
                     const chState = channelRef.current?.state;
                     if (!channelRef.current || (chState !== 'joined' && chState !== 'joining')) {
                         addLog('Watchdog canal Supabase: estado no joined (' + (chState || 'nulo') + '). Resuscribiendo...');
@@ -575,7 +610,7 @@ export const ObsBackgroundController: React.FC = () => {
         }, 4000);
 
         // Manejador de recuperación tras suspensión de la PC o restauración de red
-        const handleWakeOrOnline = () => {
+        const handleWakeOrOnline = async () => {
             addLog('Evento de reanudación detectado (wake/online). Forzando reconexión inmediata de OBS y canal Supabase...');
             isConnected = false;
             lastPingOkRef.current = false;
@@ -586,7 +621,7 @@ export const ObsBackgroundController: React.FC = () => {
 
             const currentRoom = localStorage.getItem('obs_associated_or_id');
             if (currentRoom) {
-                setupChannel(currentRoom);
+                await setupChannel(currentRoom);
                 connectOBS();
             }
         };
@@ -608,9 +643,10 @@ export const ObsBackgroundController: React.FC = () => {
                 obs.disconnect().catch(() => {});
             } catch (_) {}
             if (channelRef.current) {
-                supabase.removeChannel(channelRef.current);
+                const toRemove = channelRef.current;
+                channelRef.current = null;
+                supabase.removeChannel(toRemove).catch(() => {});
             }
-            channelRef.current = null;
         };
     }, []);
 

@@ -2,6 +2,12 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.29 [2026-11-05]**: Lanzada la versión **v3.13.29**.
+    *   **Blindaje Antirace y Descarte de Metadatos Obsoletos en Puente OBS (`ObsBackgroundController.tsx`, `ObsRecordingSection.tsx`)**:
+        *   **Eliminación Asíncrona Garantizada (`await removeChannel`)**: Resuelto el bloqueo de `socket.channels` de `realtime-js` esperando la confirmación de remoción del canal viejo antes de crear el nuevo; bandera `isResubscribingRef` previene solapamiento entre watchdog, wake, online y retry.
+        *   **Aislamiento de Callbacks Huérfanos y `unmountedRef`**: Ignorados los callbacks `CLOSED` de instancias viejas de canal removido. En tablets, `unmountedRef` limpia reintentos pendientes y evita suscripciones huérfanas al abrir y cerrar fichas repetidamente.
+        *   **Descarte Estricto de Grabación Obsoleta**: En `connectOBS`, si OBS no está grabando se depura automáticamente `obs_active_recording` de `localStorage` para prevenir que grabaciones iniciadas directo desde OBS se renombren erróneamente con pacientes anteriores.
+
 *   **v3.13.28 [2026-11-05]**: Lanzada la versión **v3.13.28**.
     *   **Corrección Integral del Puente OBS (`ObsBackgroundController.tsx`, `ObsRecordingSection.tsx`, `main.cjs`, `preload.cjs`)**:
         *   **OBS como Fuente de Verdad y Sincronización Reactiva**: Sondeo periódico de `GetRecordStatus` cada 3s para sincronizar estado (`outputActive`/`outputPaused`) y duración en segundos. Corrige desfasajes del cronómetro y actualiza tablets automáticamente ante pausas o reanudaciones manuales en OBS.

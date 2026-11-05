@@ -18,6 +18,11 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-11-05]`: **Blindaje Antirace y Descarte de Metadatos Obsoletos en Puente OBS (`ObsBackgroundController.tsx`, `ObsRecordingSection.tsx`) (v3.13.29)**:
+    *   **Eliminación Asíncrona Garantizada**: `await supabase.removeChannel(old)` antes de crear el canal nuevo y flag `isResubscribingRef` para evitar devolver el canal en cierre y eliminar la ventana muerta de 3-5s.
+    *   **Aislamiento de Callbacks y unmountedRef**: Callbacks de canales viejos ignorados; `unmountedRef` en tablets cancela reintentos pendientes y previene suscripciones huérfanas al cerrar fichas.
+    *   **Descarte de Grabación Obsoleta**: Limpieza automática de `obs_active_recording` en `connectOBS` si OBS no está grabando.
+
 *   `[2026-11-05]`: **Corrección Integral del Puente OBS (`ObsBackgroundController.tsx`, `ObsRecordingSection.tsx`, `main.cjs`, `preload.cjs`) (v3.13.28)**:
     *   **OBS como Fuente de Verdad**: Sincronización continua cada 3s de estado y duración con `GetRecordStatus` de OBS, previniendo cronómetros mentirosos y resincronizando tablets de inmediato.
     *   **Bus Local en Electron**: Eliminada la suscripción duplicada de Supabase Realtime en `ObsRecordingSection.tsx` bajo Electron; comunicación 100% por eventos locales en `window` (`obs:command`, `obs:status`, `obs:heartbeat`).
