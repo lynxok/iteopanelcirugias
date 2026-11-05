@@ -18,6 +18,14 @@ El wiki está dividido en las siguientes secciones lógicas:
 
 ## Log de Cambios del Wiki (log.md)
 
+*   `[2026-11-05]`: **Corrección Integral del Puente OBS (`ObsBackgroundController.tsx`, `ObsRecordingSection.tsx`, `main.cjs`, `preload.cjs`) (v3.13.28)**:
+    *   **OBS como Fuente de Verdad**: Sincronización continua cada 3s de estado y duración con `GetRecordStatus` de OBS, previniendo cronómetros mentirosos y resincronizando tablets de inmediato.
+    *   **Bus Local en Electron**: Eliminada la suscripción duplicada de Supabase Realtime en `ObsRecordingSection.tsx` bajo Electron; comunicación 100% por eventos locales en `window` (`obs:command`, `obs:status`, `obs:heartbeat`).
+    *   **Watchdog y Wake Recovery**: Watchdog cada 5s sobre canales caídos, reintento ante errores de suscripción y reconexión inmediata tras suspensión con `powerMonitor` de Electron y evento `online`.
+    *   **Búsqueda Inteligente de Fuentes**: Detección de fuentes de overlay por nombre exacto o aproximado normalizado ("paciente", "medico", "cirujano").
+    *   **Persistencia de Grabación Activa**: Almacenamiento en `obs_active_recording` para permitir renombrado de video incluso tras reinicio de la aplicación.
+    *   **Heartbeat Condicional y UI Resiliente**: Latido emitido solo con ping de OBS exitoso (<3s). En tablets, si no hay latido por >10s, el estado pasa a "Desconocido / Sin conexión" y el cronómetro se frena.
+
 *   `[2026-11-04]`: **Desacople de Botón PAC en Arco en C y Persistencia Resiliente (`SurgeryForm.tsx`, `globalapp_scraper.py`, `globalappSync.ts`, `GlobalappBackgroundController.tsx`) (v3.13.27)**:
     *   **Pulsación Exclusiva de PAC**: El botón PAC en GlobalApp solo se presiona cuando el instrumentador marca el checkbox "¿Se utilizó Arco en C?" en tiempo real (para enviar el worklist al equipo).
     *   **Guardado de Ficha Técnica (Sin PAC)**: Al presionar "Guardar" en la ficha técnica, se comprueba si la práctica `340907` existe (cargándola si no estuviera), pero se omite estrictamente la pulsación de PAC (`triggerPac: false`).

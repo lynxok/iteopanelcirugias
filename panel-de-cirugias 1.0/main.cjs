@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, session, Menu, Tray, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, Menu, Tray, shell, powerMonitor } = require('electron');
 const path = require('path');
 const { spawn, exec } = require('child_process');
 const fs = require('fs');
@@ -194,6 +194,21 @@ app.whenReady().then(() => {
 
     createWindow();
     createTray();
+
+    // Detección de suspensión / reanudación del sistema para reconexión de sockets
+    powerMonitor.on('resume', () => {
+        console.log('[Electron] Sistema reanudado de suspensión (powerMonitor resume)');
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('power-resume');
+        }
+    });
+
+    powerMonitor.on('unlock-screen', () => {
+        console.log('[Electron] Pantalla desbloqueada (powerMonitor unlock-screen)');
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('power-resume');
+        }
+    });
     
     // Solo buscamos actualizaciones si la app está empaquetada
     if (app.isPackaged) {

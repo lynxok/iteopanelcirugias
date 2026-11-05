@@ -2,6 +2,15 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.28 [2026-11-05]**: Lanzada la versión **v3.13.28**.
+    *   **Corrección Integral del Puente OBS (`ObsBackgroundController.tsx`, `ObsRecordingSection.tsx`, `main.cjs`, `preload.cjs`)**:
+        *   **OBS como Fuente de Verdad y Sincronización Reactiva**: Sondeo periódico de `GetRecordStatus` cada 3s para sincronizar estado (`outputActive`/`outputPaused`) y duración en segundos. Corrige desfasajes del cronómetro y actualiza tablets automáticamente ante pausas o reanudaciones manuales en OBS.
+        *   **Bus Local en Electron**: Desacoplamiento de Supabase Realtime en la aplicación de escritorio (`ObsRecordingSection.tsx` se comunica vía `CustomEvent` `'obs:command'`, `'obs:status'` y `'obs:heartbeat'`). Previene que abrir o cerrar fichas en la PC desuscriba el canal del controlador de fondo.
+        *   **Watchdog de Canal y Recuperación de Suspensión**: Reintento automático ante caídas de WebSocket o estados `CLOSED`/`CHANNEL_ERROR`/`TIMED_OUT`. Escucha de `powerMonitor` (`power-resume` y `unlock-screen`) y `window.online` para reconexión instantánea tras hibernación de notebook.
+        *   **Búsqueda Inteligente de Fuentes de Texto en OBS**: Detección dinámica con `GetInputList` buscando nombres exactos (`Fuente_Paciente` / `Fuente_Medico`) o normalizados (sin acentos, minúsculas conteniendo "paciente", "medico" o "cirujano").
+        *   **Persistencia de Grabación Activa**: Almacenamiento de metadatos en `obs_active_recording` (`localStorage`) para garantizar el renombrado seguro del video incluso tras reinicios accidentales de la app.
+        *   **Aislamiento de Heartbeat y Desconexión Visual**: El latido solo se envía si OBS responde a pings en tiempo real (<3s). En tablets, si se pierde el latido (>10s), el estado se muestra como "Desconocido / Sin conexión" y se congela el cronómetro.
+
 *   **v3.13.27 [2026-11-04]**: Lanzada la versión **v3.13.27**.
     *   **Refactorización y Desacople de Botón PAC en Arco en C (`SurgeryForm.tsx`, `globalapp_scraper.py`, `globalappSync.ts`, `GlobalappBackgroundController.tsx`)**:
         *   **Regla Estricta de PAC**: El botón de PAC se ejecuta **única y exclusivamente** cuando el usuario marca el checkbox en tiempo real durante la intervención (para disparar el worklist al equipo de rayos).

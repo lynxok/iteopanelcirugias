@@ -42,5 +42,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     writeFileBase64: (filePath, base64Data) => ipcRenderer.invoke('write-file-base64', filePath, base64Data),
     mergePrequirurgicosPdfs: (destPath, filePaths) => ipcRenderer.invoke('merge-prequirurgicos-pdfs', destPath, filePaths),
     runGlobalappScraper: (payload) => ipcRenderer.invoke('run-globalapp-scraper', payload),
-    onGlobalappLog: (callback) => ipcRenderer.on('globalapp-log', (_event, message) => callback(message))
+    onGlobalappLog: (callback) => ipcRenderer.on('globalapp-log', (_event, message) => callback(message)),
+    onPowerResume: (callback) => ipcRenderer.on('power-resume', () => callback())
 });
