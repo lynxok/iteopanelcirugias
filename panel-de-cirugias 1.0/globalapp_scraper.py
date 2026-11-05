@@ -600,6 +600,28 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         add_btn.first.click()
         page.wait_for_timeout(1800)
 
+        # Fecha y Hora de la práctica
+        surgery_date = payload.get("surgeryDate")
+        if surgery_date:
+            try:
+                set_date_input_ddmmyyyy(page, page.get_by_role("textbox").nth(0), surgery_date)
+            except Exception as e:
+                log(f"[Arco en C] Aviso fecha de prestación: {e}")
+
+        start_time = payload.get("startTime", "")
+        if start_time:
+            st_clean = start_time[:5]
+            try:
+                time_input = page.get_by_role("textbox").nth(1)
+                time_input.click()
+                time_input.fill("")
+                time_input.fill(st_clean)
+                time_input.press("Tab")
+                page.wait_for_timeout(300)
+                log(f"[Arco en C] Hora de prestación fijada en: {st_clean}")
+            except Exception as e:
+                log(f"[Arco en C] Aviso seteando hora de prestación: {e}")
+
         # Campo Código Práctica: 340907
         practice_input = page.get_by_role("textbox").nth(2)
         practice_input.click()

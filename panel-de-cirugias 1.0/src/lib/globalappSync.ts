@@ -40,7 +40,8 @@ function addMinutesToHHmm(timeStr: string, minutesToAdd: number): string {
 export async function buildGlobalappPayload(
     surgeryId: string,
     action: 'start' | 'finish' | 'sync' | 'arco_en_c_only' | 'arco_en_c_revert',
-    showBrowser: boolean = false
+    showBrowser: boolean = false,
+    overrides?: Partial<GlobalappSyncPayload>
 ): Promise<GlobalappSyncPayload | null> {
     try {
         // 1. Fetch complete surgery with patient, doctor, anesthesiologist, operating_room
@@ -89,10 +90,10 @@ export async function buildGlobalappPayload(
         const patientName = sx.patient?.full_name || sx.patient?.name || sx.patient_name || '';
         const surgeryDate = (sx.surgery_date || new Date().toISOString().split('T')[0]).substring(0, 10);
 
-        const rawStartTime = (form?.cirugia_inicio || sx.actual_start_time || sx.start_time || sx.planned_start_time || '08:00').substring(0, 5);
+        const rawStartTime = (overrides?.startTime || form?.cirugia_inicio || sx.actual_start_time || sx.start_time || sx.planned_start_time || '08:00').substring(0, 5);
         const estimatedDuration = Number(sx.estimated_duration || 60);
         const estimatedEndTime = addMinutesToHHmm(rawStartTime, estimatedDuration);
-        const rawEndTime = (form?.cirugia_fin || sx.actual_end_time || estimatedEndTime).substring(0, 5);
+        const rawEndTime = (overrides?.endTime || form?.cirugia_fin || sx.actual_end_time || estimatedEndTime).substring(0, 5);
 
         const isAmbulatory = Boolean(
             sx.is_ambulatory === true ||
@@ -142,7 +143,8 @@ export async function buildGlobalappPayload(
             anatomiaPatologica: form?.anatomia_patologica || '',
             arcoEnC: Boolean(form?.arco_en_c),
             arcoEnCSynced: Boolean(form?.arco_en_c_synced),
-            showBrowser
+            showBrowser,
+            ...overrides
         };
     } catch (err) {
         console.error('[GlobalappSync] Error armando payload:', err);
@@ -153,9 +155,10 @@ export async function buildGlobalappPayload(
 export async function triggerGlobalappSync(
     surgeryId: string,
     action: 'start' | 'finish' | 'sync' | 'arco_en_c_only' | 'arco_en_c_revert',
-    showBrowser: boolean = false
+    showBrowser: boolean = false,
+    overrides?: Partial<GlobalappSyncPayload>
 ): Promise<{ success: boolean; delegated?: boolean; mode?: string; parteId?: number; error?: string }> {
-    const payload = await buildGlobalappPayload(surgeryId, action, showBrowser);
+    const payload = await buildGlobalappPayload(surgeryId, action, showBrowser, overrides);
     if (!payload) {
         return { success: false, error: 'No se pudo construir el paquete de datos de la cirugía.' };
     }

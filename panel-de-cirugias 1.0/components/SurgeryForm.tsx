@@ -220,15 +220,23 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
 
             try {
                 // Persistir estado en la base de datos de inmediato con upsert
+                const formUpsert: any = {
+                    surgery_id: surgery.id,
+                    arco_en_c: true,
+                    updated_at: new Date().toISOString()
+                };
+                if (hcc) formUpsert.cirugia_inicio = hcc;
+                if (hfc) formUpsert.cirugia_fin = hfc;
+
                 await supabase
                     .from('surgery_forms')
-                    .upsert({
-                        surgery_id: surgery.id,
-                        arco_en_c: true,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'surgery_id' });
+                    .upsert(formUpsert, { onConflict: 'surgery_id' });
 
-                const res = await triggerGlobalappSync(surgery.id, 'arco_en_c_only');
+                const overrides: any = {};
+                if (hcc) overrides.startTime = hcc;
+                if (hfc) overrides.endTime = hfc;
+
+                const res = await triggerGlobalappSync(surgery.id, 'arco_en_c_only', false, overrides);
                 if (res?.success) {
                     setArcoEnCSynced(true);
                     setArcoEnCStatusMsg('Cargado en GlobalApp (PAC)');
@@ -240,6 +248,7 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                             arco_en_c_synced: true,
                             updated_at: new Date().toISOString()
                         }, { onConflict: 'surgery_id' });
+                    setTimeout(() => setArcoEnCStatusMsg(null), 4000);
                 } else {
                     setArcoEnCStatusMsg(res?.error || 'Aviso en GlobalApp');
                 }
@@ -883,7 +892,7 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
             setShowSuccess(true);
 
             // Trigger Globalapp Sync to review & update all fields in Globalapp (non-blocking)
-            triggerGlobalappSync(surgery.id, 'sync')
+            triggerGlobalappSync(surgery.id, 'sync', false, { startTime: tHcc, endTime: tHfcEffective })
                 .then(res => {
                     if (res && !res.success && res.error) {
                         alert(`⚠️ Aviso Globalapp:\n${res.error}\n\n(La Ficha Quirúrgica se guardó normalmente en el Panel de Cirugías).`);
@@ -1183,7 +1192,7 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                                         if (isDirty && !isReadOnly) {
                                             await handleSave(false);
                                         }
-                                        const res = await triggerGlobalappSync(surgery.id, 'sync', showBrowser);
+                                        const res = await triggerGlobalappSync(surgery.id, 'sync', showBrowser, { startTime: hcc, endTime: hfc });
                                         if (res?.success) {
                                             setGlobalappStatusMsg(res.delegated ? 'Enviado a PC Quirófano' : 'Globalapp Sincronizado');
                                         } else {
