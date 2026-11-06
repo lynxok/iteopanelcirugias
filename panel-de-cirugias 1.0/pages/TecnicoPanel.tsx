@@ -1327,8 +1327,19 @@ export default function TecnicoPanel() {
             }
 
             const estimatedShare = myShare;
-            // Si la cirugía fue agregada manualmente y aún no fue aprobada/validada, no computa en la liquidación oficial
-            const actualShare = (isManual && manualStatus !== 'approved') ? 0 : myShare;
+
+            // REGLA (06/11/2026): Fichada obligatoria para computar cirugías en días hábiles
+            // De lunes a viernes que no sean feriados, una cirugía solo se liquida si estaba fichado al momento de la cirugía.
+            // Sábados, domingos y feriados NO requieren fichada.
+            const isHolidayDay = isHoliday(surgDate, holidaysSet);
+            const requiresAttendance = isWeekDay && !isHolidayDay;
+            const presente = s.actual_start_time 
+                ? isTecnicoPresentForSurgery(selectedTecnicoId, s.date, s.actual_start_time, false, dayOfWeek)
+                : hasCheckedInOnDate(selectedTecnicoId, s.date);
+            const isMissingAttendance = requiresAttendance && !presente;
+
+            // Si la cirugía fue agregada manualmente y no está aprobada, O si falta fichada requerida -> $0
+            const actualShare = ((isManual && manualStatus !== 'approved') || isMissingAttendance) ? 0 : myShare;
 
             return {
                 id: s.id,
@@ -1364,7 +1375,8 @@ export default function TecnicoPanel() {
                 rateUpdatedByName: firstPractice?.rateUpdatedByName,
                 isManual,
                 manualRecord: myManual || null,
-                manualStatus
+                manualStatus,
+                isMissingAttendance
             };
         }).sort((a, b) => {
             const dateCompare = a.date.localeCompare(b.date);
@@ -1373,7 +1385,7 @@ export default function TecnicoPanel() {
             const timeB = b.startTime || '';
             return timeA.localeCompare(timeB);
         });
-    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate, overtimeTolerance, selectedPracticesMap, isTecnicoOnLeave, isTecnicoPresentForSurgery]);
+    }, [filteredSurgeries, rates, hourRate, selectedTecnicoId, tecnicos, allManualSurgeries, getOnDutyTecnicoForDate, overtimeTolerance, selectedPracticesMap, isTecnicoOnLeave, isTecnicoPresentForSurgery, hasCheckedInOnDate, holidaysSet]);
 
     const totalSurgeriesAmount = useMemo(() => {
         return surgeriesReport.reduce((acc, curr) => acc + curr.share, 0);
@@ -3551,11 +3563,22 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                      </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-right">
-                                                    {s.isManual && s.manualStatus === 'pending' ? (
+                                                    {s.isMissingAttendance ? (
+                                                        <div 
+                                                            className="flex flex-col items-end cursor-help"
+                                                            title="Día hábil sin fichada del técnico al momento de la cirugía. Cargue la fichada manual si corresponde."
+                                                        >
+                                                            <span className="text-sm font-black text-rose-600">$0</span>
+                                                            <span className="text-[10px] font-extrabold text-rose-600/90 leading-tight flex items-center gap-0.5">
+                                                                <span className="material-symbols-outlined text-[11px] text-rose-600">timer_off</span>
+                                                                Sin fichada (Est. ${formatCurrency(s.estimatedShare)})
+                                                            </span>
+                                                        </div>
+                                                    ) : s.isManual && s.manualStatus === 'pending' ? (
                                                         <div className="flex flex-col items-end">
                                                             <span className="text-sm font-black text-amber-700">$0</span>
                                                             <span className="text-[10px] font-semibold text-amber-600/90 leading-tight">
-                                                                (Est. ${s.estimatedShare.toLocaleString()} al validar)
+                                                                (Est. ${formatCurrency(s.estimatedShare)} al validar)
                                                             </span>
                                                         </div>
                                                     ) : s.isManual && s.manualStatus === 'rejected' ? (
@@ -3565,7 +3588,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                         </div>
                                                     ) : (
                                                         <span className="font-black bg-indigo-50/50 text-indigo-700 px-3 py-1.5 rounded-lg text-sm">
-                                                            ${s.share.toLocaleString()}
+                                                            ${formatCurrency(s.share)}
                                                         </span>
                                                     )}
                                                 </td>

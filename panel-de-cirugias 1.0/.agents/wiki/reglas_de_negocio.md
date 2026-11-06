@@ -271,6 +271,17 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     - **Fichadas y Conformidades (`CREATE` / `STATUS_CHANGE`)**: Registra la IP, tipo de fichada o monto liquidado al momento de otorgar la conformidad mensual.
     - **Asistencia Manual (`CREATE` / `DELETE`)**: Registra técnico beneficiario, modo de carga, fecha, horarios, motivo y el usuario SuperAdmin que la cargó o eliminó.
 
+### Fichada Obligatoria para Computar Cirugías (06/11/2026 - v3.13.31)
+*   **Regla de Presencia Efectiva en Quirófano**:
+    - De **lunes a viernes que no sean feriados** (`isWeekDay && !isHolidayDay`), una cirugía solo se liquida al técnico (`actualShare > 0`) si éste se encontraba fichado en el sistema al momento de la intervención (`isTecnicoPresentForSurgery` en el rango horario de la cirugía o `hasCheckedInOnDate` si la cirugía carece de horario registrado).
+    - **Excepción Fines de Semana y Feriados**: Los días sábados, domingos y feriados nacionales/sanidad (`holidaysSet`, provenientes de `ARGENTINA_HOLIDAYS` y `calendar_holidays`) **NO requieren fichada previa**, computándose las cirugías normalmente según el régimen de guardias.
+    - **Alcance Universal en Días Hábiles**: La exigencia rige de forma estricta aunque el técnico figure expresamente como instrumentador/a en la Ficha Técnica (`surgery_forms`), se encuentre co-asignado o sea el instrumentador de guardia (incluyendo intervenciones nocturnas pasadas las 19:00 hs o antes de las 06:00 hs en días hábiles).
+*   **Comportamiento en Liquidación y UI**:
+    - Si falta la fichada en día hábil (`isMissingAttendance = true`), la cirugía permanece visible en la grilla para control y auditoría pero **no suma al total a liquidar** (`share = $0`).
+    - En la columna de monto liquidado se exhibe: **"$0"** y debajo en tipografía roja destacada **"Sin fichada (Est. $X)"** con el monto estimado que percibiría al fichar.
+    - Tooltip aclaratorio: *"Día hábil sin fichada del técnico al momento de la cirugía. Cargue la fichada manual si corresponde."*
+    - Si el SuperAdmin o la Coordinación cargan la fichada manual correspondiente al turno, el sistema recalcula en tiempo real reconociendo los honorarios.
+
 ### Módulo de Stock, Farmacia Quirúrgica y Descuento en Cirugías (16/09/2026)
 *   **Sección Stock / Farmacia (`/stock`)**:
     - Administrada por los roles `Tecnico`, `Quirofano` y `SuperAdmin`.

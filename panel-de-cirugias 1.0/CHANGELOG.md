@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v3.13.31 (2026-11-06)
+- **Fichada Obligatoria para Cómputo de Cirugías en Días Hábiles (`TecnicoPanel.tsx`)**:
+    * **Exigencia de Asistencia Efectiva**: De lunes a viernes no feriados, las cirugías asignadas a un técnico solo suman a la liquidación si el profesional se encontraba fichado en el horario de inicio de la intervención (`isTecnicoPresentForSurgery`) o con ingreso registrado en la fecha.
+    * **Excepción Fines de Semana y Feriados**: Sábados, domingos y feriados nacionales/sanidad (`holidaysSet`) están exentos del requisito de fichada para liquidar cirugías de guardia.
+    * **Visualización en Grilla**: Si falta la marca de asistencia, la cirugía figura con **"$0"** y la advertencia roja **"Sin fichada (Est. $X)"** con tooltip explicativo. El total acumulado no la contempla hasta que el SuperAdmin registre la asistencia manual justificada.
+    * **Depuración de Grilla Mensual y Comparador Paralelo**: Consolidación a una única grilla de control de presencia y activación garantizada del cuadro comparativo en columnas paralelas ante diferencias de liquidación con la conformidad previa.
+
 ## v3.13.16 (2026-10-15)
 - **Filtro Desplegable por Médico en Listado General (`SurgeryList.tsx`)**:
     * **Selector de Cirujano**: Nuevo filtro desplegable `Médico` en la barra de filtros del Listado General (`/surgeries`) que agrupa a todos los profesionales intervinientes de forma ordenada alfabéticamente.
