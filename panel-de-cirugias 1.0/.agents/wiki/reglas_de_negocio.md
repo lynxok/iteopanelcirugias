@@ -342,5 +342,9 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
       - **Guardias**: Discrimina días hábiles equivalentes, fines de semana, feriados y variación de días respecto a la firma anterior.
       - **Asistencia**: Muestra total de horas computadas, tarifa horaria, días registrados y control de ciclos abiertos / omisiones de salida.
     - **Persistencia de Snapshot Detallado**: Al firmar la conformidad, el sistema almacena en `audit_logs` (`meta.surgeries_detail`, `meta.attendance_detail`, `meta.guards_detail`) el inventario completo de intervenciones y horas para comparativas quirúrgicas 100% exactas en períodos sucesivos.
+*   **Ventana de Firma a partir del 1° Día Hábil del Mes Siguiente**:
+    - La conformidad mensual (firma digital del técnico) para cualquier período liquidado solo puede emitirse a partir del **primer día hábil del mes inmediatamente siguiente** en adelante (lunes a viernes que no sea feriado).
+    - Evita firmas prematuras del mes en curso o meses futuros mientras las cirugías y fichadas continúan en desarrollo.
+    - Si el período está en curso o no alcanzó la fecha de apertura, el botón de firma se oculta y se exhibe el indicador *"Firma no habilitada - Período en curso"* junto con la fecha exacta de desbloqueo.
 
 

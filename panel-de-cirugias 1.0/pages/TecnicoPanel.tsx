@@ -1594,6 +1594,45 @@ export default function TecnicoPanel() {
         };
     }, [currentConsent, grandTotalAmount]);
 
+    // Helper & Validación: Habilitar firma solo a partir del primer día hábil del mes siguiente
+    const signingWindowInfo = useMemo(() => {
+        // Mes siguiente al seleccionado
+        const nextMonthYear = selectedMonth === 11 ? selectedYear + 1 : selectedYear;
+        const nextMonth = (selectedMonth + 1) % 12;
+
+        // Buscar el primer día hábil del mes siguiente (lunes a viernes que no sea feriado)
+        let firstBusinessDate: Date | null = null;
+        for (let d = 1; d <= 31; d++) {
+            const dateObj = new Date(nextMonthYear, nextMonth, d);
+            if (dateObj.getMonth() !== nextMonth) break;
+            const dayOfWeek = dateObj.getDay();
+            const isWeekDay = dayOfWeek >= 1 && dayOfWeek <= 5;
+            const isHolidayDay = isHoliday(dateObj, holidaysSet);
+            if (isWeekDay && !isHolidayDay) {
+                firstBusinessDate = dateObj;
+                break;
+            }
+        }
+
+        const now = new Date();
+        const todayStr = getLocalStr(now);
+        const firstBusinessDateStr = firstBusinessDate ? getLocalStr(firstBusinessDate) : '';
+
+        // Habilitado si la fecha de hoy es >= al primer día hábil del mes siguiente
+        const isOpen = firstBusinessDateStr ? (todayStr >= firstBusinessDateStr) : false;
+
+        const formattedOpeningDate = firstBusinessDate 
+            ? firstBusinessDate.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+            : '';
+
+        return {
+            isOpen,
+            firstBusinessDate,
+            firstBusinessDateStr,
+            formattedOpeningDate
+        };
+    }, [selectedYear, selectedMonth, holidaysSet]);
+
     // Desglose analítico de diferencias para la tabla comparativa (drill-down por concepto)
     const comparisonBreakdown = useMemo(() => {
         if (!consentStatusInfo.isOutdated && !signedSnapshot) {
@@ -2276,6 +2315,12 @@ export default function TecnicoPanel() {
         
         if (consentStatusInfo.status === 'valid') {
             alert('Ya has brindado conformidad para este período y la liquidación no ha sufrido modificaciones.');
+            return;
+        }
+
+        // Validación de ventana de firma: solo a partir del 1er día hábil del mes siguiente
+        if (!signingWindowInfo.isOpen) {
+            alert(`La conformidad para el período ${periodStr} solo puede emitirse a partir del primer día hábil del mes siguiente (${signingWindowInfo.formattedOpeningDate}).`);
             return;
         }
 
@@ -4806,6 +4851,16 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                     </span>
                                     <p className="text-[11px] font-semibold text-emerald-900 mt-0.5 text-center">
                                         Firmado el {new Date(consentStatusInfo.signedAt!).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })} a las {new Date(consentStatusInfo.signedAt!).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} hs
+                                    </p>
+                                </div>
+                            ) : !signingWindowInfo.isOpen ? (
+                                <div className="bg-slate-100 text-slate-700 border border-slate-300 rounded-2xl px-4 py-2.5 flex flex-col justify-center items-center gap-0.5 w-full sm:w-auto min-w-[220px] shadow-2xs text-center" title={`La conformidad se habilitará a partir del primer día hábil del mes siguiente (${signingWindowInfo.formattedOpeningDate})`}>
+                                    <span className="px-2.5 py-0.5 bg-slate-600 text-white text-[10px] font-black uppercase tracking-wider rounded-md flex items-center gap-1">
+                                        <span className="material-symbols-outlined text-xs">lock_clock</span>
+                                        Firma no habilitada
+                                    </span>
+                                    <p className="text-[10px] font-semibold text-slate-600 mt-0.5 leading-tight">
+                                        Período en curso. Habilita el {signingWindowInfo.formattedOpeningDate}
                                     </p>
                                 </div>
                             ) : consentStatusInfo.isOutdated ? (

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v3.13.33 (2026-11-06)
+- **Restricción de Ventana de Firma Digital de Técnicos (`TecnicoPanel.tsx`)**:
+    * **Apertura a partir del 1° Día Hábil del Mes Siguiente**: La emisión de conformidad (firma) para un período liquidado solo se habilita a partir del primer día hábil del mes inmediatamente posterior (excluyendo fines de semana y feriados).
+    * **Protección contra Firmas Prematuras**: Se impide firmar el mes en curso o períodos futuros mientras no hayan concluido administrativamente.
+    * **Bloqueo Visual y en Lógica**: En lugar del botón de firma, el panel exhibe el estado *"Firma no habilitada - Período en curso"* indicando la fecha exacta en que se desbloqueará la firma (`signingWindowInfo.formattedOpeningDate`), reforzado con una guarda de validación en `handleGiveConsent`.
+
+
 ## v3.13.32 (2026-11-06)
 - **Desglose Interactivo Detallado (Drill-Down) en Comparativa de Liquidación (`TecnicoPanel.tsx`)**:
     * **Filas Clickeables e Interactivas**: Al hacer clic sobre cualquier concepto del "Resumen Comparativo de Cambios en la Liquidación" (Cirugías, Guardias o Asistencia), la tabla despliega un acordeón detallado con el desglose exacto de altas, bajas y modificaciones.
