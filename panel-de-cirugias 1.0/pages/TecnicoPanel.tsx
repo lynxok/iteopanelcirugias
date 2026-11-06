@@ -529,10 +529,11 @@ export default function TecnicoPanel() {
                     .maybeSingle(),
                 targetTecnicoId ? supabase
                     .from('audit_logs')
-                    .select('action, details, created_at')
-                    .eq('action', 'Técnicos - Conformidad Mensual')
+                    .select('action, resource, resource_id, description, meta, created_at')
+                    .eq('resource', 'Técnicos - Conformidad Mensual')
+                    .eq('resource_id', `${targetTecnicoId}-${periodStr}`)
                     .order('created_at', { ascending: false })
-                    .limit(10) : Promise.resolve({ data: [] })
+                    .limit(5) : Promise.resolve({ data: [] })
             ]);
 
             // Procesar Técnicos
@@ -644,25 +645,28 @@ export default function TecnicoPanel() {
                 setAttendanceJustifications({});
             }
 
-            // Procesar Snapshot de Consentimiento Firmado Anterior desde audit_logs
+            // Procesar Snapshot de Consentimiento Firmado Anterior desde audit_logs o consentimiento previo
             if (auditLogsConsentRes?.data && auditLogsConsentRes.data.length > 0) {
                 try {
-                    const matchLog = auditLogsConsentRes.data.find((l: any) => {
-                        const d = typeof l.details === 'string' ? JSON.parse(l.details) : l.details;
-                        return d?.user_id === targetTecnicoId && d?.period === periodStr;
-                    });
-                    if (matchLog) {
-                        const details = typeof matchLog.details === 'string' ? JSON.parse(matchLog.details) : matchLog.details;
+                    const matchLog = auditLogsConsentRes.data[0];
+                    const meta = typeof matchLog.meta === 'string' ? JSON.parse(matchLog.meta) : matchLog.meta;
+                    if (meta) {
                         setSignedSnapshot({
                             signedAt: matchLog.created_at,
-                            signedAmount: details.amount,
-                            totalSurgeriesAmount: details.surgeries_amount,
-                            surgeriesCount: details.surgeries_count,
-                            totalGuardsAmount: details.guards_amount,
-                            guardsDaysCount: details.guards_days,
-                            totalAttendanceAmount: details.attendance_amount,
-                            attendanceHours: details.attendance_hours,
-                            grandTotalAmount: details.amount
+                            signedAmount: meta.amount,
+                            totalSurgeriesAmount: meta.surgeries_amount,
+                            surgeriesCount: meta.surgeries_count,
+                            totalGuardsAmount: meta.guards_amount,
+                            guardsDaysCount: meta.guards_days,
+                            totalAttendanceAmount: meta.attendance_amount,
+                            attendanceHours: meta.attendance_hours,
+                            grandTotalAmount: meta.amount
+                        });
+                    } else if (consentRes?.data?.amount_calculated) {
+                        setSignedSnapshot({
+                            signedAt: consentRes.data.consented_at,
+                            signedAmount: consentRes.data.amount_calculated,
+                            grandTotalAmount: consentRes.data.amount_calculated
                         });
                     } else {
                         setSignedSnapshot(null);
@@ -670,6 +674,12 @@ export default function TecnicoPanel() {
                 } catch {
                     setSignedSnapshot(null);
                 }
+            } else if (consentRes?.data?.amount_calculated) {
+                setSignedSnapshot({
+                    signedAt: consentRes.data.consented_at,
+                    signedAmount: consentRes.data.amount_calculated,
+                    grandTotalAmount: consentRes.data.amount_calculated
+                });
             } else {
                 setSignedSnapshot(null);
             }
@@ -3626,290 +3636,6 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                     </div>
                 )}
 
-                {/* RESUMEN MENSUAL DE ASISTENCIA Y CUMPLIMIENTO DE JORNADA MÍNIMA */}
-                {activeTab === 'clock' && (
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
-                            <div>
-                                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-indigo-600">calendar_month</span>
-                                    <span>Control Mensual de Cumplimiento de Asistencia</span>
-                                </h3>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                    {(() => {
-                                        const tec = tecnicos.find(t => t.id === selectedTecnicoId);
-                                        return tec?.is_turno_tarde
-                                            ? 'Régimen Turno Tarde Fijo: Presencia requerida todas las semanas (Lun-Jue 15:00-19:00 / Vie 14:00-19:00).'
-                                            : 'Régimen de Guardias: Presencia requerida únicamente en los días asignados de guardia.';
-                                    })()}
-                                </p>
-                            </div>
-
-                            {/* Badges de Estado General */}
-                            <div className="flex flex-wrap items-center gap-2">
-                                <div className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl text-center">
-                                    <span className="text-[10px] font-bold text-indigo-600 uppercase block">Horas Efectivas</span>
-                                    <span className="text-sm font-black text-indigo-900 font-mono">
-                                        {attendanceHoursReport.totalHours.toFixed(1)} hs
-                                    </span>
-                                </div>
-                                <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
-                                    <span className="text-[10px] font-bold text-emerald-700 uppercase block">Días Cumplidos</span>
-                                    <span className="text-sm font-black text-emerald-900 font-mono">
-                                        {monthlyAttendanceSummary.compliantDaysCount} de {monthlyAttendanceSummary.totalExpectedDays}
-                                    </span>
-                                </div>
-                                <div className={`px-3 py-1.5 rounded-xl border text-center ${
-                                    monthlyAttendanceSummary.openDaysCount > 0
-                                        ? 'bg-amber-50 border-amber-300 text-amber-900'
-                                        : 'bg-slate-50 border-slate-200 text-slate-700'
-                                }`}>
-                                    <span className="text-[10px] font-bold uppercase block">Sin Marca Salida</span>
-                                    <span className="text-sm font-black font-mono">
-                                        {monthlyAttendanceSummary.openDaysCount} {monthlyAttendanceSummary.openDaysCount === 1 ? 'día' : 'días'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Banner Informativo / Notificación de Advertencia sobre Cierre y Justificación */}
-                        <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                            <div className="flex items-start gap-3">
-                                <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0 mt-0.5">
-                                    <span className="material-symbols-outlined text-xl">notification_important</span>
-                                </div>
-                                <div className="space-y-1">
-                                    <h4 className="text-xs font-black uppercase tracking-wider text-amber-900">
-                                        Aviso de Control de Ciclo de Asistencia
-                                    </h4>
-                                    <p className="text-xs text-amber-800 leading-relaxed">
-                                        El sistema <strong>ya no cierra automáticamente las jornadas a las 19:00 hs</strong>. Si olvidaste marcar la salida, el turno permanece abierto para que el <strong>SuperAdmin registre el horario real de egreso</strong>.
-                                    </p>
-                                    <p className="text-xs font-bold text-rose-800 flex items-center gap-1.5 pt-0.5">
-                                        <span className="material-symbols-outlined text-sm text-rose-600">report</span>
-                                        Importante: Sin informar el motivo correspondiente por cada día omitido, las horas de ese turno NO serán contempladas en la liquidación.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Lista de Días con Ciclo Incompleto (Pendientes de Justificación o Cierre Real) */}
-                        {attendanceHoursReport.openDays && attendanceHoursReport.openDays.length > 0 && (
-                            <div className="space-y-3 p-4 bg-rose-50/40 border border-rose-200 rounded-2xl">
-                                <div className="flex justify-between items-center">
-                                    <h4 className="text-xs font-black uppercase tracking-wider text-rose-900 flex items-center gap-1.5">
-                                        <span className="material-symbols-outlined text-base text-rose-600">pending_actions</span>
-                                        Días sin marca de salida registrada ({attendanceHoursReport.openDays.length})
-                                    </h4>
-                                    <span className="text-[11px] text-rose-700 font-semibold">Requiere informe del técnico</span>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {attendanceHoursReport.openDays.map(item => {
-                                        const justKey = `${selectedTecnicoId}_${item.dateStr}`;
-                                        const justification = attendanceJustifications[justKey];
-
-                                        return (
-                                            <div key={item.dateStr} className="p-3 bg-white border border-rose-200 rounded-xl shadow-2xs flex flex-col justify-between gap-3">
-                                                <div className="flex justify-between items-start gap-2">
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-black text-slate-800 text-xs">
-                                                                {new Date(`${item.dateStr}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: '2-digit' })}
-                                                            </span>
-                                                            <span className="px-2 py-0.5 bg-rose-100 text-rose-800 font-extrabold text-[9px] uppercase rounded border border-rose-200">
-                                                                Falta Salida
-                                                            </span>
-                                                        </div>
-                                                        <p className="text-[11px] text-slate-500 mt-1">
-                                                            Ingreso registrado a las <strong>{item.checkInTime} hs</strong>
-                                                        </p>
-                                                    </div>
-
-                                                    <button
-                                                        onClick={() => setJustificationInputModal({
-                                                            isOpen: true,
-                                                            dateStr: item.dateStr,
-                                                            currentReason: justification?.reason || ''
-                                                        })}
-                                                        className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold transition-all flex items-center gap-1 active:scale-95"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm text-amber-700">edit_note</span>
-                                                        {justification ? 'Editar Motivo' : 'Informar Motivo'}
-                                                    </button>
-                                                </div>
-
-                                                {/* Detalle de justificación si ya existe */}
-                                                {justification ? (
-                                                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-700 space-y-0.5">
-                                                        <p className="font-semibold text-slate-600 text-[10px] uppercase">Motivo informado:</p>
-                                                        <p className="italic font-medium">"{justification.reason}"</p>
-                                                        {justification.updated_at && (
-                                                            <p className="text-[9px] text-slate-400">
-                                                                Registrado {new Date(justification.updated_at).toLocaleDateString('es-ES')} por {justification.updated_by_name || 'Técnico'}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <div className="p-2 bg-amber-50/60 rounded-lg border border-amber-200/80 text-[11px] text-amber-800 italic">
-                                                        ⚠️ Aún no se informó justificación para este día. Las horas permanecen en 0 hs.
-                                                    </div>
-                                                )}
-
-                                                {/* Acción SuperAdmin para cerrar horario real */}
-                                                {isSuperAdmin && (
-                                                    <div className="pt-2 border-t border-slate-100 flex justify-end">
-                                                        <button
-                                                            onClick={() => openManualAttendanceModal(item.dateStr, item.checkInTime)}
-                                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition-all shadow-2xs active:scale-95"
-                                                            title="Ingresar horario real de salida para cerrar el ciclo"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">edit_calendar</span>
-                                                            Cerrar Horario Real
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Calendario / Cuadrícula Mensual de Asistencia y Cumplimiento */}
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                                    <span className="size-2 rounded-full bg-indigo-600"></span>
-                                    Grilla Diaria de Presencia y Cumplimiento Mínimo
-                                </h4>
-                                <div className="flex items-center gap-3 text-[11px] text-slate-500">
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-emerald-500"></span> Cumplido
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-amber-500"></span> Sin Salida
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-rose-500"></span> Incompleto / Ausente
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-slate-300"></span> Sin Requerimiento
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
-                                {monthlyAttendanceSummary.daysList.map(day => {
-                                    const isWeekend = day.dayOfWeek === 0 || day.dayOfWeek === 6;
-                                    const cardBg = day.hasOpenCycle
-                                        ? 'bg-amber-50/90 border-amber-300 text-amber-950'
-                                        : day.isExpected
-                                        ? day.isCompliant
-                                            ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950'
-                                            : day.hasAttended
-                                            ? 'bg-rose-50/70 border-rose-300 text-rose-950'
-                                            : 'bg-rose-50/40 border-dashed border-rose-200 text-rose-800'
-                                        : day.hasAttended
-                                        ? 'bg-blue-50/70 border-blue-200 text-blue-950'
-                                        : isWeekend
-                                        ? 'bg-slate-50/50 border-slate-200/60 text-slate-400'
-                                        : day.isHolidayDay
-                                        ? 'bg-purple-50/60 border-purple-200 text-purple-900'
-                                        : 'bg-slate-50/80 border-slate-200 text-slate-500';
-
-                                    return (
-                                        <div
-                                            key={day.dateStr}
-                                            className={`p-2.5 rounded-xl border flex flex-col justify-between min-h-[92px] transition-all hover:shadow-xs relative ${cardBg}`}
-                                        >
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <span className="text-[10px] uppercase font-bold text-slate-500 block">
-                                                        {day.dayName}
-                                                    </span>
-                                                    <span className="text-base font-black font-mono">
-                                                        {day.dayNumber}
-                                                    </span>
-                                                </div>
-
-                                                {day.hasOpenCycle ? (
-                                                    <span className="material-symbols-outlined text-amber-600 text-sm animate-pulse" title="Sin marca de salida">
-                                                        warning
-                                                    </span>
-                                                ) : day.isExpected && day.isCompliant ? (
-                                                    <span className="material-symbols-outlined text-emerald-600 text-sm" title="Jornada mínima cumplida">
-                                                        check_circle
-                                                    </span>
-                                                ) : day.isExpected && !day.isCompliant ? (
-                                                    <span className="material-symbols-outlined text-rose-500 text-sm" title="Horas insuficientes o ausente">
-                                                        error
-                                                    </span>
-                                                ) : day.hasAttended ? (
-                                                    <span className="material-symbols-outlined text-blue-500 text-sm" title="Asistencia en día opcional / adicional">
-                                                        schedule
-                                                    </span>
-                                                ) : null}
-                                            </div>
-
-                                            <div className="mt-1 space-y-0.5 text-[10px] leading-tight">
-                                                {day.isExpected && (
-                                                    <p className="font-semibold text-slate-600">
-                                                        Min: <span className="font-mono">{day.expectedStart}–{day.expectedEnd}</span> ({day.expectedHours}h)
-                                                    </p>
-                                                )}
-
-                                                {day.hasOpenCycle ? (
-                                                    <p className="font-bold text-amber-800">
-                                                        ⚠️ Salida abierta
-                                                    </p>
-                                                ) : day.hasAttended ? (
-                                                    <p className="font-black font-mono text-indigo-900">
-                                                        {day.attendedHours.toFixed(1)} hs registradas
-                                                    </p>
-                                                ) : (
-                                                    <p className="text-slate-400 italic">
-                                                        {day.isHolidayDay ? 'Feriado' : day.isExpected ? 'Sin marcas' : isWeekend ? 'Finde' : 'Libre'}
-                                                    </p>
-                                                )}
-
-                                                {day.justificationText && (
-                                                    <p className="text-[9px] text-emerald-700 truncate" title={`Justificación: ${day.justificationText}`}>
-                                                        💬 {day.justificationText}
-                                                    </p>
-                                                )}
-                                            </div>
-
-                                            {/* Acción rápida para justificar o cerrar si tiene ciclo abierto */}
-                                            {day.hasOpenCycle && (
-                                                <div className="mt-1.5 pt-1 border-t border-amber-200/80 flex items-center justify-between gap-1">
-                                                    <button
-                                                        onClick={() => setJustificationInputModal({
-                                                            isOpen: true,
-                                                            dateStr: day.dateStr,
-                                                            currentReason: day.justificationText || ''
-                                                        })}
-                                                        className="text-[9px] font-bold text-amber-800 hover:text-amber-950 underline"
-                                                    >
-                                                        {day.justificationText ? 'Ver motivo' : 'Justificar'}
-                                                    </button>
-                                                    {isSuperAdmin && (
-                                                        <button
-                                                            onClick={() => openManualAttendanceModal(day.dateStr)}
-                                                            className="text-[9px] font-black text-indigo-700 hover:text-indigo-900 underline"
-                                                        >
-                                                            Cerrar
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </div>
-                )}
 
                 {/* GUARDS TAB */}
                 {activeTab === 'guards' && (
@@ -4107,290 +3833,6 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                     </div>
                 )}
 
-                {/* RESUMEN MENSUAL DE ASISTENCIA Y CUMPLIMIENTO DE JORNADA MÍNIMA */}
-                {activeTab === 'clock' && (
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
-                            <div>
-                                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-indigo-600">calendar_month</span>
-                                    <span>Control Mensual de Cumplimiento de Asistencia</span>
-                                </h3>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                    {(() => {
-                                        const tec = tecnicos.find(t => t.id === selectedTecnicoId);
-                                        return tec?.is_turno_tarde
-                                            ? 'Régimen Turno Tarde Fijo: Presencia requerida todas las semanas (Lun-Jue 15:00-19:00 / Vie 14:00-19:00).'
-                                            : 'Régimen de Guardias: Presencia requerida únicamente en los días asignados de guardia.';
-                                    })()}
-                                </p>
-                            </div>
-
-                            {/* Badges de Estado General */}
-                            <div className="flex flex-wrap items-center gap-2">
-                                <div className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl text-center">
-                                    <span className="text-[10px] font-bold text-indigo-600 uppercase block">Horas Efectivas</span>
-                                    <span className="text-sm font-black text-indigo-900 font-mono">
-                                        {attendanceHoursReport.totalHours.toFixed(1)} hs
-                                    </span>
-                                </div>
-                                <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
-                                    <span className="text-[10px] font-bold text-emerald-700 uppercase block">Días Cumplidos</span>
-                                    <span className="text-sm font-black text-emerald-900 font-mono">
-                                        {monthlyAttendanceSummary.compliantDaysCount} de {monthlyAttendanceSummary.totalExpectedDays}
-                                    </span>
-                                </div>
-                                <div className={`px-3 py-1.5 rounded-xl border text-center ${
-                                    monthlyAttendanceSummary.openDaysCount > 0
-                                        ? 'bg-amber-50 border-amber-300 text-amber-900'
-                                        : 'bg-slate-50 border-slate-200 text-slate-700'
-                                }`}>
-                                    <span className="text-[10px] font-bold uppercase block">Sin Marca Salida</span>
-                                    <span className="text-sm font-black font-mono">
-                                        {monthlyAttendanceSummary.openDaysCount} {monthlyAttendanceSummary.openDaysCount === 1 ? 'día' : 'días'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Banner Informativo / Notificación de Advertencia sobre Cierre y Justificación */}
-                        <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                            <div className="flex items-start gap-3">
-                                <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0 mt-0.5">
-                                    <span className="material-symbols-outlined text-xl">notification_important</span>
-                                </div>
-                                <div className="space-y-1">
-                                    <h4 className="text-xs font-black uppercase tracking-wider text-amber-900">
-                                        Aviso de Control de Ciclo de Asistencia
-                                    </h4>
-                                    <p className="text-xs text-amber-800 leading-relaxed">
-                                        El sistema <strong>ya no cierra automáticamente las jornadas a las 19:00 hs</strong>. Si olvidaste marcar la salida, el turno permanece abierto para que el <strong>SuperAdmin registre el horario real de egreso</strong>.
-                                    </p>
-                                    <p className="text-xs font-bold text-rose-800 flex items-center gap-1.5 pt-0.5">
-                                        <span className="material-symbols-outlined text-sm text-rose-600">report</span>
-                                        Importante: Sin informar el motivo correspondiente por cada día omitido, las horas de ese turno NO serán contempladas en la liquidación.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Lista de Días con Ciclo Incompleto (Pendientes de Justificación o Cierre Real) */}
-                        {attendanceHoursReport.openDays && attendanceHoursReport.openDays.length > 0 && (
-                            <div className="space-y-3 p-4 bg-rose-50/40 border border-rose-200 rounded-2xl">
-                                <div className="flex justify-between items-center">
-                                    <h4 className="text-xs font-black uppercase tracking-wider text-rose-900 flex items-center gap-1.5">
-                                        <span className="material-symbols-outlined text-base text-rose-600">pending_actions</span>
-                                        Días sin marca de salida registrada ({attendanceHoursReport.openDays.length})
-                                    </h4>
-                                    <span className="text-[11px] text-rose-700 font-semibold">Requiere informe del técnico</span>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {attendanceHoursReport.openDays.map(item => {
-                                        const justKey = `${selectedTecnicoId}_${item.dateStr}`;
-                                        const justification = attendanceJustifications[justKey];
-
-                                        return (
-                                            <div key={item.dateStr} className="p-3 bg-white border border-rose-200 rounded-xl shadow-2xs flex flex-col justify-between gap-3">
-                                                <div className="flex justify-between items-start gap-2">
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-black text-slate-800 text-xs">
-                                                                {new Date(`${item.dateStr}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: '2-digit' })}
-                                                            </span>
-                                                            <span className="px-2 py-0.5 bg-rose-100 text-rose-800 font-extrabold text-[9px] uppercase rounded border border-rose-200">
-                                                                Falta Salida
-                                                            </span>
-                                                        </div>
-                                                        <p className="text-[11px] text-slate-500 mt-1">
-                                                            Ingreso registrado a las <strong>{item.checkInTime} hs</strong>
-                                                        </p>
-                                                    </div>
-
-                                                    <button
-                                                        onClick={() => setJustificationInputModal({
-                                                            isOpen: true,
-                                                            dateStr: item.dateStr,
-                                                            currentReason: justification?.reason || ''
-                                                        })}
-                                                        className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold transition-all flex items-center gap-1 active:scale-95"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm text-amber-700">edit_note</span>
-                                                        {justification ? 'Editar Motivo' : 'Informar Motivo'}
-                                                    </button>
-                                                </div>
-
-                                                {/* Detalle de justificación si ya existe */}
-                                                {justification ? (
-                                                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-700 space-y-0.5">
-                                                        <p className="font-semibold text-slate-600 text-[10px] uppercase">Motivo informado:</p>
-                                                        <p className="italic font-medium">"{justification.reason}"</p>
-                                                        {justification.updated_at && (
-                                                            <p className="text-[9px] text-slate-400">
-                                                                Registrado {new Date(justification.updated_at).toLocaleDateString('es-ES')} por {justification.updated_by_name || 'Técnico'}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <div className="p-2 bg-amber-50/60 rounded-lg border border-amber-200/80 text-[11px] text-amber-800 italic">
-                                                        ⚠️ Aún no se informó justificación para este día. Las horas permanecen en 0 hs.
-                                                    </div>
-                                                )}
-
-                                                {/* Acción SuperAdmin para cerrar horario real */}
-                                                {isSuperAdmin && (
-                                                    <div className="pt-2 border-t border-slate-100 flex justify-end">
-                                                        <button
-                                                            onClick={() => openManualAttendanceModal(item.dateStr, item.checkInTime)}
-                                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition-all shadow-2xs active:scale-95"
-                                                            title="Ingresar horario real de salida para cerrar el ciclo"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">edit_calendar</span>
-                                                            Cerrar Horario Real
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Calendario / Cuadrícula Mensual de Asistencia y Cumplimiento */}
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                                    <span className="size-2 rounded-full bg-indigo-600"></span>
-                                    Grilla Diaria de Presencia y Cumplimiento Mínimo
-                                </h4>
-                                <div className="flex items-center gap-3 text-[11px] text-slate-500">
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-emerald-500"></span> Cumplido
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-amber-500"></span> Sin Salida
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-rose-500"></span> Incompleto / Ausente
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-slate-300"></span> Sin Requerimiento
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
-                                {monthlyAttendanceSummary.daysList.map(day => {
-                                    const isWeekend = day.dayOfWeek === 0 || day.dayOfWeek === 6;
-                                    const cardBg = day.hasOpenCycle
-                                        ? 'bg-amber-50/90 border-amber-300 text-amber-950'
-                                        : day.isExpected
-                                        ? day.isCompliant
-                                            ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950'
-                                            : day.hasAttended
-                                            ? 'bg-rose-50/70 border-rose-300 text-rose-950'
-                                            : 'bg-rose-50/40 border-dashed border-rose-200 text-rose-800'
-                                        : day.hasAttended
-                                        ? 'bg-blue-50/70 border-blue-200 text-blue-950'
-                                        : isWeekend
-                                        ? 'bg-slate-50/50 border-slate-200/60 text-slate-400'
-                                        : day.isHolidayDay
-                                        ? 'bg-purple-50/60 border-purple-200 text-purple-900'
-                                        : 'bg-slate-50/80 border-slate-200 text-slate-500';
-
-                                    return (
-                                        <div
-                                            key={day.dateStr}
-                                            className={`p-2.5 rounded-xl border flex flex-col justify-between min-h-[92px] transition-all hover:shadow-xs relative ${cardBg}`}
-                                        >
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <span className="text-[10px] uppercase font-bold text-slate-500 block">
-                                                        {day.dayName}
-                                                    </span>
-                                                    <span className="text-base font-black font-mono">
-                                                        {day.dayNumber}
-                                                    </span>
-                                                </div>
-
-                                                {day.hasOpenCycle ? (
-                                                    <span className="material-symbols-outlined text-amber-600 text-sm animate-pulse" title="Sin marca de salida">
-                                                        warning
-                                                    </span>
-                                                ) : day.isExpected && day.isCompliant ? (
-                                                    <span className="material-symbols-outlined text-emerald-600 text-sm" title="Jornada mínima cumplida">
-                                                        check_circle
-                                                    </span>
-                                                ) : day.isExpected && !day.isCompliant ? (
-                                                    <span className="material-symbols-outlined text-rose-500 text-sm" title="Horas insuficientes o ausente">
-                                                        error
-                                                    </span>
-                                                ) : day.hasAttended ? (
-                                                    <span className="material-symbols-outlined text-blue-500 text-sm" title="Asistencia en día opcional / adicional">
-                                                        schedule
-                                                    </span>
-                                                ) : null}
-                                            </div>
-
-                                            <div className="mt-1 space-y-0.5 text-[10px] leading-tight">
-                                                {day.isExpected && (
-                                                    <p className="font-semibold text-slate-600">
-                                                        Min: <span className="font-mono">{day.expectedStart}–{day.expectedEnd}</span> ({day.expectedHours}h)
-                                                    </p>
-                                                )}
-
-                                                {day.hasOpenCycle ? (
-                                                    <p className="font-bold text-amber-800">
-                                                        ⚠️ Salida abierta
-                                                    </p>
-                                                ) : day.hasAttended ? (
-                                                    <p className="font-black font-mono text-indigo-900">
-                                                        {day.attendedHours.toFixed(1)} hs registradas
-                                                    </p>
-                                                ) : (
-                                                    <p className="text-slate-400 italic">
-                                                        {day.isHolidayDay ? 'Feriado' : day.isExpected ? 'Sin marcas' : isWeekend ? 'Finde' : 'Libre'}
-                                                    </p>
-                                                )}
-
-                                                {day.justificationText && (
-                                                    <p className="text-[9px] text-emerald-700 truncate" title={`Justificación: ${day.justificationText}`}>
-                                                        💬 {day.justificationText}
-                                                    </p>
-                                                )}
-                                            </div>
-
-                                            {/* Acción rápida para justificar o cerrar si tiene ciclo abierto */}
-                                            {day.hasOpenCycle && (
-                                                <div className="mt-1.5 pt-1 border-t border-amber-200/80 flex items-center justify-between gap-1">
-                                                    <button
-                                                        onClick={() => setJustificationInputModal({
-                                                            isOpen: true,
-                                                            dateStr: day.dateStr,
-                                                            currentReason: day.justificationText || ''
-                                                        })}
-                                                        className="text-[9px] font-bold text-amber-800 hover:text-amber-950 underline"
-                                                    >
-                                                        {day.justificationText ? 'Ver motivo' : 'Justificar'}
-                                                    </button>
-                                                    {isSuperAdmin && (
-                                                        <button
-                                                            onClick={() => openManualAttendanceModal(day.dateStr)}
-                                                            className="text-[9px] font-black text-indigo-700 hover:text-indigo-900 underline"
-                                                        >
-                                                            Cerrar
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </div>
-                )}
 
                 {/* RATES TAB (ADMIN ONLY) */}
                 {activeTab === 'rates' && isLevelAdmin && (
@@ -5101,290 +4543,6 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                     </div>
                 )}
 
-                {/* RESUMEN MENSUAL DE ASISTENCIA Y CUMPLIMIENTO DE JORNADA MÍNIMA */}
-                {activeTab === 'clock' && (
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
-                            <div>
-                                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-indigo-600">calendar_month</span>
-                                    <span>Control Mensual de Cumplimiento de Asistencia</span>
-                                </h3>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                    {(() => {
-                                        const tec = tecnicos.find(t => t.id === selectedTecnicoId);
-                                        return tec?.is_turno_tarde
-                                            ? 'Régimen Turno Tarde Fijo: Presencia requerida todas las semanas (Lun-Jue 15:00-19:00 / Vie 14:00-19:00).'
-                                            : 'Régimen de Guardias: Presencia requerida únicamente en los días asignados de guardia.';
-                                    })()}
-                                </p>
-                            </div>
-
-                            {/* Badges de Estado General */}
-                            <div className="flex flex-wrap items-center gap-2">
-                                <div className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl text-center">
-                                    <span className="text-[10px] font-bold text-indigo-600 uppercase block">Horas Efectivas</span>
-                                    <span className="text-sm font-black text-indigo-900 font-mono">
-                                        {attendanceHoursReport.totalHours.toFixed(1)} hs
-                                    </span>
-                                </div>
-                                <div className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
-                                    <span className="text-[10px] font-bold text-emerald-700 uppercase block">Días Cumplidos</span>
-                                    <span className="text-sm font-black text-emerald-900 font-mono">
-                                        {monthlyAttendanceSummary.compliantDaysCount} de {monthlyAttendanceSummary.totalExpectedDays}
-                                    </span>
-                                </div>
-                                <div className={`px-3 py-1.5 rounded-xl border text-center ${
-                                    monthlyAttendanceSummary.openDaysCount > 0
-                                        ? 'bg-amber-50 border-amber-300 text-amber-900'
-                                        : 'bg-slate-50 border-slate-200 text-slate-700'
-                                }`}>
-                                    <span className="text-[10px] font-bold uppercase block">Sin Marca Salida</span>
-                                    <span className="text-sm font-black font-mono">
-                                        {monthlyAttendanceSummary.openDaysCount} {monthlyAttendanceSummary.openDaysCount === 1 ? 'día' : 'días'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Banner Informativo / Notificación de Advertencia sobre Cierre y Justificación */}
-                        <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                            <div className="flex items-start gap-3">
-                                <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0 mt-0.5">
-                                    <span className="material-symbols-outlined text-xl">notification_important</span>
-                                </div>
-                                <div className="space-y-1">
-                                    <h4 className="text-xs font-black uppercase tracking-wider text-amber-900">
-                                        Aviso de Control de Ciclo de Asistencia
-                                    </h4>
-                                    <p className="text-xs text-amber-800 leading-relaxed">
-                                        El sistema <strong>ya no cierra automáticamente las jornadas a las 19:00 hs</strong>. Si olvidaste marcar la salida, el turno permanece abierto para que el <strong>SuperAdmin registre el horario real de egreso</strong>.
-                                    </p>
-                                    <p className="text-xs font-bold text-rose-800 flex items-center gap-1.5 pt-0.5">
-                                        <span className="material-symbols-outlined text-sm text-rose-600">report</span>
-                                        Importante: Sin informar el motivo correspondiente por cada día omitido, las horas de ese turno NO serán contempladas en la liquidación.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Lista de Días con Ciclo Incompleto (Pendientes de Justificación o Cierre Real) */}
-                        {attendanceHoursReport.openDays && attendanceHoursReport.openDays.length > 0 && (
-                            <div className="space-y-3 p-4 bg-rose-50/40 border border-rose-200 rounded-2xl">
-                                <div className="flex justify-between items-center">
-                                    <h4 className="text-xs font-black uppercase tracking-wider text-rose-900 flex items-center gap-1.5">
-                                        <span className="material-symbols-outlined text-base text-rose-600">pending_actions</span>
-                                        Días sin marca de salida registrada ({attendanceHoursReport.openDays.length})
-                                    </h4>
-                                    <span className="text-[11px] text-rose-700 font-semibold">Requiere informe del técnico</span>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {attendanceHoursReport.openDays.map(item => {
-                                        const justKey = `${selectedTecnicoId}_${item.dateStr}`;
-                                        const justification = attendanceJustifications[justKey];
-
-                                        return (
-                                            <div key={item.dateStr} className="p-3 bg-white border border-rose-200 rounded-xl shadow-2xs flex flex-col justify-between gap-3">
-                                                <div className="flex justify-between items-start gap-2">
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-black text-slate-800 text-xs">
-                                                                {new Date(`${item.dateStr}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: '2-digit' })}
-                                                            </span>
-                                                            <span className="px-2 py-0.5 bg-rose-100 text-rose-800 font-extrabold text-[9px] uppercase rounded border border-rose-200">
-                                                                Falta Salida
-                                                            </span>
-                                                        </div>
-                                                        <p className="text-[11px] text-slate-500 mt-1">
-                                                            Ingreso registrado a las <strong>{item.checkInTime} hs</strong>
-                                                        </p>
-                                                    </div>
-
-                                                    <button
-                                                        onClick={() => setJustificationInputModal({
-                                                            isOpen: true,
-                                                            dateStr: item.dateStr,
-                                                            currentReason: justification?.reason || ''
-                                                        })}
-                                                        className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold transition-all flex items-center gap-1 active:scale-95"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm text-amber-700">edit_note</span>
-                                                        {justification ? 'Editar Motivo' : 'Informar Motivo'}
-                                                    </button>
-                                                </div>
-
-                                                {/* Detalle de justificación si ya existe */}
-                                                {justification ? (
-                                                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-700 space-y-0.5">
-                                                        <p className="font-semibold text-slate-600 text-[10px] uppercase">Motivo informado:</p>
-                                                        <p className="italic font-medium">"{justification.reason}"</p>
-                                                        {justification.updated_at && (
-                                                            <p className="text-[9px] text-slate-400">
-                                                                Registrado {new Date(justification.updated_at).toLocaleDateString('es-ES')} por {justification.updated_by_name || 'Técnico'}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <div className="p-2 bg-amber-50/60 rounded-lg border border-amber-200/80 text-[11px] text-amber-800 italic">
-                                                        ⚠️ Aún no se informó justificación para este día. Las horas permanecen en 0 hs.
-                                                    </div>
-                                                )}
-
-                                                {/* Acción SuperAdmin para cerrar horario real */}
-                                                {isSuperAdmin && (
-                                                    <div className="pt-2 border-t border-slate-100 flex justify-end">
-                                                        <button
-                                                            onClick={() => openManualAttendanceModal(item.dateStr, item.checkInTime)}
-                                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition-all shadow-2xs active:scale-95"
-                                                            title="Ingresar horario real de salida para cerrar el ciclo"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">edit_calendar</span>
-                                                            Cerrar Horario Real
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Calendario / Cuadrícula Mensual de Asistencia y Cumplimiento */}
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                                    <span className="size-2 rounded-full bg-indigo-600"></span>
-                                    Grilla Diaria de Presencia y Cumplimiento Mínimo
-                                </h4>
-                                <div className="flex items-center gap-3 text-[11px] text-slate-500">
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-emerald-500"></span> Cumplido
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-amber-500"></span> Sin Salida
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-rose-500"></span> Incompleto / Ausente
-                                    </span>
-                                    <span className="flex items-center gap-1">
-                                        <span className="size-2 rounded-full bg-slate-300"></span> Sin Requerimiento
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
-                                {monthlyAttendanceSummary.daysList.map(day => {
-                                    const isWeekend = day.dayOfWeek === 0 || day.dayOfWeek === 6;
-                                    const cardBg = day.hasOpenCycle
-                                        ? 'bg-amber-50/90 border-amber-300 text-amber-950'
-                                        : day.isExpected
-                                        ? day.isCompliant
-                                            ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950'
-                                            : day.hasAttended
-                                            ? 'bg-rose-50/70 border-rose-300 text-rose-950'
-                                            : 'bg-rose-50/40 border-dashed border-rose-200 text-rose-800'
-                                        : day.hasAttended
-                                        ? 'bg-blue-50/70 border-blue-200 text-blue-950'
-                                        : isWeekend
-                                        ? 'bg-slate-50/50 border-slate-200/60 text-slate-400'
-                                        : day.isHolidayDay
-                                        ? 'bg-purple-50/60 border-purple-200 text-purple-900'
-                                        : 'bg-slate-50/80 border-slate-200 text-slate-500';
-
-                                    return (
-                                        <div
-                                            key={day.dateStr}
-                                            className={`p-2.5 rounded-xl border flex flex-col justify-between min-h-[92px] transition-all hover:shadow-xs relative ${cardBg}`}
-                                        >
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <span className="text-[10px] uppercase font-bold text-slate-500 block">
-                                                        {day.dayName}
-                                                    </span>
-                                                    <span className="text-base font-black font-mono">
-                                                        {day.dayNumber}
-                                                    </span>
-                                                </div>
-
-                                                {day.hasOpenCycle ? (
-                                                    <span className="material-symbols-outlined text-amber-600 text-sm animate-pulse" title="Sin marca de salida">
-                                                        warning
-                                                    </span>
-                                                ) : day.isExpected && day.isCompliant ? (
-                                                    <span className="material-symbols-outlined text-emerald-600 text-sm" title="Jornada mínima cumplida">
-                                                        check_circle
-                                                    </span>
-                                                ) : day.isExpected && !day.isCompliant ? (
-                                                    <span className="material-symbols-outlined text-rose-500 text-sm" title="Horas insuficientes o ausente">
-                                                        error
-                                                    </span>
-                                                ) : day.hasAttended ? (
-                                                    <span className="material-symbols-outlined text-blue-500 text-sm" title="Asistencia en día opcional / adicional">
-                                                        schedule
-                                                    </span>
-                                                ) : null}
-                                            </div>
-
-                                            <div className="mt-1 space-y-0.5 text-[10px] leading-tight">
-                                                {day.isExpected && (
-                                                    <p className="font-semibold text-slate-600">
-                                                        Min: <span className="font-mono">{day.expectedStart}–{day.expectedEnd}</span> ({day.expectedHours}h)
-                                                    </p>
-                                                )}
-
-                                                {day.hasOpenCycle ? (
-                                                    <p className="font-bold text-amber-800">
-                                                        ⚠️ Salida abierta
-                                                    </p>
-                                                ) : day.hasAttended ? (
-                                                    <p className="font-black font-mono text-indigo-900">
-                                                        {day.attendedHours.toFixed(1)} hs registradas
-                                                    </p>
-                                                ) : (
-                                                    <p className="text-slate-400 italic">
-                                                        {day.isHolidayDay ? 'Feriado' : day.isExpected ? 'Sin marcas' : isWeekend ? 'Finde' : 'Libre'}
-                                                    </p>
-                                                )}
-
-                                                {day.justificationText && (
-                                                    <p className="text-[9px] text-emerald-700 truncate" title={`Justificación: ${day.justificationText}`}>
-                                                        💬 {day.justificationText}
-                                                    </p>
-                                                )}
-                                            </div>
-
-                                            {/* Acción rápida para justificar o cerrar si tiene ciclo abierto */}
-                                            {day.hasOpenCycle && (
-                                                <div className="mt-1.5 pt-1 border-t border-amber-200/80 flex items-center justify-between gap-1">
-                                                    <button
-                                                        onClick={() => setJustificationInputModal({
-                                                            isOpen: true,
-                                                            dateStr: day.dateStr,
-                                                            currentReason: day.justificationText || ''
-                                                        })}
-                                                        className="text-[9px] font-bold text-amber-800 hover:text-amber-950 underline"
-                                                    >
-                                                        {day.justificationText ? 'Ver motivo' : 'Justificar'}
-                                                    </button>
-                                                    {isSuperAdmin && (
-                                                        <button
-                                                            onClick={() => openManualAttendanceModal(day.dateStr)}
-                                                            className="text-[9px] font-black text-indigo-700 hover:text-indigo-900 underline"
-                                                        >
-                                                            Cerrar
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* Bottom Consent Panel */}
@@ -5491,6 +4649,151 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                 </button>
                             )}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CUADRO COMPARATIVO DE CAMBIOS EN COLUMNAS PARALELAS (Visible si hubo cambios respecto a la firma anterior) */}
+            {selectedTecnicoId && consentStatusInfo.isOutdated && (
+                <div className="mt-4 bg-white border-2 border-amber-300 rounded-2xl p-5 shadow-lg shadow-amber-100/50 space-y-4 animate-fadeIn">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-amber-100 pb-3">
+                        <div className="flex items-center gap-2.5">
+                            <span className="p-2 bg-amber-100 text-amber-800 rounded-xl material-symbols-outlined text-xl">compare_arrows</span>
+                            <div>
+                                <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                                    Resumen Comparativo de Cambios en la Liquidación
+                                </h4>
+                                <p className="text-xs text-slate-500">
+                                    Comparativa paralela entre la versión firmada ({signedSnapshot?.signedAt ? new Date(signedSnapshot.signedAt).toLocaleDateString('es-ES') : consentStatusInfo.signedAt ? new Date(consentStatusInfo.signedAt).toLocaleDateString('es-ES') : 'Previa'}) y la versión actual modificada.
+                                </p>
+                            </div>
+                        </div>
+                        <span className={`px-3 py-1 rounded-xl text-xs font-black uppercase ${
+                            consentStatusInfo.diffAmount > 0 
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                                : 'bg-rose-100 text-rose-800 border border-rose-300'
+                        }`}>
+                            Diferencia: {consentStatusInfo.diffAmount > 0 ? `+${formatCurrency(consentStatusInfo.diffAmount)}` : `-${formatCurrency(Math.abs(consentStatusInfo.diffAmount))}`}
+                        </span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left">
+                            <thead className="bg-slate-100 text-slate-600 font-black uppercase text-[10px] tracking-wider border-b border-slate-200">
+                                <tr>
+                                    <th className="p-3">Concepto Liquidado</th>
+                                    <th className="p-3 text-right text-slate-600 bg-slate-50/70 border-x border-slate-200">Versión Firmada</th>
+                                    <th className="p-3 text-right text-indigo-900 bg-indigo-50/40 border-r border-slate-200">Versión Actual (Nueva)</th>
+                                    <th className="p-3 text-right">Variación</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {/* Cirugías */}
+                                <tr className="hover:bg-slate-50/50">
+                                    <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
+                                        <span className="size-2 rounded-full bg-indigo-500"></span>
+                                        Cirugías Realizadas
+                                        <span className="text-[10px] text-slate-400 font-normal">
+                                            ({signedSnapshot?.surgeriesCount !== undefined ? `${signedSnapshot.surgeriesCount}` : '-'} vs {surgeriesReport.length} intervenciones)
+                                        </span>
+                                    </td>
+                                    <td className="p-3 text-right font-mono font-semibold text-slate-600 bg-slate-50/70 border-x border-slate-200">
+                                        ${signedSnapshot?.totalSurgeriesAmount !== undefined ? `${formatCurrency(signedSnapshot.totalSurgeriesAmount)}` : (signedSnapshot ? '$0,00' : 'Ver detalle')}
+                                    </td>
+                                    <td className="p-3 text-right font-mono font-bold text-slate-900 bg-indigo-50/40 border-r border-slate-200">
+                                        ${formatCurrency(totalSurgeriesAmount)}
+                                    </td>
+                                    <td className="p-3 text-right font-mono font-extrabold">
+                                        {(() => {
+                                            if (signedSnapshot?.totalSurgeriesAmount === undefined) return <span className="text-slate-400 font-normal">--</span>;
+                                            const diff = totalSurgeriesAmount - signedSnapshot.totalSurgeriesAmount;
+                                            if (diff === 0) return <span className="text-slate-400 font-normal">Sin cambio</span>;
+                                            return diff > 0 ? (
+                                                <span className="text-emerald-700">+${formatCurrency(diff)}</span>
+                                            ) : (
+                                                <span className="text-rose-700">-${formatCurrency(Math.abs(diff))}</span>
+                                            );
+                                        })()}
+                                    </td>
+                                </tr>
+
+                                {/* Guardias */}
+                                <tr className="hover:bg-slate-50/50">
+                                    <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
+                                        <span className="size-2 rounded-full bg-emerald-500"></span>
+                                        Guardias Cubiertas
+                                        <span className="text-[10px] text-slate-400 font-normal">
+                                            ({signedSnapshot?.guardsDaysCount !== undefined ? `${signedSnapshot.guardsDaysCount.toFixed(2)}d` : '-'} vs {guardsReport.daysCount.toFixed(2)}d)
+                                        </span>
+                                    </td>
+                                    <td className="p-3 text-right font-mono font-semibold text-slate-600 bg-slate-50/70 border-x border-slate-200">
+                                        ${signedSnapshot?.totalGuardsAmount !== undefined ? `${formatCurrency(signedSnapshot.totalGuardsAmount)}` : (signedSnapshot ? '$0,00' : 'Ver detalle')}
+                                    </td>
+                                    <td className="p-3 text-right font-mono font-bold text-slate-900 bg-indigo-50/40 border-r border-slate-200">
+                                        ${formatCurrency(guardsReport.totalAmount)}
+                                    </td>
+                                    <td className="p-3 text-right font-mono font-extrabold">
+                                        {(() => {
+                                            if (signedSnapshot?.totalGuardsAmount === undefined) return <span className="text-slate-400 font-normal">--</span>;
+                                            const diff = guardsReport.totalAmount - signedSnapshot.totalGuardsAmount;
+                                            if (diff === 0) return <span className="text-slate-400 font-normal">Sin cambio</span>;
+                                            return diff > 0 ? (
+                                                <span className="text-emerald-700">+${formatCurrency(diff)}</span>
+                                            ) : (
+                                                <span className="text-rose-700">-${formatCurrency(Math.abs(diff))}</span>
+                                            );
+                                        })()}
+                                    </td>
+                                </tr>
+
+                                {/* Asistencia / Horas Fichadas */}
+                                <tr className="hover:bg-slate-50/50">
+                                    <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
+                                        <span className="size-2 rounded-full bg-blue-500"></span>
+                                        Asistencia (Horas de Turno)
+                                        <span className="text-[10px] text-slate-400 font-normal">
+                                            ({signedSnapshot?.attendanceHours !== undefined ? `${signedSnapshot.attendanceHours.toFixed(1)}h` : '-'} vs {attendanceHoursReport.totalHours.toFixed(1)}h)
+                                        </span>
+                                    </td>
+                                    <td className="p-3 text-right font-mono font-semibold text-slate-600 bg-slate-50/70 border-x border-slate-200">
+                                        ${signedSnapshot?.totalAttendanceAmount !== undefined ? `${formatCurrency(signedSnapshot.totalAttendanceAmount)}` : (signedSnapshot ? '$0,00' : 'Ver detalle')}
+                                    </td>
+                                    <td className="p-3 text-right font-mono font-bold text-slate-900 bg-indigo-50/40 border-r border-slate-200">
+                                        ${formatCurrency(attendanceHoursReport.amount)}
+                                    </td>
+                                    <td className="p-3 text-right font-mono font-extrabold">
+                                        {(() => {
+                                            if (signedSnapshot?.totalAttendanceAmount === undefined) return <span className="text-slate-400 font-normal">--</span>;
+                                            const diff = attendanceHoursReport.amount - signedSnapshot.totalAttendanceAmount;
+                                            if (diff === 0) return <span className="text-slate-400 font-normal">Sin cambio</span>;
+                                            return diff > 0 ? (
+                                                <span className="text-emerald-700">+${formatCurrency(diff)}</span>
+                                            ) : (
+                                                <span className="text-rose-700">-${formatCurrency(Math.abs(diff))}</span>
+                                            );
+                                        })()}
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tfoot className="bg-slate-100 font-black border-t-2 border-slate-300">
+                                <tr>
+                                    <td className="p-3 uppercase text-[10px] text-slate-700">Total Consolidado:</td>
+                                    <td className="p-3 text-right font-mono text-slate-700 bg-slate-100 border-x border-slate-300">
+                                        ${formatCurrency(signedSnapshot?.grandTotalAmount ?? consentStatusInfo.signedAmount ?? 0)}
+                                    </td>
+                                    <td className="p-3 text-right font-mono text-indigo-900 bg-indigo-100/50 border-r border-slate-300 text-sm">
+                                        ${formatCurrency(grandTotalAmount)}
+                                    </td>
+                                    <td className="p-3 text-right font-mono text-sm">
+                                        {consentStatusInfo.diffAmount > 0 ? (
+                                            <span className="text-emerald-800">+${formatCurrency(consentStatusInfo.diffAmount)}</span>
+                                        ) : (
+                                            <span className="text-rose-800">-${formatCurrency(Math.abs(consentStatusInfo.diffAmount))}</span>
+                                        )}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
                     </div>
                 </div>
             )}
