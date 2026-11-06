@@ -5106,11 +5106,33 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                 </div>
                                             )}
 
-                                            {/* Si no hubo cirugías afectadas por falta de fichada ni agregadas ni eliminadas */}
+                                            {/* Caso 5: Firma previa sin snapshot nominal detallado con diferencia numérica */}
+                                            {!comparisonBreakdown.surgeries.hasDetailedHistory && (comparisonBreakdown.surgeries.amountDiff !== 0 || comparisonBreakdown.surgeries.countDiff !== 0) && (
+                                                <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 space-y-2">
+                                                    <div className="flex items-start gap-2.5">
+                                                        <span className="material-symbols-outlined text-amber-700 text-lg shrink-0 mt-0.5">info</span>
+                                                        <div className="text-xs space-y-1">
+                                                            <p className="font-bold text-amber-900">
+                                                                Variación de {Math.abs(comparisonBreakdown.surgeries.countDiff)} intervenciones ({comparisonBreakdown.surgeries.signedCount} firmadas vs {comparisonBreakdown.surgeries.currentCount} actuales)
+                                                            </p>
+                                                            <p className="text-amber-800 text-[11px] leading-relaxed">
+                                                                La versión firmada el {signedSnapshot?.signedAt ? new Date(signedSnapshot.signedAt).toLocaleDateString('es-ES') : 'anterior'} registró <strong>{comparisonBreakdown.surgeries.signedCount} cirugías</strong> por <strong>${formatCurrency(comparisonBreakdown.surgeries.signedAmount)}</strong>. La versión actual liquida <strong>{comparisonBreakdown.surgeries.currentCount} cirugías</strong> por <strong>${formatCurrency(comparisonBreakdown.surgeries.currentAmount)}</strong> (diferencia: <strong className={comparisonBreakdown.surgeries.amountDiff < 0 ? 'text-rose-700 font-extrabold' : 'text-emerald-700 font-extrabold'}>{comparisonBreakdown.surgeries.amountDiff > 0 ? `+$${formatCurrency(comparisonBreakdown.surgeries.amountDiff)}` : `-$${formatCurrency(Math.abs(comparisonBreakdown.surgeries.amountDiff))}`}</strong>).
+                                                            </p>
+                                                            <p className="text-slate-600 text-[11px] leading-relaxed">
+                                                                Esta firma se asentó previamente a la versión con almacenamiento nominal unitario (v3.13.32), por lo que la base histórica conservó el total numérico consolidado. Las modificaciones derivan de la aplicación de las reglas vigentes de asistencia y exclusividad de guardia/turno tarde. A partir de las próximas conformidades, cada cirugía se guardará de forma unitaria para contrastar altas y bajas específicas por paciente.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Si no hubo cirugías afectadas por falta de fichada ni agregadas ni eliminadas y tampoco hay diferencia de monto */}
                                             {comparisonBreakdown.surgeries.missingAttendanceSurgeries.length === 0 &&
                                              comparisonBreakdown.surgeries.addedSurgeries.length === 0 &&
                                              comparisonBreakdown.surgeries.removedSurgeries.length === 0 &&
-                                             comparisonBreakdown.surgeries.pendingOrRejectedManualSurgeries.length === 0 && (
+                                             comparisonBreakdown.surgeries.pendingOrRejectedManualSurgeries.length === 0 &&
+                                             comparisonBreakdown.surgeries.amountDiff === 0 &&
+                                             comparisonBreakdown.surgeries.countDiff === 0 && (
                                                 <p className="text-xs text-slate-500 italic p-2 text-center">
                                                     No se registran cambios individuales en el listado de cirugías computadas.
                                                 </p>
