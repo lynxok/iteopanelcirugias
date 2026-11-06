@@ -330,3 +330,17 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     - **Responsable de Enfermería**: Puede diagramar cuadrantes, asignar turnos, francos y registrar ausencias/vacaciones. No tiene acceso a cambiar los minutos base ni el umbral de curaciones (reservado para SuperAdmin / Dirección).
     - **Enfermera de Guardia**: Modo visor en el cronograma y permiso exclusivo para realizar el **Cierre de su propio Turno**.
 
+### Liquidación de Técnicos e Instrumentadores (`TecnicoPanel.tsx`) (06/11/2026)
+*   **Regla de Fichada Obligatoria para Cómputo de Cirugías en Días Hábiles**:
+    - De lunes a viernes que no sean feriados (`isWeekDay && !isHolidayDay`), una cirugía solo se liquida al técnico si estaba presente/fichado al momento de inicio de la intervención (`isTecnicoPresentForSurgery`) o con marca de ingreso en la fecha (`hasCheckedInOnDate`).
+    - **Excepción para Fines de Semana y Feriados**: Sábados, domingos y feriados (`holidaysSet`) NO requieren fichada presencial previa para liquidar la cirugía asignada (se contemplan por guardia).
+    - **Impacto Económico**: Si no registra fichada en día hábil, la cirugía figura con `$0,00` y badge rojo `"Sin fichada (Est. $X)"`. El monto estimado no suma al total de la liquidación hasta que se registre la fichada manual correspondiente.
+*   **Comparativa Paralela de Liquidaciones y Desglose Interactivo (Drill-Down)**:
+    - Cuando una liquidación previa cuenta con firma de conformidad digital y sufre modificaciones posteriores, se activa el bloque **"Resumen Comparativo de Cambios en la Liquidación"**.
+    - Cada fila del resumen (**Cirugías**, **Guardias**, **Asistencia**) es clickeable y despliega un desglose detallado (drill-down):
+      - **Cirugías**: Discrimina cirugías que pasaron a $0 por falta de fichada en días hábiles (mostrando paciente, procedimiento, monto original e impacto), cirugías agregadas nuevas, cirugías eliminadas/desasignadas y cirugías manuales pendientes.
+      - **Guardias**: Discrimina días hábiles equivalentes, fines de semana, feriados y variación de días respecto a la firma anterior.
+      - **Asistencia**: Muestra total de horas computadas, tarifa horaria, días registrados y control de ciclos abiertos / omisiones de salida.
+    - **Persistencia de Snapshot Detallado**: Al firmar la conformidad, el sistema almacena en `audit_logs` (`meta.surgeries_detail`, `meta.attendance_detail`, `meta.guards_detail`) el inventario completo de intervenciones y horas para comparativas quirúrgicas 100% exactas en períodos sucesivos.
+
+

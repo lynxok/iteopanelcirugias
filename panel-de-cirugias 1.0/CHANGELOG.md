@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## v3.13.32 (2026-11-06)
+- **Desglose Interactivo Detallado (Drill-Down) en Comparativa de Liquidación (`TecnicoPanel.tsx`)**:
+    * **Filas Clickeables e Interactivas**: Al hacer clic sobre cualquier concepto del "Resumen Comparativo de Cambios en la Liquidación" (Cirugías, Guardias o Asistencia), la tabla despliega un acordeón detallado con el desglose exacto de altas, bajas y modificaciones.
+    * **Detalle Quirúrgico de Cirugías**:
+        - Listado de cirugías descontadas a $0 por falta de fichada en día hábil (mostrando Fecha, Hora, Paciente, Procedimiento, Monto anterior e impacto negativo).
+        - Cirugías agregadas con posterioridad a la última firma (con impacto positivo).
+        - Cirugías eliminadas / desasignadas (con impacto negativo).
+        - Cirugías manuales pendientes o rechazadas.
+    * **Detalle de Guardias**: Desglose de días hábiles equivalentes, fines de semana, feriados computados y comparación de totales y tarifas aplicadas.
+    * **Detalle de Asistencia**: Desglose de horas computadas, tarifa horaria, días registrados y advertencias de ciclos abiertos / omisiones de salida.
+    * **Snapshot Profundo Persistente**: A partir de esta versión, la firma digital almacena en `audit_logs` (`meta.surgeries_detail`, `meta.attendance_detail`, `meta.guards_detail`) la lista completa de intervenciones y marcas horarias para comparativas 100% exactas ítem por ítem en cualquier período.
+
 ## v3.13.31 (2026-11-06)
 - **Fichada Obligatoria para Cómputo de Cirugías en Días Hábiles (`TecnicoPanel.tsx`)**:
     * **Exigencia de Asistencia Efectiva**: De lunes a viernes no feriados, las cirugías asignadas a un técnico solo suman a la liquidación si el profesional se encontraba fichado en el horario de inicio de la intervención (`isTecnicoPresentForSurgery`) o con ingreso registrado en la fecha.

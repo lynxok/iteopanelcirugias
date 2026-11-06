@@ -88,6 +88,20 @@ interface Consent {
     status: string;
 }
 
+export interface SignedSurgeryDetailItem {
+    id: string;
+    date: string;
+    startTime?: string | null;
+    endTime?: string | null;
+    patient: string;
+    procedure: string;
+    share: number;
+    estimatedShare?: number;
+    isMissingAttendance?: boolean;
+    isManual?: boolean;
+    manualStatus?: 'pending' | 'approved' | 'rejected' | null;
+}
+
 export interface SignedConsentSnapshot {
     signedAt?: string;
     signedAmount?: number;
@@ -98,6 +112,20 @@ export interface SignedConsentSnapshot {
     totalAttendanceAmount?: number;
     attendanceHours?: number;
     grandTotalAmount?: number;
+    surgeriesDetail?: SignedSurgeryDetailItem[];
+    attendanceDailyDetail?: Array<{
+        date: string;
+        hours: number;
+        amount: number;
+        hasOpenCycle?: boolean;
+    }>;
+    guardsDetail?: {
+        daysCount: number;
+        weekendDaysCount: number;
+        holidaysCount: number;
+        weeksDetail: Array<{ week: string; daysCount: number; equiv: number }>;
+        totalAmount: number;
+    };
 }
 
 export interface SurgeryPracticeItem {
@@ -312,6 +340,8 @@ export default function TecnicoPanel() {
 
     // Estado para guardar el snapshot firmado anterior
     const [signedSnapshot, setSignedSnapshot] = useState<SignedConsentSnapshot | null>(null);
+    // Estado para expandir el desglose detallado de diferencias al hacer clic en la tabla comparativa
+    const [expandedDiffConcept, setExpandedDiffConcept] = useState<'surgeries' | 'guards' | 'attendance' | null>(null);
 
     // Estado para justificaciones de omisión de marca de salida por técnico y fecha ({ [key: string]: { reason: string, updated_at: string, updated_by_name: string } })
     const [attendanceJustifications, setAttendanceJustifications] = useState<Record<string, { reason: string; updated_at?: string; updated_by_name?: string }>>({});
@@ -660,7 +690,10 @@ export default function TecnicoPanel() {
                             guardsDaysCount: meta.guards_days,
                             totalAttendanceAmount: meta.attendance_amount,
                             attendanceHours: meta.attendance_hours,
-                            grandTotalAmount: meta.amount
+                            grandTotalAmount: meta.amount,
+                            surgeriesDetail: meta.surgeries_detail || undefined,
+                            attendanceDailyDetail: meta.attendance_detail || undefined,
+                            guardsDetail: meta.guards_detail || undefined
                         });
                     } else if (consentRes?.data?.amount_calculated) {
                         setSignedSnapshot({
@@ -1561,6 +1594,110 @@ export default function TecnicoPanel() {
         };
     }, [currentConsent, grandTotalAmount]);
 
+    // Desglose analítico de diferencias para la tabla comparativa (drill-down por concepto)
+    const comparisonBreakdown = useMemo(() => {
+        if (!consentStatusInfo.isOutdated && !signedSnapshot) {
+            return null;
+        }
+
+        // --- 1. CIRUGÍAS ---
+        const signedSurgeriesCount = signedSnapshot?.surgeriesCount ?? 0;
+        const currentSurgeriesCount = surgeriesReport.length;
+        const countDiff = currentSurgeriesCount - signedSurgeriesCount;
+
+        const signedSurgeriesAmount = signedSnapshot?.totalSurgeriesAmount ?? 0;
+        const currentSurgeriesAmount = totalSurgeriesAmount;
+        const surgeriesAmountDiff = currentSurgeriesAmount - signedSurgeriesAmount;
+
+        // Cirugías afectadas por falta de fichada en día hábil (Regla 06/11/2026)
+        const missingAttendanceSurgeries = surgeriesReport.filter(s => s.isMissingAttendance);
+
+        // Cirugías manuales pendientes o rechazadas
+        const pendingOrRejectedManualSurgeries = surgeriesReport.filter(s => s.isManual && s.manualStatus !== 'approved');
+
+        // Comparación elemento por elemento si existe snapshot con surgeriesDetail
+        let addedSurgeries: typeof surgeriesReport = [];
+        let removedSurgeries: SignedSurgeryDetailItem[] = [];
+        let changedSurgeries: Array<{ current: (typeof surgeriesReport)[0]; previous: SignedSurgeryDetailItem }> = [];
+
+        if (signedSnapshot?.surgeriesDetail && signedSnapshot.surgeriesDetail.length > 0) {
+            const currentMap = new Map(surgeriesReport.map(s => [s.id, s]));
+            const signedMap = new Map(signedSnapshot.surgeriesDetail.map(s => [s.id, s]));
+
+            // Agregadas: están en current pero no en signed
+            addedSurgeries = surgeriesReport.filter(s => !signedMap.has(s.id));
+
+            // Eliminadas: estaban en signed pero no están en current
+            removedSurgeries = signedSnapshot.surgeriesDetail.filter(s => !currentMap.has(s.id));
+
+            // Modificadas de monto: están en ambas pero difiere el share
+            surgeriesReport.forEach(curr => {
+                const prev = signedMap.get(curr.id);
+                if (prev && Math.abs(curr.share - prev.share) > 0.01) {
+                    changedSurgeries.push({ current: curr, previous: prev });
+                }
+            });
+        }
+
+        // --- 2. GUARDIAS ---
+        const signedGuardsDays = signedSnapshot?.guardsDaysCount ?? 0;
+        const currentGuardsDays = guardsReport.daysCount;
+        const guardsDaysDiff = currentGuardsDays - signedGuardsDays;
+
+        const signedGuardsAmount = signedSnapshot?.totalGuardsAmount ?? 0;
+        const currentGuardsAmount = guardsReport.totalAmount;
+        const guardsAmountDiff = currentGuardsAmount - signedGuardsAmount;
+
+        // --- 3. ASISTENCIA ---
+        const signedAttendanceHours = signedSnapshot?.attendanceHours ?? 0;
+        const currentAttendanceHours = attendanceHoursReport.totalHours;
+        const attendanceHoursDiff = currentAttendanceHours - signedAttendanceHours;
+
+        const signedAttendanceAmount = signedSnapshot?.totalAttendanceAmount ?? 0;
+        const currentAttendanceAmount = attendanceHoursReport.amount;
+        const attendanceAmountDiff = currentAttendanceAmount - signedAttendanceAmount;
+
+        return {
+            surgeries: {
+                signedCount: signedSurgeriesCount,
+                currentCount: currentSurgeriesCount,
+                countDiff,
+                signedAmount: signedSurgeriesAmount,
+                currentAmount: currentSurgeriesAmount,
+                amountDiff: surgeriesAmountDiff,
+                missingAttendanceSurgeries,
+                pendingOrRejectedManualSurgeries,
+                addedSurgeries,
+                removedSurgeries,
+                changedSurgeries,
+                hasDetailedHistory: !!(signedSnapshot?.surgeriesDetail && signedSnapshot.surgeriesDetail.length > 0)
+            },
+            guards: {
+                signedDays: signedGuardsDays,
+                currentDays: currentGuardsDays,
+                daysDiff: guardsDaysDiff,
+                signedAmount: signedGuardsAmount,
+                currentAmount: currentGuardsAmount,
+                amountDiff: guardsAmountDiff,
+                weeksDetail: guardsReport.weeksDetail,
+                weekendDaysCount: guardsReport.weekendDaysCount,
+                holidaysCount: guardsReport.holidaysCount,
+                guardRate: Number(guardRate) || 0
+            },
+            attendance: {
+                signedHours: signedAttendanceHours,
+                currentHours: currentAttendanceHours,
+                hoursDiff: attendanceHoursDiff,
+                signedAmount: signedAttendanceAmount,
+                currentAmount: currentAttendanceAmount,
+                amountDiff: attendanceAmountDiff,
+                hourRate: Number(hourRate) || 0,
+                openDaysCount: attendanceHoursReport.openDays.length,
+                totalDaysRecorded: attendanceHoursReport.details.length
+            }
+        };
+    }, [consentStatusInfo, signedSnapshot, surgeriesReport, totalSurgeriesAmount, guardsReport, attendanceHoursReport, guardRate, hourRate]);
+
     // Helper para registrar en audit_logs de forma segura
     const logAudit = async (action: 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE', resource: string, resourceId: string, description: string, meta?: any) => {
         try {
@@ -2185,7 +2322,33 @@ export default function TecnicoPanel() {
                     guards_days: guardsReport.daysCount,
                     guards_amount: guardsReport.totalAmount,
                     attendance_amount: attendanceHoursReport.amount,
-                    attendance_hours: attendanceHoursReport.totalHours
+                    attendance_hours: attendanceHoursReport.totalHours,
+                    surgeries_detail: surgeriesReport.map(s => ({
+                        id: s.id,
+                        date: s.date,
+                        startTime: s.startTime,
+                        endTime: s.endTime,
+                        patient: s.patient,
+                        procedure: s.procedureText || s.procedure,
+                        share: s.share,
+                        estimatedShare: s.estimatedShare,
+                        isMissingAttendance: !!s.isMissingAttendance,
+                        isManual: !!s.isManual,
+                        manualStatus: s.manualStatus
+                    })),
+                    attendance_detail: attendanceHoursReport.details.map(d => ({
+                        date: d.date,
+                        hours: d.hours,
+                        amount: d.amount,
+                        hasOpenCycle: d.hasOpenCycle
+                    })),
+                    guards_detail: {
+                        daysCount: guardsReport.daysCount,
+                        weekendDaysCount: guardsReport.weekendDaysCount,
+                        holidaysCount: guardsReport.holidaysCount,
+                        weeksDetail: guardsReport.weeksDetail,
+                        totalAmount: guardsReport.totalAmount
+                    }
                 }
             );
 
@@ -4712,12 +4875,24 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {/* Cirugías */}
-                                <tr className="hover:bg-slate-50/50">
-                                    <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
-                                        <span className="size-2 rounded-full bg-indigo-500"></span>
-                                        Cirugías Realizadas
-                                        <span className="text-[10px] text-slate-400 font-normal">
-                                            ({signedSnapshot?.surgeriesCount !== undefined ? `${signedSnapshot.surgeriesCount}` : '-'} vs {surgeriesReport.length} intervenciones)
+                                <tr 
+                                    onClick={() => setExpandedDiffConcept(expandedDiffConcept === 'surgeries' ? null : 'surgeries')}
+                                    className="hover:bg-amber-50/50 cursor-pointer transition-colors group select-none"
+                                    title="Haga clic para ver el desglose detallado de cirugías agregadas, eliminadas o modificadas"
+                                >
+                                    <td className="p-3 font-bold text-slate-800 flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="size-2 rounded-full bg-indigo-500"></span>
+                                            <span>Cirugías Realizadas</span>
+                                            <span className="text-[10px] text-slate-400 font-normal">
+                                                ({signedSnapshot?.surgeriesCount !== undefined ? `${signedSnapshot.surgeriesCount}` : '-'} vs {surgeriesReport.length} intervenciones)
+                                            </span>
+                                        </div>
+                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-indigo-50 group-hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors">
+                                            {expandedDiffConcept === 'surgeries' ? 'Ocultar detalle' : 'Ver detalle'}
+                                            <span className="material-symbols-outlined text-sm">
+                                                {expandedDiffConcept === 'surgeries' ? 'expand_less' : 'expand_more'}
+                                            </span>
                                         </span>
                                     </td>
                                     <td className="p-3 text-right font-mono font-semibold text-slate-600 bg-slate-50/70 border-x border-slate-200">
@@ -4740,13 +4915,229 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                     </td>
                                 </tr>
 
+                                {/* Subfila Expandida: Detalle de Cirugías */}
+                                {expandedDiffConcept === 'surgeries' && comparisonBreakdown && (
+                                    <tr className="bg-slate-50/90 border-t border-b border-indigo-100 animate-fadeIn">
+                                        <td colSpan={4} className="p-4 space-y-3">
+                                            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-indigo-600 text-lg">medical_services</span>
+                                                    <h5 className="font-bold text-slate-900 text-xs uppercase tracking-tight">
+                                                        Detalle de Variaciones en Cirugías
+                                                    </h5>
+                                                </div>
+                                                <span className="text-[11px] font-mono font-bold text-slate-500">
+                                                    Diferencia Total: {comparisonBreakdown.surgeries.amountDiff > 0 ? `+$${formatCurrency(comparisonBreakdown.surgeries.amountDiff)}` : comparisonBreakdown.surgeries.amountDiff < 0 ? `-$${formatCurrency(Math.abs(comparisonBreakdown.surgeries.amountDiff))}` : '$0,00'}
+                                                </span>
+                                            </div>
+
+                                            {/* Caso 1: Cirugías descontadas por falta de fichada en día hábil */}
+                                            {comparisonBreakdown.surgeries.missingAttendanceSurgeries.length > 0 && (
+                                                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 space-y-2">
+                                                    <div className="flex items-start gap-2">
+                                                        <span className="material-symbols-outlined text-rose-600 text-lg shrink-0 mt-0.5">timer_off</span>
+                                                        <div className="text-xs">
+                                                            <p className="font-bold text-rose-900">
+                                                                {comparisonBreakdown.surgeries.missingAttendanceSurgeries.length} cirugía(s) pasaron a $0 por falta de fichada en día hábil
+                                                            </p>
+                                                            <p className="text-rose-700 text-[11px] leading-relaxed">
+                                                                Regla vigente (06/11/2026): De lunes a viernes no feriados, una cirugía solo se liquida si el técnico estaba presente/fichado al momento de su inicio. Si asistió, cargue la fichada manual correspondiente para habilitar su pago.
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="overflow-x-auto bg-white rounded-lg border border-rose-200">
+                                                        <table className="w-full text-[11px]">
+                                                            <thead className="bg-rose-100/60 text-rose-900 font-bold uppercase text-[9px] border-b border-rose-200">
+                                                                <tr>
+                                                                    <th className="p-2 text-left">Fecha / Hora</th>
+                                                                    <th className="p-2 text-left">Paciente</th>
+                                                                    <th className="p-2 text-left">Procedimiento</th>
+                                                                    <th className="p-2 text-right">Versión Firmada</th>
+                                                                    <th className="p-2 text-right">Versión Actual</th>
+                                                                    <th className="p-2 text-right">Impacto</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-rose-100 font-medium">
+                                                                {comparisonBreakdown.surgeries.missingAttendanceSurgeries.map((s, idx) => (
+                                                                    <tr key={s.id || idx} className="hover:bg-rose-50/40">
+                                                                        <td className="p-2 font-mono whitespace-nowrap">
+                                                                            {new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                                                                            <span className="text-slate-400 ml-1">({s.startTime || 'Sin hora'})</span>
+                                                                        </td>
+                                                                        <td className="p-2 font-semibold text-slate-800">{s.patient}</td>
+                                                                        <td className="p-2 text-slate-600 max-w-[200px] truncate" title={s.procedureText || s.procedure}>
+                                                                            {s.procedureText || s.procedure}
+                                                                        </td>
+                                                                        <td className="p-2 text-right font-mono text-slate-600 line-through">
+                                                                            ${formatCurrency(s.estimatedShare)}
+                                                                        </td>
+                                                                        <td className="p-2 text-right font-mono font-bold text-rose-700">
+                                                                            $0,00
+                                                                        </td>
+                                                                        <td className="p-2 text-right font-mono font-extrabold text-rose-700">
+                                                                            -${formatCurrency(s.estimatedShare)}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Caso 2: Cirugías agregadas nuevas */}
+                                            {comparisonBreakdown.surgeries.addedSurgeries.length > 0 && (
+                                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-2">
+                                                    <div className="flex items-center gap-2 text-xs">
+                                                        <span className="material-symbols-outlined text-emerald-600 text-lg">add_circle</span>
+                                                        <p className="font-bold text-emerald-900">
+                                                            {comparisonBreakdown.surgeries.addedSurgeries.length} cirugía(s) agregadas / reconocidas tras la firma:
+                                                        </p>
+                                                    </div>
+                                                    <div className="overflow-x-auto bg-white rounded-lg border border-emerald-200">
+                                                        <table className="w-full text-[11px]">
+                                                            <thead className="bg-emerald-100/60 text-emerald-900 font-bold uppercase text-[9px] border-b border-emerald-200">
+                                                                <tr>
+                                                                    <th className="p-2 text-left">Fecha / Hora</th>
+                                                                    <th className="p-2 text-left">Paciente</th>
+                                                                    <th className="p-2 text-left">Procedimiento</th>
+                                                                    <th className="p-2 text-right">Monto Sumado</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-emerald-100 font-medium">
+                                                                {comparisonBreakdown.surgeries.addedSurgeries.map((s, idx) => (
+                                                                    <tr key={s.id || idx} className="hover:bg-emerald-50/40">
+                                                                        <td className="p-2 font-mono whitespace-nowrap">
+                                                                            {new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                                                                            <span className="text-slate-400 ml-1">({s.startTime || 'Sin hora'})</span>
+                                                                        </td>
+                                                                        <td className="p-2 font-semibold text-slate-800">{s.patient}</td>
+                                                                        <td className="p-2 text-slate-600 max-w-[200px] truncate" title={s.procedureText || s.procedure}>
+                                                                            {s.procedureText || s.procedure}
+                                                                        </td>
+                                                                        <td className="p-2 text-right font-mono font-bold text-emerald-700">
+                                                                            +${formatCurrency(s.share)}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Caso 3: Cirugías eliminadas / desasignadas */}
+                                            {comparisonBreakdown.surgeries.removedSurgeries.length > 0 && (
+                                                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 space-y-2">
+                                                    <div className="flex items-center gap-2 text-xs">
+                                                        <span className="material-symbols-outlined text-rose-600 text-lg">do_not_disturb_on</span>
+                                                        <p className="font-bold text-rose-900">
+                                                            {comparisonBreakdown.surgeries.removedSurgeries.length} cirugía(s) eliminadas o desasignadas respecto a la firma anterior:
+                                                        </p>
+                                                    </div>
+                                                    <div className="overflow-x-auto bg-white rounded-lg border border-rose-200">
+                                                        <table className="w-full text-[11px]">
+                                                            <thead className="bg-rose-100/60 text-rose-900 font-bold uppercase text-[9px] border-b border-rose-200">
+                                                                <tr>
+                                                                    <th className="p-2 text-left">Fecha</th>
+                                                                    <th className="p-2 text-left">Paciente</th>
+                                                                    <th className="p-2 text-left">Procedimiento</th>
+                                                                    <th className="p-2 text-right">Monto Descontado</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-rose-100 font-medium">
+                                                                {comparisonBreakdown.surgeries.removedSurgeries.map((s, idx) => (
+                                                                    <tr key={s.id || idx} className="hover:bg-rose-50/40">
+                                                                        <td className="p-2 font-mono whitespace-nowrap">
+                                                                            {new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                                                                        </td>
+                                                                        <td className="p-2 font-semibold text-slate-800">{s.patient}</td>
+                                                                        <td className="p-2 text-slate-600 max-w-[200px] truncate" title={s.procedure}>
+                                                                            {s.procedure}
+                                                                        </td>
+                                                                        <td className="p-2 text-right font-mono font-bold text-rose-700">
+                                                                            -${formatCurrency(s.share)}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Caso 4: Cirugías manuales pendientes o rechazadas */}
+                                            {comparisonBreakdown.surgeries.pendingOrRejectedManualSurgeries.length > 0 && (
+                                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                                                    <div className="flex items-center gap-2 text-xs">
+                                                        <span className="material-symbols-outlined text-amber-600 text-lg">pending</span>
+                                                        <p className="font-bold text-amber-900">
+                                                            {comparisonBreakdown.surgeries.pendingOrRejectedManualSurgeries.length} cirugía(s) manuales sin aprobación (liquidadas en $0):
+                                                        </p>
+                                                    </div>
+                                                    <div className="overflow-x-auto bg-white rounded-lg border border-amber-200">
+                                                        <table className="w-full text-[11px]">
+                                                            <thead className="bg-amber-100/60 text-amber-900 font-bold uppercase text-[9px] border-b border-amber-200">
+                                                                <tr>
+                                                                    <th className="p-2 text-left">Fecha</th>
+                                                                    <th className="p-2 text-left">Paciente</th>
+                                                                    <th className="p-2 text-left">Procedimiento</th>
+                                                                    <th className="p-2 text-right">Estado Manual</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-amber-100 font-medium">
+                                                                {comparisonBreakdown.surgeries.pendingOrRejectedManualSurgeries.map((s, idx) => (
+                                                                    <tr key={s.id || idx} className="hover:bg-amber-50/40">
+                                                                        <td className="p-2 font-mono whitespace-nowrap">
+                                                                            {new Date(`${s.date}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}
+                                                                        </td>
+                                                                        <td className="p-2 font-semibold text-slate-800">{s.patient}</td>
+                                                                        <td className="p-2 text-slate-600 max-w-[200px] truncate" title={s.procedureText || s.procedure}>
+                                                                            {s.procedureText || s.procedure}
+                                                                        </td>
+                                                                        <td className="p-2 text-right font-bold text-amber-800 uppercase text-[10px]">
+                                                                            {s.manualStatus === 'rejected' ? 'Rechazada ($0)' : 'Pendiente de aprobación ($0)'}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Si no hubo cirugías afectadas por falta de fichada ni agregadas ni eliminadas */}
+                                            {comparisonBreakdown.surgeries.missingAttendanceSurgeries.length === 0 &&
+                                             comparisonBreakdown.surgeries.addedSurgeries.length === 0 &&
+                                             comparisonBreakdown.surgeries.removedSurgeries.length === 0 &&
+                                             comparisonBreakdown.surgeries.pendingOrRejectedManualSurgeries.length === 0 && (
+                                                <p className="text-xs text-slate-500 italic p-2 text-center">
+                                                    No se registran cambios individuales en el listado de cirugías computadas.
+                                                </p>
+                                            )}
+                                        </td>
+                                    </tr>
+                                )}
+
                                 {/* Guardias */}
-                                <tr className="hover:bg-slate-50/50">
-                                    <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
-                                        <span className="size-2 rounded-full bg-emerald-500"></span>
-                                        Guardias Cubiertas
-                                        <span className="text-[10px] text-slate-400 font-normal">
-                                            ({signedSnapshot?.guardsDaysCount !== undefined ? `${signedSnapshot.guardsDaysCount.toFixed(2)}d` : '-'} vs {guardsReport.daysCount.toFixed(2)}d)
+                                <tr 
+                                    onClick={() => setExpandedDiffConcept(expandedDiffConcept === 'guards' ? null : 'guards')}
+                                    className="hover:bg-amber-50/50 cursor-pointer transition-colors group select-none"
+                                    title="Haga clic para ver el desglose detallado de días y turnos de guardia"
+                                >
+                                    <td className="p-3 font-bold text-slate-800 flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="size-2 rounded-full bg-emerald-500"></span>
+                                            <span>Guardias Cubiertas</span>
+                                            <span className="text-[10px] text-slate-400 font-normal">
+                                                ({signedSnapshot?.guardsDaysCount !== undefined ? `${signedSnapshot.guardsDaysCount.toFixed(2)}d` : '-'} vs {guardsReport.daysCount.toFixed(2)}d)
+                                            </span>
+                                        </div>
+                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-50 group-hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors">
+                                            {expandedDiffConcept === 'guards' ? 'Ocultar detalle' : 'Ver detalle'}
+                                            <span className="material-symbols-outlined text-sm">
+                                                {expandedDiffConcept === 'guards' ? 'expand_less' : 'expand_more'}
+                                            </span>
                                         </span>
                                     </td>
                                     <td className="p-3 text-right font-mono font-semibold text-slate-600 bg-slate-50/70 border-x border-slate-200">
@@ -4769,13 +5160,98 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                     </td>
                                 </tr>
 
+                                {/* Subfila Expandida: Detalle de Guardias */}
+                                {expandedDiffConcept === 'guards' && comparisonBreakdown && (
+                                    <tr className="bg-slate-50/90 border-t border-b border-emerald-100 animate-fadeIn">
+                                        <td colSpan={4} className="p-4 space-y-3">
+                                            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-emerald-600 text-lg">hotel</span>
+                                                    <h5 className="font-bold text-slate-900 text-xs uppercase tracking-tight">
+                                                        Detalle de Variaciones en Guardias
+                                                    </h5>
+                                                </div>
+                                                <span className="text-[11px] font-mono font-bold text-slate-500">
+                                                    Diferencia Total: {comparisonBreakdown.guards.amountDiff > 0 ? `+$${formatCurrency(comparisonBreakdown.guards.amountDiff)}` : comparisonBreakdown.guards.amountDiff < 0 ? `-$${formatCurrency(Math.abs(comparisonBreakdown.guards.amountDiff))}` : '$0,00'}
+                                                </span>
+                                            </div>
+
+                                            {comparisonBreakdown.guards.amountDiff === 0 ? (
+                                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start gap-2.5">
+                                                    <span className="material-symbols-outlined text-emerald-600 text-xl shrink-0">check_circle</span>
+                                                    <div className="text-xs">
+                                                        <p className="font-bold text-emerald-900">
+                                                            Sin variaciones en guardias respecto a la versión firmada
+                                                        </p>
+                                                        <p className="text-emerald-700 text-[11px] mt-0.5">
+                                                            Se mantienen exactamente {comparisonBreakdown.guards.currentDays.toFixed(2)} días computados (${formatCurrency(comparisonBreakdown.guards.currentAmount)}).
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                                                    <div className="flex items-center gap-2 text-xs">
+                                                        <span className="material-symbols-outlined text-amber-600 text-lg">published_with_changes</span>
+                                                        <p className="font-bold text-amber-900">
+                                                            Variación de {comparisonBreakdown.guards.daysDiff > 0 ? `+${comparisonBreakdown.guards.daysDiff.toFixed(2)}` : `${comparisonBreakdown.guards.daysDiff.toFixed(2)}`} días en guardias
+                                                        </p>
+                                                    </div>
+                                                    <p className="text-amber-800 text-[11px]">
+                                                        Versión firmada: {comparisonBreakdown.guards.signedDays.toFixed(2)} días (${formatCurrency(comparisonBreakdown.guards.signedAmount)}) ➔ Versión actual: {comparisonBreakdown.guards.currentDays.toFixed(2)} días (${formatCurrency(comparisonBreakdown.guards.currentAmount)}).
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            {/* Desglose de componentes de guardia */}
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                                                <div className="bg-white border border-slate-200 rounded-lg p-2 text-center">
+                                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Días Hábiles</span>
+                                                    <span className="font-mono font-bold text-slate-800">
+                                                        {comparisonBreakdown.guards.weeksDetail.reduce((a, b) => a + b.equiv, 0).toFixed(2)} d
+                                                    </span>
+                                                </div>
+                                                <div className="bg-white border border-slate-200 rounded-lg p-2 text-center">
+                                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Fines de Semana</span>
+                                                    <span className="font-mono font-bold text-slate-800">
+                                                        {comparisonBreakdown.guards.weekendDaysCount} d
+                                                    </span>
+                                                </div>
+                                                <div className="bg-white border border-slate-200 rounded-lg p-2 text-center">
+                                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Feriados</span>
+                                                    <span className="font-mono font-bold text-slate-800">
+                                                        {comparisonBreakdown.guards.holidaysCount} d
+                                                    </span>
+                                                </div>
+                                                <div className="bg-white border border-slate-200 rounded-lg p-2 text-center">
+                                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Tarifa por Día</span>
+                                                    <span className="font-mono font-bold text-emerald-700">
+                                                        ${formatCurrency(comparisonBreakdown.guards.guardRate)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+
                                 {/* Asistencia / Horas Fichadas */}
-                                <tr className="hover:bg-slate-50/50">
-                                    <td className="p-3 font-bold text-slate-800 flex items-center gap-2">
-                                        <span className="size-2 rounded-full bg-blue-500"></span>
-                                        Asistencia (Horas de Turno)
-                                        <span className="text-[10px] text-slate-400 font-normal">
-                                            ({signedSnapshot?.attendanceHours !== undefined ? `${signedSnapshot.attendanceHours.toFixed(1)}h` : '-'} vs {attendanceHoursReport.totalHours.toFixed(1)}h)
+                                <tr 
+                                    onClick={() => setExpandedDiffConcept(expandedDiffConcept === 'attendance' ? null : 'attendance')}
+                                    className="hover:bg-amber-50/50 cursor-pointer transition-colors group select-none"
+                                    title="Haga clic para ver el desglose detallado de horas y marcas de asistencia"
+                                >
+                                    <td className="p-3 font-bold text-slate-800 flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="size-2 rounded-full bg-blue-500"></span>
+                                            <span>Asistencia (Horas de Turno)</span>
+                                            <span className="text-[10px] text-slate-400 font-normal">
+                                                ({signedSnapshot?.attendanceHours !== undefined ? `${signedSnapshot.attendanceHours.toFixed(1)}h` : '-'} vs {attendanceHoursReport.totalHours.toFixed(1)}h)
+                                            </span>
+                                        </div>
+                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-blue-50 group-hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors">
+                                            {expandedDiffConcept === 'attendance' ? 'Ocultar detalle' : 'Ver detalle'}
+                                            <span className="material-symbols-outlined text-sm">
+                                                {expandedDiffConcept === 'attendance' ? 'expand_less' : 'expand_more'}
+                                            </span>
                                         </span>
                                     </td>
                                     <td className="p-3 text-right font-mono font-semibold text-slate-600 bg-slate-50/70 border-x border-slate-200">
@@ -4797,6 +5273,79 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                         })()}
                                     </td>
                                 </tr>
+
+                                {/* Subfila Expandida: Detalle de Asistencia */}
+                                {expandedDiffConcept === 'attendance' && comparisonBreakdown && (
+                                    <tr className="bg-slate-50/90 border-t border-b border-blue-100 animate-fadeIn">
+                                        <td colSpan={4} className="p-4 space-y-3">
+                                            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-blue-600 text-lg">schedule</span>
+                                                    <h5 className="font-bold text-slate-900 text-xs uppercase tracking-tight">
+                                                        Detalle de Variaciones en Horas de Asistencia
+                                                    </h5>
+                                                </div>
+                                                <span className="text-[11px] font-mono font-bold text-slate-500">
+                                                    Diferencia Total: {comparisonBreakdown.attendance.amountDiff > 0 ? `+$${formatCurrency(comparisonBreakdown.attendance.amountDiff)}` : comparisonBreakdown.attendance.amountDiff < 0 ? `-$${formatCurrency(Math.abs(comparisonBreakdown.attendance.amountDiff))}` : '$0,00'}
+                                                </span>
+                                            </div>
+
+                                            {comparisonBreakdown.attendance.amountDiff === 0 ? (
+                                                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2.5">
+                                                    <span className="material-symbols-outlined text-blue-600 text-xl shrink-0">check_circle</span>
+                                                    <div className="text-xs">
+                                                        <p className="font-bold text-blue-900">
+                                                            Sin variaciones en horas de fichada respecto a la versión firmada
+                                                        </p>
+                                                        <p className="text-blue-700 text-[11px] mt-0.5">
+                                                            Se mantienen {comparisonBreakdown.attendance.currentHours.toFixed(1)} horas computadas (${formatCurrency(comparisonBreakdown.attendance.currentAmount)}).
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+                                                    <div className="flex items-center gap-2 text-xs">
+                                                        <span className="material-symbols-outlined text-amber-600 text-lg">schedule</span>
+                                                        <p className="font-bold text-amber-900">
+                                                            Variación de {comparisonBreakdown.attendance.hoursDiff > 0 ? `+${comparisonBreakdown.attendance.hoursDiff.toFixed(1)}` : `${comparisonBreakdown.attendance.hoursDiff.toFixed(1)}`} horas fichadas
+                                                        </p>
+                                                    </div>
+                                                    <p className="text-amber-800 text-[11px]">
+                                                        Versión firmada: {comparisonBreakdown.attendance.signedHours.toFixed(1)} hs (${formatCurrency(comparisonBreakdown.attendance.signedAmount)}) ➔ Versión actual: {comparisonBreakdown.attendance.currentHours.toFixed(1)} hs (${formatCurrency(comparisonBreakdown.attendance.currentAmount)}).
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            {/* Desglose de componentes de asistencia */}
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                                                <div className="bg-white border border-slate-200 rounded-lg p-2 text-center">
+                                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Horas Totales</span>
+                                                    <span className="font-mono font-bold text-slate-800">
+                                                        {comparisonBreakdown.attendance.currentHours.toFixed(1)} hs
+                                                    </span>
+                                                </div>
+                                                <div className="bg-white border border-slate-200 rounded-lg p-2 text-center">
+                                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Días Registrados</span>
+                                                    <span className="font-mono font-bold text-slate-800">
+                                                        {comparisonBreakdown.attendance.totalDaysRecorded} días
+                                                    </span>
+                                                </div>
+                                                <div className="bg-white border border-slate-200 rounded-lg p-2 text-center">
+                                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Ciclos Abiertos</span>
+                                                    <span className={`font-mono font-bold ${comparisonBreakdown.attendance.openDaysCount > 0 ? 'text-amber-600' : 'text-slate-800'}`}>
+                                                        {comparisonBreakdown.attendance.openDaysCount} días
+                                                    </span>
+                                                </div>
+                                                <div className="bg-white border border-slate-200 rounded-lg p-2 text-center">
+                                                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Tarifa por Hora</span>
+                                                    <span className="font-mono font-bold text-blue-700">
+                                                        ${formatCurrency(comparisonBreakdown.attendance.hourRate)}/h
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
                             </tbody>
                             <tfoot className="bg-slate-100 font-black border-t-2 border-slate-300">
                                 <tr>
