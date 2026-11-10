@@ -270,6 +270,40 @@ export const PatientSection: React.FC<PatientSectionProps> = ({
 }) => {
     const isCoverageReadOnly = isReadOnly || (canEditField && !canEditField('obra_social')) || currentUserRole === 'Ortopedia';
     const [isOpeningPortal, setIsOpeningPortal] = React.useState(false);
+    const [existingPatientFound, setExistingPatientFound] = React.useState<any | null>(null);
+    const [isCheckingDni, setIsCheckingDni] = React.useState(false);
+
+    // Detección automática en vivo de paciente existente al ingresar 7 u 8 dígitos de DNI
+    React.useEffect(() => {
+        const clean = documentNumber ? documentNumber.replace(/\D/g, '').trim() : '';
+        if (!isNew || !clean || clean.length < 7) {
+            setExistingPatientFound(null);
+            return;
+        }
+
+        const timer = setTimeout(async () => {
+            try {
+                setIsCheckingDni(true);
+                const { data, error } = await supabase
+                    .from('patients')
+                    .select('*')
+                    .eq('document_number', clean)
+                    .maybeSingle();
+
+                if (!error && data && data.full_name?.toLowerCase().trim() !== patientName?.toLowerCase().trim()) {
+                    setExistingPatientFound(data);
+                } else {
+                    setExistingPatientFound(null);
+                }
+            } catch (err) {
+                console.error("Error verificando DNI existente:", err);
+            } finally {
+                setIsCheckingDni(false);
+            }
+        }, 400);
+
+        return () => clearTimeout(timer);
+    }, [documentNumber, isNew, patientName]);
 
     const handleOpenOserPortal = async () => {
         if (!nuc || isOpeningPortal) return;
@@ -406,15 +440,63 @@ export const PatientSection: React.FC<PatientSectionProps> = ({
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1.5">DNI</label>
-                        <input
-                            className="w-full rounded border border-slate-200 bg-slate-50 text-slate-900 focus:border-primary focus:ring-1 focus:ring-primary text-sm px-3 py-2"
-                            type="text"
-                            value={documentNumber}
-                            onChange={(e) => onDocumentNumberChange(e.target.value)}
-                            placeholder="Nº Documento"
-                            disabled={isReadOnly || currentUserRole === 'Ortopedia'}
-                        />
+                        <div className="flex justify-between items-center mb-1.5">
+                            <label className="block text-xs font-semibold text-slate-500">DNI</label>
+                            {documentNumber && documentNumber.replace(/\D/g, '').length >= 7 && (
+                                <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5">
+                                    <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                                    {Number(documentNumber.replace(/\D/g, '')).toLocaleString('es-AR')}
+                                </span>
+                            )}
+                        </div>
+                        <div className="relative">
+                            <input
+                                className={`w-full rounded border text-sm px-3 py-2 transition-all font-mono font-medium ${
+                                    documentNumber && documentNumber.replace(/\D/g, '').length > 0 && documentNumber.replace(/\D/g, '').length < 7
+                                        ? 'border-amber-400 bg-amber-50/40 text-slate-900 focus:border-amber-500 focus:ring-amber-500'
+                                        : 'border-slate-200 bg-slate-50 text-slate-900 focus:border-primary focus:ring-1 focus:ring-primary'
+                                }`}
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={8}
+                                value={documentNumber}
+                                onChange={(e) => {
+                                    const clean = e.target.value.replace(/\D/g, '').slice(0, 8);
+                                    onDocumentNumberChange(clean);
+                                }}
+                                placeholder="Ej: 25033591"
+                                disabled={isReadOnly || currentUserRole === 'Ortopedia'}
+                            />
+                            {isCheckingDni && (
+                                <div className="absolute right-3 top-2.5">
+                                    <div className="size-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+                                </div>
+                            )}
+                        </div>
+                        {documentNumber && documentNumber.replace(/\D/g, '').length > 0 && documentNumber.replace(/\D/g, '').length < 7 && (
+                            <p className="text-[10px] text-amber-600 font-bold mt-1 flex items-center gap-0.5">
+                                <span className="material-symbols-outlined text-[12px]">warning</span>
+                                Incompleto: 7 u 8 dígitos (faltan {7 - documentNumber.replace(/\D/g, '').length})
+                            </p>
+                        )}
+                        {existingPatientFound && isNew && (
+                            <div className="mt-2 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center justify-between text-xs animate-in fade-in duration-200 shadow-sm">
+                                <div className="pr-2">
+                                    <p className="font-bold text-indigo-950 uppercase text-[11px] leading-tight">{existingPatientFound.full_name}</p>
+                                    <p className="text-[10px] text-indigo-600 font-medium">Paciente ya registrado en el sistema</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        onSelectPatient(existingPatientFound);
+                                        setExistingPatientFound(null);
+                                    }}
+                                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-[10px] shadow-sm transition-all whitespace-nowrap"
+                                >
+                                    Cargar Datos
+                                </button>
+                            </div>
+                        )}
                     </div>
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 mb-1.5">Sexo</label>

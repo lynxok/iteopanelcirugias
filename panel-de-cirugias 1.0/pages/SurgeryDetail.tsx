@@ -183,6 +183,45 @@ export const SurgeryDetail: React.FC = () => {
     } = useSurgeryDetail({ id, user, navigationState });
 
     const [showComparison, setShowComparison] = React.useState(false);
+    const [showPatientValidationModal, setShowPatientValidationModal] = React.useState(false);
+
+    const handleSaveButtonClick = () => {
+        if (isNew) {
+            // Validaciones previas obligatorias antes de abrir el modal de confirmación
+            if (!patientName || !patientName.trim()) {
+                alert('Por favor complete el nombre del paciente antes de continuar.');
+                patientInputRef.current?.focus();
+                return;
+            }
+
+            const cleanDni = documentNumber ? documentNumber.replace(/\D/g, '').trim() : '';
+            if (!cleanDni) {
+                alert('El DNI del paciente es obligatorio.');
+                return;
+            }
+            if (cleanDni.length < 6 || cleanDni.length > 8) {
+                alert(`⚠️ Ingrese un DNI válido (entre 7 y 8 dígitos numéricos). Actual: ${cleanDni}`);
+                return;
+            }
+
+            const hasValidProcedure = selectedProcedures.length > 0 || 
+                (procedureInput && (
+                    procedureInput.toLowerCase().includes('a definir') ||
+                    procedureInput.includes('00.00.00') ||
+                    procedureInput.includes('000000')
+                ));
+
+            if (!hasValidProcedure) {
+                alert('Por favor complete al menos un procedimiento o código antes de guardar.');
+                return;
+            }
+
+            // Mostrar el pop-up de validación activa con el paciente
+            setShowPatientValidationModal(true);
+        } else {
+            handleSurgerySave();
+        }
+    };
 
     const translateStatus = (s: string) => {
         switch (s) {
@@ -590,7 +629,7 @@ export const SurgeryDetail: React.FC = () => {
                         )}
                         {!isReadOnly && (
                             <button
-                                onClick={handleSurgerySave}
+                                onClick={handleSaveButtonClick}
                                 disabled={saving}
                                 className={`px-6 py-2 rounded text-white font-bold text-sm shadow-sm transition-all flex items-center gap-2 ${priority === 'emergency' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary-hover'} ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
@@ -1071,6 +1110,133 @@ export const SurgeryDetail: React.FC = () => {
                                     Cerrar y Editar
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE VALIDACIÓN ACTIVA DE DATOS DEL PACIENTE (SOLO AL CREAR NUEVA CIRUGÍA) */}
+            {showPatientValidationModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden border border-slate-200 flex flex-col">
+                        {/* Cabecera */}
+                        <div className="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="size-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                                    <span className="material-symbols-outlined text-2xl">verified_user</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black text-white">Validación de Datos del Paciente</h3>
+                                    <p className="text-xs text-indigo-200 font-medium">Confirme en voz alta estos datos con el paciente antes de ingresar la cirugía:</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowPatientValidationModal(false)}
+                                className="text-white/60 hover:text-white transition-colors"
+                            >
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+
+                        {/* Cuerpo con datos estructurados */}
+                        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            {/* Tarjeta principal Paciente & DNI */}
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                                <div className="flex items-start justify-between border-b border-slate-200/80 pb-3">
+                                    <div>
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Nombre del Paciente</span>
+                                        <span className="text-base font-black text-slate-900 uppercase">{patientName}</span>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">DNI</span>
+                                        <span className="inline-flex items-center gap-1 text-base font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200 font-mono">
+                                            <span className="material-symbols-outlined text-sm text-indigo-600">badge</span>
+                                            {Number(documentNumber?.replace(/\D/g, '') || 0).toLocaleString('es-AR')}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs pt-1">
+                                    <div>
+                                        <span className="font-bold text-slate-400 block text-[10px] uppercase">F. Nacimiento / Edad</span>
+                                        <span className="font-semibold text-slate-800">
+                                            {birthDate ? new Date(birthDate + 'T12:00:00').toLocaleDateString('es-AR') : 'Sin fecha'} 
+                                            {patientAge !== null ? ` (${patientAge} años)` : ''}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="font-bold text-slate-400 block text-[10px] uppercase">Sexo</span>
+                                        <span className="font-semibold text-slate-800">
+                                            {sexo === 'M' ? 'Masculino' : sexo === 'F' ? 'Femenino' : 'No especificado'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="font-bold text-slate-400 block text-[10px] uppercase">Teléfono</span>
+                                        <span className="font-semibold text-slate-800">{phone || 'Sin registrar'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="font-bold text-slate-400 block text-[10px] uppercase">Historia Clínica</span>
+                                        <span className="font-semibold text-slate-800">{medicalRecordNumber || 'N/A'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="font-bold text-slate-400 block text-[10px] uppercase">NUC (Carpeta)</span>
+                                        <span className="font-semibold text-slate-800">{nuc || 'Pendiente'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="font-bold text-slate-400 block text-[10px] uppercase">Localidad</span>
+                                        <span className="font-semibold text-slate-800">{locality || 'No especificada'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Tarjeta Cobertura y Práctica */}
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5 text-xs">
+                                <div className="flex justify-between items-center border-b border-slate-200/80 pb-2">
+                                    <span className="font-bold text-slate-500 uppercase text-[10px]">Obra Social / ART</span>
+                                    <span className="font-black text-slate-900 uppercase">{medicalCoverage || 'Particular / Sin cobertura'}</span>
+                                </div>
+                                <div className="pt-1">
+                                    <span className="font-bold text-slate-500 uppercase text-[10px] block mb-0.5">Procedimiento / Práctica</span>
+                                    <span className="font-bold text-slate-800 block text-xs">
+                                        {selectedProcedures.length > 0 ? selectedProcedures.join(' + ') : procedureInput || 'A definir'}
+                                    </span>
+                                </div>
+                                {selectedDoctorId && (
+                                    <div className="pt-1 border-t border-slate-200/80">
+                                        <span className="font-bold text-slate-500 uppercase text-[10px] block mb-0.5">Cirujano</span>
+                                        <span className="font-semibold text-slate-800 block">
+                                            {doctors.find(d => String(d.id) === String(selectedDoctorId))?.full_name || 'Sin asignar'}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2 text-xs text-amber-800">
+                                <span className="material-symbols-outlined text-amber-600 text-lg flex-shrink-0">info</span>
+                                <p>Al confirmar, se creará el registro clínico oficial y se notificará a los sectores correspondientes.</p>
+                            </div>
+                        </div>
+
+                        {/* Pie con acciones */}
+                        <div className="p-4 bg-slate-100 border-t border-slate-200 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowPatientValidationModal(false)}
+                                className="px-5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors"
+                            >
+                                Volver a Corregir
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowPatientValidationModal(false);
+                                    handleSurgerySave();
+                                }}
+                                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5 active:scale-95"
+                            >
+                                <span className="material-symbols-outlined text-sm">check_circle</span>
+                                Datos Validados - Crear Solicitud
+                            </button>
                         </div>
                     </div>
                 </div>

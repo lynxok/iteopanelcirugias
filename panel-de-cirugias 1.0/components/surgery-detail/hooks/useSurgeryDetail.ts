@@ -797,10 +797,17 @@ export const useSurgeryDetail = ({ id, user, navigationState }: UseSurgeryDetail
         isSavingRef.current = true;
         setSaving(true);
         try {
-            const cleanDni = documentNumber?.trim();
+            const cleanDni = documentNumber ? documentNumber.replace(/\D/g, '').trim() : '';
             if (!cleanDni) {
-                alert('El DNI es obligatorio.');
+                alert('El DNI del paciente es obligatorio.');
                 setSaving(false);
+                isSavingRef.current = false;
+                return;
+            }
+            if (cleanDni.length < 6 || cleanDni.length > 8) {
+                alert(`⚠️ El DNI ingresado (${cleanDni}) no es válido. Debe contener entre 7 y 8 dígitos numéricos.`);
+                setSaving(false);
+                isSavingRef.current = false;
                 return;
             }
 
