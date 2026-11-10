@@ -238,23 +238,51 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
 
                 const res = await triggerGlobalappSync(surgery.id, 'arco_en_c_only', false, overrides);
                 if (res?.success) {
-                    setArcoEnCSynced(true);
-                    setArcoEnCStatusMsg('Cargado en GlobalApp (PAC)');
+                    if (res.delegated) {
+                        setArcoEnCStatusMsg('Enviado a PC Quirófano...');
+                    } else {
+                        setArcoEnCSynced(true);
+                        setArcoEnCStatusMsg('Cargado en GlobalApp (PAC)');
+                        await supabase
+                            .from('surgery_forms')
+                            .upsert({
+                                surgery_id: surgery.id,
+                                arco_en_c: true,
+                                arco_en_c_synced: true,
+                                updated_at: new Date().toISOString()
+                            }, { onConflict: 'surgery_id' });
+                        setTimeout(() => setArcoEnCStatusMsg(null), 4000);
+                    }
+                } else {
+                    const errMsg = res?.error || (res as any)?.warning || 'No se pudo sincronizar la práctica en GlobalApp.';
+                    setArcoEnC(false);
+                    setArcoEnCSynced(false);
+                    setArcoEnCStatusMsg('No cargado en GlobalApp');
                     await supabase
                         .from('surgery_forms')
                         .upsert({
                             surgery_id: surgery.id,
-                            arco_en_c: true,
-                            arco_en_c_synced: true,
+                            arco_en_c: false,
+                            arco_en_c_synced: false,
                             updated_at: new Date().toISOString()
                         }, { onConflict: 'surgery_id' });
-                    setTimeout(() => setArcoEnCStatusMsg(null), 4000);
-                } else {
-                    setArcoEnCStatusMsg(res?.error || 'Aviso en GlobalApp');
+                    alert(`⚠️ GlobalApp - Arco en C:\n\n${errMsg}\n\nEl tilde de Arco en C ha sido cancelado.`);
                 }
             } catch (err: any) {
                 console.error('[ArcoEnC] Error al sincronizar:', err);
+                const errMsg = err?.message || 'Error de conexión con GlobalApp';
+                setArcoEnC(false);
+                setArcoEnCSynced(false);
                 setArcoEnCStatusMsg('Error de conexión');
+                await supabase
+                    .from('surgery_forms')
+                    .upsert({
+                        surgery_id: surgery.id,
+                        arco_en_c: false,
+                        arco_en_c_synced: false,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'surgery_id' });
+                alert(`⚠️ GlobalApp - Arco en C:\n\n${errMsg}\n\nEl tilde de Arco en C ha sido cancelado.`);
             }
         }, 5000);
     };
@@ -265,6 +293,43 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
             if (arcoEnCIntervalRef.current) clearInterval(arcoEnCIntervalRef.current);
         };
     }, []);
+
+    // Escuchar respuestas de sincronización de Globalapp emitidas por la PC de Quirófano (para Tablets/Web)
+    useEffect(() => {
+        const channel = supabase.channel(`globalapp-sync-listener-${surgery.id}-${Math.random()}`);
+        channel
+            .on('broadcast', { event: 'GLOBALAPP_SYNC_RESULT' }, (msg: any) => {
+                const { surgeryId, action, result } = msg?.payload || {};
+                if (surgeryId !== surgery.id) return;
+
+                if (action === 'arco_en_c_only') {
+                    if (result?.success) {
+                        setArcoEnCSynced(true);
+                        setArcoEnCStatusMsg('Cargado en GlobalApp (PAC)');
+                        setTimeout(() => setArcoEnCStatusMsg(null), 4000);
+                    } else {
+                        const errMsg = result?.error || result?.warning || 'No se pudo sincronizar la práctica en GlobalApp.';
+                        setArcoEnC(false);
+                        setArcoEnCSynced(false);
+                        setArcoEnCStatusMsg('No cargado en GlobalApp');
+                        alert(`⚠️ GlobalApp (PC Quirófano) - Arco en C:\n\n${errMsg}\n\nEl tilde de Arco en C ha sido cancelado.`);
+                    }
+                } else if (action === 'arco_en_c_revert') {
+                    if (result?.success) {
+                        setArcoEnCSynced(false);
+                        setArcoEnCStatusMsg('Arco en C eliminado de GlobalApp');
+                        setTimeout(() => setArcoEnCStatusMsg(null), 4000);
+                    } else {
+                        setArcoEnCStatusMsg(result?.error || 'Aviso al revertir en GlobalApp');
+                    }
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [surgery.id]);
 
     // Items States
     const [items, setItems] = useState<FormItem[]>([]);
@@ -897,8 +962,13 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                     if (res && !res.success && res.error) {
                         alert(`⚠️ Aviso Globalapp:\n${res.error}\n\n(La Ficha Quirúrgica se guardó normalmente en el Panel de Cirugías).`);
                     } else if (res && res.success) {
-                        if (arcoEnC && !arcoEnCSynced) setArcoEnCSynced(true);
-                        else if (!arcoEnC && arcoEnCSynced) setArcoEnCSynced(false);
+                        if ((res as any).arcoEnCResult && !(res as any).arcoEnCResult.success) {
+                            alert(`⚠️ Aviso Arco en C en GlobalApp:\n${(res as any).arcoEnCResult.error}\n\n(La cirugía se sincronizó pero la práctica de Arco en C no se pudo cargar).`);
+                        } else if (arcoEnC && !arcoEnCSynced) {
+                            setArcoEnCSynced(true);
+                        } else if (!arcoEnC && arcoEnCSynced) {
+                            setArcoEnCSynced(false);
+                        }
                     }
                 })
                 .catch(err => console.error('[GlobalappSync] Error al sincronizar desde Ficha Técnica:', err));

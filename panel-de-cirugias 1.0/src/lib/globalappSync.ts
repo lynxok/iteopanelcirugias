@@ -181,9 +181,26 @@ export async function triggerGlobalappSync(
                             arco_en_c_synced: true,
                             updated_at: new Date().toISOString()
                         }, { onConflict: 'surgery_id' });
+                } else {
+                    await supabase
+                        .from('surgery_forms')
+                        .upsert({
+                            surgery_id: surgeryId,
+                            arco_en_c: false,
+                            arco_en_c_synced: false,
+                            updated_at: new Date().toISOString()
+                        }, { onConflict: 'surgery_id' });
                 }
                 return res;
             } catch (err: any) {
+                await supabase
+                    .from('surgery_forms')
+                    .upsert({
+                        surgery_id: surgeryId,
+                        arco_en_c: false,
+                        arco_en_c_synced: false,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'surgery_id' });
                 return { success: false, error: err.message };
             }
         }

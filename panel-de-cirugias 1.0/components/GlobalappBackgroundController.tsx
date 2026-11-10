@@ -58,6 +58,33 @@ export const GlobalappBackgroundController: React.FC = () => {
                                     updated_at: new Date().toISOString()
                                 }, { onConflict: 'surgery_id' });
                         }
+                    } else {
+                        if (syncPayload.action === 'arco_en_c_only') {
+                            await supabase
+                                .from('surgery_forms')
+                                .upsert({
+                                    surgery_id: syncPayload.surgeryId,
+                                    arco_en_c: false,
+                                    arco_en_c_synced: false,
+                                    updated_at: new Date().toISOString()
+                                }, { onConflict: 'surgery_id' });
+                        }
+                    }
+
+                    // Retransmitir resultado a tablets/clientes conectados
+                    try {
+                        await channel.send({
+                            type: 'broadcast',
+                            event: 'GLOBALAPP_SYNC_RESULT',
+                            payload: {
+                                requestId,
+                                surgeryId: syncPayload.surgeryId,
+                                action: syncPayload.action,
+                                result: res
+                            }
+                        });
+                    } catch (bErr) {
+                        console.error('[GlobalappBridge] Error broadcasting resultado:', bErr);
                     }
 
                     await supabase.from('audit_logs').insert({

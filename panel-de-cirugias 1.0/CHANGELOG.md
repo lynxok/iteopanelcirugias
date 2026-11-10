@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## v3.13.35 (2026-11-10)
+- **Validación Estricta de Identidad y Doble Factor en GlobalApp (`globalapp_scraper.py`, `SurgeryForm.tsx`, `globalappSync.ts`)**:
+    * **Doble Chequeo Clínico (DNI Exacto + Nombre/Apellido)**:
+        - Match numérico estricto con límite de frontera (`rf'(?<!\d){clean_dni}(?!\d)'`), normalizando puntos o comas (`34.123.456` $\rightarrow$ `34123456`).
+        - Validación por intersección de tokens de nombre y apellido: tolera omisión de segundos nombres o inversión de orden, pero bloquea inmediatamente si el DNI pertenece a otra persona en GlobalApp.
+    * **Protección al Crear y Buscar Cirugía (`Quirófanos`)**:
+        - Eliminado fallback por coincidencia laxa de nombre; si no hay coincidencia exacta del paciente en el padrón de GlobalApp, se aborta y alerta al usuario sin tocar ninguna ficha.
+    * **Carga y Reversión Segura de Arco en C (`Internaciones`)**:
+        - Inspección celda por celda en la grilla de internaciones; se interactúa únicamente con el botón "Prestaciones" de la fila con match exacto de DNI y apellido.
+        - Notificación modal emergente (`alert`) ante fallos o discrepancias, cancelando el checkbox y asegurando persistencia de `arco_en_c: false, arco_en_c_synced: false`.
+    * **Puente Bidireccional Tablet ◄► PC de Quirófano**:
+        - El controlador de fondo en Electron retransmite el evento `GLOBALAPP_SYNC_RESULT` por Supabase Broadcast para actualizar el estado y notificar en vivo a tablets y clientes web.
+
+## v3.13.34 (2026-11-10)
+- **Validación Activa de DNI y Read-Back en Admisión de Cirugías**:
+    * Input sanitizado (solo dígitos, formato visual con miles, semáforo en tiempo real).
+    * Detección reactiva de paciente existente en base de datos con autocompletado para evitar duplicados.
+    * Modal de confirmación activa de identidad del paciente antes de crear la solicitud.
+
 ## v3.13.33 (2026-11-06)
 - **Restricción de Ventana de Firma Digital de Técnicos (`TecnicoPanel.tsx`)**:
     * **Apertura a partir del 1° Día Hábil del Mes Siguiente**: La emisión de conformidad (firma) para un período liquidado solo se habilita a partir del primer día hábil del mes inmediatamente posterior (excluyendo fines de semana y feriados).

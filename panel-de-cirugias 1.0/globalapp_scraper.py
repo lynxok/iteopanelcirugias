@@ -76,6 +76,51 @@ def has_anatomia_patologica(val: str) -> bool:
         return False
     return True
 
+STOPWORDS = {"DE", "DEL", "LA", "LAS", "LOS", "SAN", "SANTA", "Y", "EL", "EN", "DA", "DO", "DI"}
+
+def extract_name_tokens(s: str) -> set:
+    """Extracts uppercase alphanumeric tokens (len >= 3) excluding common stop words."""
+    norm = normalize_str(s)
+    clean = re.sub(r'[^A-Z\s]', ' ', norm)
+    return {w for w in clean.split() if len(w) >= 3 and w not in STOPWORDS}
+
+def validate_patient_identity(dni_target: str, name_target: str, candidate_text: str) -> tuple:
+    """
+    Strict dual-check validation:
+    1. Exact DNI match with numeric boundaries (ignoring formatted dots/commas).
+    2. Surname/Name token intersection (subset matching) to prevent identity mismatch or typos.
+    Returns: (is_match: bool, reason: str, error_msg: str)
+      - is_match=True, reason='OK', error_msg=''
+      - is_match=False, reason='DISCREPANCY', error_msg='...' (DNI matched but name belongs to another person)
+      - is_match=False, reason='NO_DNI', error_msg='...'
+    """
+    clean_dni = re.sub(r'\D', '', str(dni_target or ''))
+    if not clean_dni:
+        return False, "NO_DNI", "No se proporcionó DNI objetivo para validar."
+
+    norm_cand = normalize_str(candidate_text)
+    # Strip dots/commas between digits so '34.123.456' -> '34123456'
+    norm_cand_clean_nums = re.sub(r'(?<=\d)[.,](?=\d)', '', norm_cand)
+
+    # 1. Exact DNI check with word/numeric boundary
+    if not re.search(rf'(?<!\d){re.escape(clean_dni)}(?!\d)', norm_cand_clean_nums):
+        return False, "NO_DNI", f"DNI {clean_dni} no coincide con el registro."
+
+    # 2. Token intersection check if name_target is provided
+    target_tokens = extract_name_tokens(name_target)
+    if not target_tokens:
+        return True, "OK", ""
+
+    cand_tokens = extract_name_tokens(norm_cand)
+    common = target_tokens.intersection(cand_tokens)
+    if common:
+        return True, "OK", ""
+
+    return False, "DISCREPANCY", (
+        f"Discrepancia de identidad: El DNI {clean_dni} fue hallado en GlobalApp pero figura para "
+        f"'{candidate_text.strip()}', mientras que en el Panel de Cirugías el paciente es '{name_target}'."
+    )
+
 def extract_search_tokens(person_name: str, license_number: str = "") -> list:
     """Returns ordered search candidates for Globalapp professional lookup (strictly license or surname)."""
     candidates = []
@@ -275,21 +320,27 @@ def find_existing_surgery_in_globalapp(page, dni: str, patient_name: str, surger
         search_box.fill(str(dni).strip())
         page.wait_for_timeout(1500)
 
-        # Click patient suggestion
-        patient_opt = page.locator("li, div, span").filter(has_text=f"{dni} -")
-        if patient_opt.count() == 0 and patient_name:
-            words = [normalize_str(w) for w in patient_name.split() if len(w) >= 3]
-            if words:
-                patient_opt = page.locator("li, div, span").filter(has_text=f"- {words[0]}")
+        # Click patient suggestion with strict double check (DNI + Name tokens)
+        matched_opt = None
+        discrepancy_err = None
+        suggestions = page.locator("li, div, span").filter(has_text="- ")
+        for i in range(min(suggestions.count(), 30)):
+            txt = suggestions.nth(i).inner_text().strip()
+            if "\n" in txt or len(txt) > 100:
+                continue
+            is_match, reason, msg = validate_patient_identity(dni, patient_name, txt)
+            if is_match:
+                matched_opt = suggestions.nth(i)
+                break
+            elif reason == "DISCREPANCY":
+                discrepancy_err = msg
 
-        if patient_opt.count() > 0:
-            # Click the most specific suggestion
-            for i in range(patient_opt.count()):
-                txt = patient_opt.nth(i).inner_text().strip()
-                if "\n" not in txt and "-" in txt and len(txt) < 80:
-                    patient_opt.nth(i).click()
-                    page.wait_for_timeout(400)
-                    break
+        if matched_opt:
+            matched_opt.click()
+            page.wait_for_timeout(400)
+        elif discrepancy_err:
+            log(f"[Globalapp] {discrepancy_err}")
+            return False
 
         # 2. Set Desde / Hasta dates via Flatpickr JS API (reliable across any month/year)
         target_iso = surgery_date[:10]
@@ -354,25 +405,37 @@ def create_new_surgery_in_globalapp(page, payload: dict) -> bool:
     page.get_by_role("button", name=" Agregar").click()
     page.wait_for_timeout(2000)
 
-    # 1. Search patient by DNI exclusively (with name fallback only if DNI empty)
+    # 1. Search patient by DNI exclusively with strict double check (DNI + Name tokens)
     search_term = dni if dni else patient_name
+    if not search_term:
+        raise RuntimeError("No se proporcionó DNI del paciente para dar de alta la cirugía en Globalapp.")
+
     pat_input = page.get_by_role("textbox").nth(1)
     pat_input.click()
     pat_input.fill(search_term)
     page.wait_for_timeout(1500)
 
-    clicked_pat = False
+    matched_pat = None
+    discrepancy_msg = None
     suggestions = page.locator("li, div, span").filter(has_text="- ")
     for i in range(min(suggestions.count(), 30)):
         txt = suggestions.nth(i).inner_text().strip()
-        if "\n" not in txt and len(txt) < 85 and (dni in txt or normalize_str(patient_name.split()[0]) in normalize_str(txt)):
-            suggestions.nth(i).click()
-            clicked_pat = True
-            page.wait_for_timeout(500)
+        if "\n" in txt or len(txt) > 100:
+            continue
+        is_match, reason, msg = validate_patient_identity(dni, patient_name, txt)
+        if is_match:
+            matched_pat = suggestions.nth(i)
             break
+        elif reason == "DISCREPANCY":
+            discrepancy_msg = msg
 
-    if not clicked_pat:
-        raise RuntimeError(f"No se encontró al paciente con DNI '{search_term}' en el padrón de Globalapp.")
+    if matched_pat:
+        matched_pat.click()
+        page.wait_for_timeout(500)
+    elif discrepancy_msg:
+        raise RuntimeError(discrepancy_msg)
+    else:
+        raise RuntimeError(f"No se encontró al paciente con DNI {dni} ({patient_name}) en el padrón de GlobalApp. Verifique si está registrado.")
 
     # 2. Select Quirófano (Quirófano 1 -> QUIROFANO)
     target_or = map_operating_room(or_name)
@@ -512,12 +575,13 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
     - Saves and executes PAC action on the practice.
     """
     dni = str(payload.get("patientDni", "")).strip()
+    patient_name = payload.get("patientName", "")
     if not dni:
         log("[Arco en C] No se proporcionó DNI del paciente para buscar internación.")
         return {"success": False, "error": "No se proporcionó DNI del paciente."}
 
     trigger_pac = bool(payload.get("triggerPac", False)) if "triggerPac" in payload else (payload.get("action") == "arco_en_c_only")
-    log(f"[Arco en C] Buscando internación para DNI {dni} en Globalapp (triggerPac: {trigger_pac})...")
+    log(f"[Arco en C] Buscando internación para DNI {dni} ({patient_name}) en Globalapp (triggerPac: {trigger_pac})...")
     try:
         # 1. Navegar al módulo Internaciones
         page.get_by_role("link", name="Internaciones").click()
@@ -553,12 +617,39 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         page.get_by_role("button", name=re.compile(r"Buscar")).click()
         page.wait_for_timeout(3000)
 
-        # 4. Localizar botón Prestaciones de la internación encontrada
-        prestac_btn = page.get_by_role("button", name=re.compile(r"Prestac", re.I))
-        if prestac_btn.count() == 0:
-            log(f"[Arco en C] No se encontró internación para el DNI {dni} en GlobalApp.")
-            return {"success": False, "warning": f"No se encontró internación activa en GlobalApp para el DNI {dni}."}
+        # 4. DOBLE CHEQUEO ESTRICTO DE LA FILA EN LA GRILLA (DNI EXACTO + NOMBRE)
+        rows = page.locator("tbody tr, .vs-table--tbody-table tbody tr, tr")
+        matching_row = None
+        discrepancy_error = None
 
+        for i in range(rows.count()):
+            row = rows.nth(i)
+            try:
+                row_text = row.inner_text().strip()
+            except Exception:
+                continue
+
+            if not row_text or "No hay datos" in row_text or "Buscar" in row_text:
+                continue
+
+            is_match, reason, msg = validate_patient_identity(dni, patient_name, row_text)
+            if is_match:
+                btn = row.get_by_role("button", name=re.compile(r"Prestac", re.I))
+                if btn.count() > 0:
+                    matching_row = row
+                    break
+            elif reason == "DISCREPANCY":
+                discrepancy_error = msg
+
+        if discrepancy_error and not matching_row:
+            log(f"[Arco en C] {discrepancy_error}")
+            return {"success": False, "error": discrepancy_error}
+
+        if not matching_row:
+            log(f"[Arco en C] No se encontró internación para el DNI {dni} ({patient_name}) en GlobalApp.")
+            return {"success": False, "error": f"No se encontró ninguna internación activa en GlobalApp para el DNI {dni} ({patient_name})."}
+
+        prestac_btn = matching_row.get_by_role("button", name=re.compile(r"Prestac", re.I))
         prestac_btn.first.click()
         page.wait_for_timeout(3000)
 
@@ -705,11 +796,12 @@ def revert_arco_en_c_in_internaciones(page, payload: dict) -> dict:
     - If 340907 is found, clicks Eliminar and confirms deletion.
     """
     dni = str(payload.get("patientDni", "")).strip()
+    patient_name = payload.get("patientName", "")
     if not dni:
         log("[Arco en C Revert] No se proporcionó DNI del paciente.")
         return {"success": False, "error": "No se proporcionó DNI del paciente."}
 
-    log(f"[Arco en C Revert] Buscando internación para DNI {dni} para eliminar práctica 340907...")
+    log(f"[Arco en C Revert] Buscando internación para DNI {dni} ({patient_name}) para eliminar práctica 340907...")
     try:
         # 1. Navegar a Internaciones
         page.get_by_role("link", name="Internaciones").click()
@@ -744,12 +836,39 @@ def revert_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         search_box.press("Enter")
         page.wait_for_timeout(2500)
 
-        # 4. Localizar botón Prestaciones
-        prestac_btn = page.get_by_role("button", name=re.compile(r"Prestac", re.I))
-        if prestac_btn.count() == 0:
-            log(f"[Arco en C Revert] No se encontró internación para el DNI {dni} en GlobalApp.")
-            return {"success": True, "warning": f"No se encontró internación en GlobalApp para DNI {dni}."}
+        # 4. DOBLE CHEQUEO ESTRICTO EN REVERSIÓN (DNI EXACTO + NOMBRE)
+        rows = page.locator("tbody tr, .vs-table--tbody-table tbody tr, tr")
+        matching_row = None
+        discrepancy_error = None
 
+        for i in range(rows.count()):
+            row = rows.nth(i)
+            try:
+                row_text = row.inner_text().strip()
+            except Exception:
+                continue
+
+            if not row_text or "No hay datos" in row_text or "Buscar" in row_text:
+                continue
+
+            is_match, reason, msg = validate_patient_identity(dni, patient_name, row_text)
+            if is_match:
+                btn = row.get_by_role("button", name=re.compile(r"Prestac", re.I))
+                if btn.count() > 0:
+                    matching_row = row
+                    break
+            elif reason == "DISCREPANCY":
+                discrepancy_error = msg
+
+        if discrepancy_error and not matching_row:
+            log(f"[Arco en C Revert] {discrepancy_error}")
+            return {"success": False, "error": discrepancy_error}
+
+        if not matching_row:
+            log(f"[Arco en C Revert] No se encontró internación para el DNI {dni} ({patient_name}) en GlobalApp.")
+            return {"success": False, "error": f"No se encontró ninguna internación activa en GlobalApp para DNI {dni} ({patient_name})."}
+
+        prestac_btn = matching_row.get_by_role("button", name=re.compile(r"Prestac", re.I))
         prestac_btn.first.click()
         page.wait_for_timeout(3000)
 
