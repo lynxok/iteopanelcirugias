@@ -53,6 +53,7 @@ import {
     addDays,
     addMonths,
     subDays,
+    subWeeks,
     subMonths,
     subQuarters,
     subYears,
@@ -152,6 +153,321 @@ let resultsDashboardCache: {
     timestamp: number;
 } | null = null;
 
+const PUNCTUALITY_TOLERANCE_MIN = 15;
+
+const KPI_COLOR_MAP: Record<string, string> = {
+    blue: 'bg-blue-50 text-blue-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    red: 'bg-red-50 text-red-600',
+    purple: 'bg-purple-50 text-purple-600',
+    amber: 'bg-amber-50 text-amber-600',
+    indigo: 'bg-indigo-50 text-indigo-600'
+};
+
+const parseTimeToMinutes = (timeStr?: string | null): number | null => {
+    if (!timeStr) return null;
+    const parts = timeStr.trim().split(':').map(Number);
+    if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null;
+    return parts[0] * 60 + parts[1];
+};
+
+const enrichSurgeryStatus = (surgery: any, admissionsMap: Record<string, any[]>) => {
+    const hasRealEndTime = !!surgery.actual_end_time;
+    let hasCompletedAdmission = false;
+    if (surgery.patient_id && surgery.surgery_date && surgery.actual_start_time) {
+        const sDate = new Date(surgery.surgery_date + 'T12:00:00Z');
+        const adms = admissionsMap[surgery.patient_id] || [];
+        hasCompletedAdmission = adms.some(adm => {
+            if (!adm.check_in || !adm.check_out) return false;
+            const checkInDate = new Date(adm.check_in.substring(0, 10) + 'T12:00:00Z');
+            const diffDays = Math.abs(sDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24);
+            return diffDays <= 2;
+        });
+    }
+    const isFinished = surgery.status === 'completed' || hasRealEndTime || hasCompletedAdmission;
+    return isFinished ? { ...surgery, status: 'completed' } : surgery;
+};
+
+const getPeriodDates = (
+    activePeriod: string, 
+    refDate: Date, 
+    customRange: { start: string, end: string }
+) => {
+    let startDate = startOfMonth(refDate);
+    let endDate = endOfMonth(refDate);
+
+    if (activePeriod === 'Esta Semana') {
+        startDate = startOfWeek(refDate, { weekStartsOn: 1 });
+        endDate = endOfWeek(refDate, { weekStartsOn: 1 });
+    } else if (activePeriod === 'Este Mes') {
+        startDate = startOfMonth(refDate);
+        endDate = endOfMonth(refDate);
+    } else if (activePeriod === 'Este Trimestre') {
+        startDate = startOfMonth(subMonths(refDate, 2));
+        endDate = endOfMonth(refDate);
+    } else if (activePeriod === 'Este Año') {
+        startDate = startOfYear(refDate);
+        endDate = endOfYear(refDate);
+    } else if (activePeriod === 'Personalizado') {
+        startDate = parseLocalDate(customRange.start) || startOfMonth(refDate);
+        endDate = parseLocalDate(customRange.end) || endOfMonth(refDate);
+    }
+    return { startDate, endDate };
+};
+
+const getPreviousPeriodDates = (
+    activePeriod: string,
+    startDate: Date,
+    endDate: Date
+) => {
+    const today = new Date();
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const startMidnight = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const endMidnight = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+    const isCurrentPeriod = todayMidnight >= startMidnight && todayMidnight <= endMidnight;
+
+    let prevStartDate: Date;
+    let prevEndDate: Date;
+
+    if (activePeriod === 'Esta Semana') {
+        prevStartDate = subWeeks(startDate, 1);
+        if (isCurrentPeriod) {
+            const elapsedDays = differenceInDays(todayMidnight, startMidnight);
+            prevEndDate = addDays(prevStartDate, elapsedDays);
+        } else {
+            prevEndDate = subWeeks(endDate, 1);
+        }
+    } else if (activePeriod === 'Este Mes') {
+        prevStartDate = startOfMonth(subMonths(startDate, 1));
+        if (isCurrentPeriod) {
+            const elapsedDays = differenceInDays(todayMidnight, startMidnight);
+            prevEndDate = addDays(prevStartDate, elapsedDays);
+            const prevMonthEnd = endOfMonth(prevStartDate);
+            if (prevEndDate > prevMonthEnd) prevEndDate = prevMonthEnd;
+        } else {
+            prevEndDate = endOfMonth(prevStartDate);
+        }
+    } else if (activePeriod === 'Este Trimestre') {
+        const prevFullEnd = subDays(startDate, 1);
+        prevStartDate = startOfMonth(subMonths(prevFullEnd, 2));
+        if (isCurrentPeriod) {
+            const elapsedDays = differenceInDays(todayMidnight, startMidnight);
+            prevEndDate = addDays(prevStartDate, elapsedDays);
+        } else {
+            prevEndDate = prevFullEnd;
+        }
+    } else if (activePeriod === 'Este Año') {
+        prevStartDate = startOfYear(subYears(startDate, 1));
+        if (isCurrentPeriod) {
+            const elapsedDays = differenceInDays(todayMidnight, startMidnight);
+            prevEndDate = addDays(prevStartDate, elapsedDays);
+        } else {
+            prevEndDate = endOfYear(prevStartDate);
+        }
+    } else {
+        const totalDays = differenceInDays(endMidnight, startMidnight) + 1;
+        if (isCurrentPeriod) {
+            const elapsedDays = differenceInDays(todayMidnight, startMidnight) + 1;
+            prevEndDate = subDays(startDate, 1);
+            prevStartDate = subDays(prevEndDate, elapsedDays - 1);
+        } else {
+            prevEndDate = subDays(startDate, 1);
+            prevStartDate = subDays(prevEndDate, totalDays - 1);
+        }
+    }
+
+    return { prevStartDate, prevEndDate };
+};
+
+const formatComparisonRange = (start: Date, end: Date) => {
+    if (start.getFullYear() === end.getFullYear()) {
+        return `vs ${format(start, 'dd/MM')}–${format(end, 'dd/MM/yyyy')}`;
+    }
+    return `vs ${format(start, 'dd/MM/yyyy')}–${format(end, 'dd/MM/yyyy')}`;
+};
+
+const calculateRoundedPercentages = (
+    items: { label: string; count: number; color?: string }[]
+): { label: string; count: number; value: number; color: string }[] => {
+    const total = items.reduce((acc, it) => acc + it.count, 0);
+    if (total === 0) return [];
+
+    const withRaw = items.map(it => {
+        const raw = (it.count / total) * 100;
+        const floor = Math.floor(raw);
+        const remainder = raw - floor;
+        return {
+            ...it,
+            raw,
+            floor,
+            remainder,
+            value: floor,
+            color: it.color || (it.label.toLowerCase().includes('material') ? 'bg-orange-500' : 'bg-blue-500')
+        };
+    });
+
+    const sumFloors = withRaw.reduce((acc, it) => acc + it.floor, 0);
+    const remaining = 100 - sumFloors;
+
+    const sortedIndices = withRaw
+        .map((it, idx) => ({ idx, remainder: it.remainder }))
+        .sort((a, b) => b.remainder - a.remainder);
+
+    for (let i = 0; i < remaining && i < sortedIndices.length; i++) {
+        withRaw[sortedIndices[i].idx].value += 1;
+    }
+
+    return withRaw.map(({ label, count, value, color }) => ({
+        label,
+        count,
+        value,
+        color
+    }));
+};
+
+const calculateDashboardMetrics = (
+    surgeries: any[],
+    ors: any[],
+    holidaysList: string[],
+    startDate: Date,
+    endDate: Date
+) => {
+    const daysInRange = eachDayOfInterval({ start: startDate, end: endDate });
+    const businessDays = daysInRange.filter(day => {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        return !isWeekend(day) && !holidaysList.includes(dateStr);
+    });
+    const usefulDays = businessDays.length;
+    const usefulMinutes = usefulDays * 810;
+
+    const filteredSurgeries = surgeries.filter((s: any) => {
+        if (!s.surgery_date) return false;
+        const sDate = parseLocalDate(s.surgery_date);
+        return sDate && sDate >= startDate && sDate <= endDate;
+    });
+
+    const total = filteredSurgeries.length;
+    const completedList = filteredSurgeries.filter((s: any) => s.status === 'completed');
+    const completedCount = completedList.length;
+    const suspendedCount = filteredSurgeries.filter((s: any) => s.status === 'suspended').length;
+    const cancelledCount = filteredSurgeries.filter((s: any) => s.status === 'cancelled').length;
+    const activeScheduledList = filteredSurgeries.filter((s: any) => s.status !== 'completed' && s.status !== 'suspended' && s.status !== 'cancelled');
+    const effectiveExpectedCount = filteredSurgeries.filter((s: any) => s.status !== 'suspended' && s.status !== 'cancelled').length;
+
+    const suspRate = total > 0 ? (suspendedCount / total) * 100 : 0;
+
+    const orOccupancyData = ors.map(or => {
+        const orSurgeries = completedList.filter((s: any) => {
+            if (s.operating_room_id !== or.id || s.is_guardia === true) return false;
+            const sDate = parseLocalDate(s.surgery_date);
+            if (!sDate) return false;
+            const dateStr = format(sDate, 'yyyy-MM-dd');
+            return !isWeekend(sDate) && !holidaysList.includes(dateStr);
+        });
+        let usedMinutes = 0;
+        orSurgeries.forEach((s: any) => {
+            const actualStart = s.actual_start_time;
+            const actualEnd = s.actual_end_time;
+            if (actualStart && actualEnd) {
+                const startM = parseTimeToMinutes(actualStart);
+                const endM = parseTimeToMinutes(actualEnd);
+                if (startM !== null && endM !== null) {
+                    usedMinutes += Math.max(0, endM - startM);
+                } else {
+                    usedMinutes += (s.estimated_duration || 0);
+                }
+            } else {
+                usedMinutes += (s.estimated_duration || 0);
+            }
+        });
+        const value = usefulMinutes > 0 ? Math.round((usedMinutes / usefulMinutes) * 100) : 0;
+        return { name: or.name, value, goal: 100, usedMinutes, usefulMinutes };
+    });
+
+    const avgOcc = orOccupancyData.length > 0
+        ? Math.round(orOccupancyData.reduce((acc, curr) => acc + curr.value, 0) / orOccupancyData.length)
+        : 0;
+
+    const punctualityItems: Array<{
+        id: string;
+        date: string;
+        orName: string;
+        surgeonName: string;
+        procedureName: string;
+        scheduledTime: string;
+        actualTime: string;
+        delay: number;
+        isPunctual: boolean;
+    }> = [];
+
+    businessDays.forEach(day => {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        ors.forEach(or => {
+            const daySurgeries = filteredSurgeries.filter((s: any) =>
+                s.surgery_date === dateStr &&
+                s.operating_room_id === or.id &&
+                s.is_guardia !== true &&
+                !!s.start_time
+            );
+
+            if (daySurgeries.length === 0) return;
+
+            daySurgeries.sort((a: any, b: any) => (a.start_time || '').localeCompare(b.start_time || ''));
+
+            const firstScheduled = daySurgeries[0];
+
+            if (firstScheduled.status === 'completed' && firstScheduled.actual_start_time) {
+                const schedM = parseTimeToMinutes(firstScheduled.start_time);
+                const actualM = parseTimeToMinutes(firstScheduled.actual_start_time);
+                if (schedM !== null && actualM !== null) {
+                    const delay = Math.max(0, actualM - schedM);
+                    punctualityItems.push({
+                        id: firstScheduled.id,
+                        date: dateStr,
+                        orName: or.name,
+                        surgeonName: firstScheduled.doctors?.full_name || 'Sin Asignar',
+                        procedureName: firstScheduled.procedure_name || 'Sin especificar',
+                        scheduledTime: firstScheduled.start_time,
+                        actualTime: firstScheduled.actual_start_time,
+                        delay,
+                        isPunctual: delay <= PUNCTUALITY_TOLERANCE_MIN
+                    });
+                }
+            }
+        });
+    });
+
+    const punctTotal = punctualityItems.length;
+    const punctCount = punctualityItems.filter(p => p.isPunctual).length;
+    const punctRate = punctTotal > 0 ? (punctCount / punctTotal) * 100 : 0;
+    const punctAvgDelay = punctTotal > 0
+        ? Math.round(punctualityItems.reduce((acc, p) => acc + p.delay, 0) / punctTotal)
+        : 0;
+
+    return {
+        totalPeriod: total,
+        totalCompleted: completedCount,
+        suspendedCount,
+        cancelledCount,
+        activeScheduledCount: activeScheduledList.length,
+        effectiveExpected: effectiveExpectedCount,
+        suspensionRate: suspRate,
+        suspensionRateStr: `${suspRate.toFixed(1)}%`,
+        avgOccupancy: avgOcc,
+        avgOccupancyStr: `${avgOcc}%`,
+        orOccupancyData,
+        punctualityItems,
+        punctualityRate: punctRate,
+        punctualityRateStr: `${Math.round(punctRate)}%`,
+        punctualityAvgDelay: punctAvgDelay,
+        punctualityCount: punctTotal,
+        hasData: total > 0 || usefulMinutes > 0,
+        surgeries: filteredSurgeries,
+        usefulMinutes
+    };
+};
+
 const ResultsDashboard: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
@@ -162,40 +478,6 @@ const ResultsDashboard: React.FC = () => {
     const [rawSurgeries, setRawSurgeries] = useState<any[]>([]);
     const [rawAdmissions, setRawAdmissions] = useState<any[]>([]);
     const [currentPeriodSurgeries, setCurrentPeriodSurgeries] = useState<any[]>([]);
-
-    // --- Local Period Helper ---
-    const parseLocalDate = (dateStr: string) => {
-        if (!dateStr) return null;
-        const [year, month, day] = dateStr.split('-').map(Number);
-        return new Date(year, month - 1, day);
-    };
-
-    const getPeriodDates = (
-        activePeriod: string, 
-        refDate: Date, 
-        customRange: { start: string, end: string }
-    ) => {
-        let startDate = startOfMonth(refDate);
-        let endDate = endOfMonth(refDate);
-
-        if (activePeriod === 'Esta Semana') {
-            startDate = startOfWeek(refDate, { weekStartsOn: 1 });
-            endDate = endOfWeek(refDate, { weekStartsOn: 1 });
-        } else if (activePeriod === 'Este Mes') {
-            startDate = startOfMonth(refDate);
-            endDate = endOfMonth(refDate);
-        } else if (activePeriod === 'Este Trimestre') {
-            startDate = startOfMonth(subMonths(refDate, 2));
-            endDate = endOfMonth(refDate);
-        } else if (activePeriod === 'Este Año') {
-            startDate = startOfYear(refDate);
-            endDate = endOfYear(refDate);
-        } else if (activePeriod === 'Personalizado') {
-            startDate = parseLocalDate(customRange.start) || startOfMonth(refDate);
-            endDate = parseLocalDate(customRange.end) || endOfMonth(refDate);
-        }
-        return { startDate, endDate };
-    };
 
     // --- Card 1 (Volumen Quirúrgico) Filter States ---
     const [isLocalVolumen, setIsLocalVolumen] = useState(false);
@@ -249,14 +531,16 @@ const ResultsDashboard: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         totalCompleted: 0,
-        successRate: '0%',
         suspensionRate: '0%',
         avgOccupancy: '0%',
         totalPeriod: 0,
         effectiveExpected: 0,
         activeScheduledCount: 0,
         suspendedCount: 0,
-        cancelledCount: 0
+        cancelledCount: 0,
+        punctualityRate: '0%',
+        punctualityAvgDelay: 0,
+        punctualityCount: 0
     });
     const [predictiveStats, setPredictiveStats] = useState<{
         topDeviations: { name: string, avg: number, max: number, count: number, doctors: any[], avg_total_time?: number, code?: string, relatedCodes?: string[] }[],
@@ -270,7 +554,7 @@ const ResultsDashboard: React.FC = () => {
         avgDeviation: 0
     });
     const [orOccupancy, setOrOccupancy] = useState<{ name: string, value: number, goal: number }[]>([]);
-    const [suspensionReasons, setSuspensionReasons] = useState<{ label: string, value: number, color: string }[]>([]);
+    const [suspensionReasons, setSuspensionReasons] = useState<{ label: string, value: number, count: number, color: string }[]>([]);
     const [efficiencyData, setEfficiencyData] = useState<any[]>([]);
     const [chartMode, setChartMode] = useState<'Occupancy' | 'Volume'>('Volume');
     const [casuistryMode, setCasuistryMode] = useState<'Frecuencia' | 'Relacion'>('Frecuencia');
@@ -294,6 +578,7 @@ const ResultsDashboard: React.FC = () => {
     const [targetSurgeonStats, setTargetSurgeonStats] = useState<{ name: string, count: number, percentage: number, surgeries: any[] }[]>([]);
     const [selectedReferralGroup, setSelectedReferralGroup] = useState<{ title: string, surgeries: any[] } | null>(null);
     const [holidays, setHolidays] = useState<string[]>([]);
+    const [missingHolidayYears, setMissingHolidayYears] = useState<number[]>([]);
     const [showAllProceduresModal, setShowAllProceduresModal] = useState(false);
     const [procedureSearchQuery, setProcedureSearchQuery] = useState('');
 
@@ -302,10 +587,21 @@ const ResultsDashboard: React.FC = () => {
     const [volumeModalFilter, setVolumeModalFilter] = useState<'all' | 'completed' | 'effective' | 'difference'>('all');
     const [volumeModalSearch, setVolumeModalSearch] = useState('');
 
+    // --- Modal de Puntualidad del Primer Turno ---
+    const [punctualityModalOpen, setPunctualityModalOpen] = useState(false);
+    const [punctualityModalSearch, setPunctualityModalSearch] = useState('');
+
     const exportVolumeSurgeriesToExcel = (surgeriesList: any[], filterType: string) => {
         if (!surgeriesList.length) return;
         const exportData = surgeriesList.map(s => {
             const or = rawOrs.find(o => o.id === s.operating_room_id);
+            const mappedStatus = s.status === 'completed'
+                ? 'Realizada'
+                : s.status === 'suspended'
+                    ? 'Suspendida'
+                    : s.status === 'cancelled'
+                        ? 'Cancelada'
+                        : 'Programada';
             return {
                 "Fecha": s.surgery_date ? format(new Date(s.surgery_date + 'T12:00:00'), 'dd/MM/yyyy') : 'N/A',
                 "Paciente": s.patients?.full_name || 'Desconocido',
@@ -313,7 +609,7 @@ const ResultsDashboard: React.FC = () => {
                 "Especialidad": s.doctors?.specialty || 'General',
                 "Procedimiento": s.procedure_name || 'Sin especificar',
                 "Quirófano": or ? or.name : 'Sin asignar',
-                "Estado": s.status === 'completed' ? 'Realizada' : s.status === 'suspended' ? 'Suspendida' : 'Programada',
+                "Estado": mappedStatus,
                 "Motivo Suspensión": s.suspension_reason || '',
                 "Hora Inicio": s.actual_start_time || '',
                 "Hora Fin": s.actual_end_time || '',
@@ -325,6 +621,25 @@ const ResultsDashboard: React.FC = () => {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Cirugías");
         XLSX.writeFile(wb, `Cirugias_${filterType}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    };
+
+    const exportPunctualityToExcel = (items: any[]) => {
+        if (!items || !items.length) return;
+        const exportData = items.map(p => ({
+            "Fecha": p.date ? format(new Date(p.date + 'T12:00:00'), 'dd/MM/yyyy') : 'N/A',
+            "Quirófano": p.orName,
+            "Cirujano": p.surgeonName,
+            "Procedimiento": p.procedureName,
+            "Hora Programada": p.scheduledTime,
+            "Hora Real": p.actualTime,
+            "Demora (min)": p.delay,
+            "Estado": p.isPunctual ? 'Puntual' : 'Demorado'
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Puntualidad");
+        XLSX.writeFile(wb, `Puntualidad_Primer_Turno_${period.replace(/\s+/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     };
 
     const exportCasuistryToExcel = () => {
@@ -371,21 +686,90 @@ const ResultsDashboard: React.FC = () => {
         setPeriod('Este Mes');
     };
 
-    useEffect(() => {
-        const fetchHolidays = async () => {
-            try {
-                const year = new Date().getFullYear();
-                const response = await fetch(`https://api.argentinadatos.com/v1/feriados/${year}`);
-                const data = await response.json();
-                // Map to YYYY-MM-DD
-                const holidayDates = data.map((h: any) => h.fecha);
-                setHolidays(holidayDates);
-            } catch (err) {
-                console.error('Error fetching holidays:', err);
+    const loadHolidaysForYears = async (targetYears: number[]) => {
+        try {
+            const missing: number[] = [];
+            const holidayDatesSet = new Set<string>();
+
+            // 1. Fuente principal: tabla quirofano.calendar_holidays (nacional only)
+            const { data: dbHolidays, error } = await supabase
+                .from('calendar_holidays')
+                .select('date, holiday_type, is_recurring_yearly')
+                .eq('holiday_type', 'nacional');
+
+            const dbRows = (!error && dbHolidays) ? dbHolidays : [];
+
+            for (const year of targetYears) {
+                let yearHasRows = false;
+
+                dbRows.forEach((row: any) => {
+                    if (row.is_recurring_yearly && row.date) {
+                        const projected = `${year}-${row.date.substring(5, 10)}`;
+                        holidayDatesSet.add(projected);
+                        yearHasRows = true;
+                    } else if (row.date && row.date.startsWith(`${year}-`)) {
+                        holidayDatesSet.add(row.date);
+                        yearHasRows = true;
+                    }
+                });
+
+                // Fallback: si para algún año la tabla no tiene filas, pedir ese año a la API y cachear
+                if (!yearHasRows) {
+                    const cacheKey = `holidays_argentinadatos_${year}`;
+                    let foundInCache = false;
+                    try {
+                        const cached = localStorage.getItem(cacheKey);
+                        if (cached) {
+                            const parsed = JSON.parse(cached);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                parsed.forEach((d: string) => holidayDatesSet.add(d));
+                                foundInCache = true;
+                            }
+                        }
+                    } catch (_) {}
+
+                    if (!foundInCache) {
+                        try {
+                            const resp = await fetch(`https://api.argentinadatos.com/v1/feriados/${year}`);
+                            if (resp.ok) {
+                                const data = await resp.json();
+                                if (Array.isArray(data) && data.length > 0) {
+                                    const dates = data.map((h: any) => h.fecha).filter(Boolean);
+                                    localStorage.setItem(cacheKey, JSON.stringify(dates));
+                                    dates.forEach((d: string) => holidayDatesSet.add(d));
+                                } else {
+                                    missing.push(year);
+                                }
+                            } else {
+                                missing.push(year);
+                            }
+                        } catch (e) {
+                            console.warn(`Error al consultar feriados para el año ${year}:`, e);
+                            missing.push(year);
+                        }
+                    }
+                }
             }
-        };
-        fetchHolidays();
-    }, []);
+
+            setHolidays(Array.from(holidayDatesSet));
+            setMissingHolidayYears(missing);
+        } catch (err) {
+            console.error('Error fetching holidays:', err);
+        }
+    };
+
+    useEffect(() => {
+        const { startDate, endDate } = getPeriodDates(period, referenceDate, globalCustomRange);
+        const { prevStartDate, prevEndDate } = getPreviousPeriodDates(period, startDate, endDate);
+        const years = Array.from(new Set([
+            startDate.getFullYear(),
+            endDate.getFullYear(),
+            prevStartDate.getFullYear(),
+            prevEndDate.getFullYear(),
+            new Date().getFullYear()
+        ])).sort();
+        loadHolidaysForYears(years);
+    }, [period, referenceDate, globalCustomRange]);
 
     useEffect(() => {
         if (user?.role === 'Medico') {
@@ -473,6 +857,8 @@ const ResultsDashboard: React.FC = () => {
         try {
             const twoYearsAgoStr = format(subYears(new Date(), 2), 'yyyy-MM-dd');
 
+            const twoYearsAgoStartOfYearStr = format(startOfYear(subYears(new Date(), 2)), 'yyyy-MM-dd');
+
             // Parallel execution with pagination helper to bypass Supabase 1000-row limit
             const fetchAllSurgeries = async () => {
                 let allSurgeries: any[] = [];
@@ -488,6 +874,8 @@ const ResultsDashboard: React.FC = () => {
                             operating_room_id,
                             estimated_duration,
                             surgery_date,
+                            start_time,
+                            is_guardia,
                             procedure_name,
                             doctor_id,
                             patient_id,
@@ -505,6 +893,8 @@ const ResultsDashboard: React.FC = () => {
                                 full_name
                             )
                         `)
+                        .gte('surgery_date', twoYearsAgoStartOfYearStr)
+                        .order('id')
                         .range(from, from + batchSize - 1);
                     if (error) throw error;
                     if (!data || data.length === 0) break;
@@ -566,92 +956,27 @@ const ResultsDashboard: React.FC = () => {
         }
     };
 
+    // --- Consistencia de cirugías enriquecidas (C.1) ---
+    const admissionsMap = useMemo(() => {
+        const map: Record<string, any[]> = {};
+        rawAdmissions.forEach(adm => {
+            if (adm.patient_id) {
+                if (!map[adm.patient_id]) map[adm.patient_id] = [];
+                map[adm.patient_id].push(adm);
+            }
+        });
+        return map;
+    }, [rawAdmissions]);
+
+    const enrichedSurgeries = useMemo(() => {
+        return rawSurgeries.map((s: any) => enrichSurgeryStatus(s, admissionsMap));
+    }, [rawSurgeries, admissionsMap]);
+
     // --- Reactively calculate global KPIs ---
     const globalStats = useMemo(() => {
         const { startDate, endDate } = getPeriodDates(period, referenceDate, globalCustomRange);
-
-        const daysInRange = eachDayOfInterval({ start: startDate, end: endDate });
-        const usefulDays = daysInRange.filter(day => {
-            const dateStr = format(day, 'yyyy-MM-dd');
-            return !isWeekend(day) && !holidays.includes(dateStr);
-        }).length;
-        const usefulMinutes = usefulDays * 810;
-
-        const rawFiltered = rawSurgeries.filter((s: any) => {
-            if (!s.surgery_date) return false;
-            const sDate = parseLocalDate(s.surgery_date);
-            return sDate && sDate >= startDate && sDate <= endDate;
-        });
-
-        const admissionsMap = {};
-        rawAdmissions.forEach(adm => {
-            if (adm.patient_id) {
-                if (!admissionsMap[adm.patient_id]) admissionsMap[adm.patient_id] = [];
-                admissionsMap[adm.patient_id].push(adm);
-            }
-        });
-
-        const filteredSurgeries = rawFiltered.map((s: any) => {
-            const hasRealEndTime = !!s.actual_end_time;
-            let hasCompletedAdmission = false;
-            if (s.patient_id && s.surgery_date && s.actual_start_time) {
-                const sDate = new Date(s.surgery_date + 'T12:00:00Z');
-                const adms = admissionsMap[s.patient_id] || [];
-                hasCompletedAdmission = adms.some(adm => {
-                    if (!adm.check_in || !adm.check_out) return false;
-                    const checkInDate = new Date(adm.check_in.substring(0, 10) + 'T12:00:00Z');
-                    const diffDays = Math.abs(sDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24);
-                    return diffDays <= 2;
-                });
-            }
-            const isFinished = s.status === 'completed' || hasRealEndTime || hasCompletedAdmission;
-            return { ...s, status: isFinished ? 'completed' : s.status };
-        });
-
-        const total = filteredSurgeries.length;
-        const completedList = filteredSurgeries.filter((s: any) => s.status === 'completed');
-        const completedCount = completedList.length;
-        const suspendedCount = filteredSurgeries.filter((s: any) => s.status === 'suspended').length;
-        const cancelledCount = filteredSurgeries.filter((s: any) => s.status === 'cancelled').length;
-        const activeScheduledList = filteredSurgeries.filter((s: any) => s.status !== 'completed' && s.status !== 'suspended' && s.status !== 'cancelled');
-        const effectiveExpectedList = filteredSurgeries.filter((s: any) => s.status !== 'suspended' && s.status !== 'cancelled');
-        const effectiveExpectedCount = effectiveExpectedList.length;
-        const suspRate = total > 0 ? ((suspendedCount / total) * 100).toFixed(1) : '0';
-        const succRate = total > 0 ? ((completedCount / total) * 100).toFixed(1) : '0';
-
-        const orOccupancyData = rawOrs.map(or => {
-            const orSurgeries = filteredSurgeries.filter((s: any) => s.status === 'completed' && s.operating_room_id === or.id);
-            let usedMinutes = 0;
-            orSurgeries.forEach((s: any) => {
-                const actualStart = s.actual_start_time;
-                const actualEnd = s.actual_end_time;
-                if (actualStart && actualEnd) {
-                    const [startH, startM] = actualStart.split(':').map(Number);
-                    const [endH, endM] = actualEnd.split(':').map(Number);
-                    usedMinutes += Math.max(0, (endH * 60 + endM) - (startH * 60 + startM));
-                } else {
-                    usedMinutes += (s.estimated_duration || 0);
-                }
-            });
-            return usefulMinutes > 0 ? Math.round((usedMinutes / usefulMinutes) * 100) : 0;
-        });
-
-        const avgOcc = orOccupancyData.length > 0
-            ? Math.round(orOccupancyData.reduce((acc, curr) => acc + curr, 0) / orOccupancyData.length)
-            : 0;
-
-        return {
-            totalCompleted: completedCount,
-            successRate: `${succRate}%`,
-            suspensionRate: `${suspRate}%`,
-            avgOccupancy: `${avgOcc}%`,
-            totalPeriod: total,
-            effectiveExpected: effectiveExpectedCount,
-            activeScheduledCount: activeScheduledList.length,
-            suspendedCount: suspendedCount,
-            cancelledCount: cancelledCount
-        };
-    }, [rawSurgeries, rawOrs, rawAdmissions, period, referenceDate, globalCustomRange, holidays]);
+        return calculateDashboardMetrics(enrichedSurgeries, rawOrs, holidays, startDate, endDate);
+    }, [enrichedSurgeries, rawOrs, period, referenceDate, globalCustomRange, holidays]);
 
     // --- Reactively calculate Card 1 (Volumen Quirúrgico) ---
     const card1Data = useMemo(() => {
@@ -659,76 +984,13 @@ const ResultsDashboard: React.FC = () => {
             ? getPeriodDates(periodVolumen, new Date(), customRangeVolumen)
             : getPeriodDates(period, referenceDate, globalCustomRange);
 
-        const daysInRange = eachDayOfInterval({ start: startDate, end: endDate });
-        const usefulDays = daysInRange.filter(day => {
-            const dateStr = format(day, 'yyyy-MM-dd');
-            return !isWeekend(day) && !holidays.includes(dateStr);
-        }).length;
-        const usefulMinutes = usefulDays * 810;
-
-        const rawFiltered = rawSurgeries.filter((s: any) => {
-            if (!s.surgery_date) return false;
-            const sDate = parseLocalDate(s.surgery_date);
-            return sDate && sDate >= startDate && sDate <= endDate;
-        });
-
-        const admissionsMap = {};
-        rawAdmissions.forEach(adm => {
-            if (adm.patient_id) {
-                if (!admissionsMap[adm.patient_id]) admissionsMap[adm.patient_id] = [];
-                admissionsMap[adm.patient_id].push(adm);
-            }
-        });
-
-        const filteredSurgeries = rawFiltered.map((s: any) => {
-            const hasRealEndTime = !!s.actual_end_time;
-            let hasCompletedAdmission = false;
-            if (s.patient_id && s.surgery_date && s.actual_start_time) {
-                const sDate = new Date(s.surgery_date + 'T12:00:00Z');
-                const adms = admissionsMap[s.patient_id] || [];
-                hasCompletedAdmission = adms.some(adm => {
-                    if (!adm.check_in || !adm.check_out) return false;
-                    const checkInDate = new Date(adm.check_in.substring(0, 10) + 'T12:00:00Z');
-                    const diffDays = Math.abs(sDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24);
-                    return diffDays <= 2;
-                });
-            }
-            const isFinished = s.status === 'completed' || hasRealEndTime || hasCompletedAdmission;
-            return { ...s, status: isFinished ? 'completed' : s.status };
-        });
-
-        const total = filteredSurgeries.length;
-        const completedList = filteredSurgeries.filter((s: any) => s.status === 'completed');
-        const completedCount = completedList.length;
-        const suspendedCount = filteredSurgeries.filter((s: any) => s.status === 'suspended').length;
-        const cancelledCount = filteredSurgeries.filter((s: any) => s.status === 'cancelled').length;
-        const activeScheduledList = filteredSurgeries.filter((s: any) => s.status !== 'completed' && s.status !== 'suspended' && s.status !== 'cancelled');
-        const effectiveExpectedList = filteredSurgeries.filter((s: any) => s.status !== 'suspended' && s.status !== 'cancelled');
-        const effectiveExpectedCount = effectiveExpectedList.length;
-        const suspRate = total > 0 ? ((suspendedCount / total) * 100).toFixed(1) : '0';
-        const succRate = total > 0 ? ((completedCount / total) * 100).toFixed(1) : '0';
-
-        const orOccupancyData = rawOrs.map(or => {
-            const orSurgeries = completedList.filter((s: any) => s.operating_room_id === or.id);
-            let usedMinutes = 0;
-            orSurgeries.forEach((s: any) => {
-                const actualStart = s.actual_start_time;
-                const actualEnd = s.actual_end_time;
-                if (actualStart && actualEnd) {
-                    const [startH, startM] = actualStart.split(':').map(Number);
-                    const [endH, endM] = actualEnd.split(':').map(Number);
-                    usedMinutes += Math.max(0, (endH * 60 + endM) - (startH * 60 + startM));
-                } else {
-                    usedMinutes += (s.estimated_duration || 0);
-                }
-            });
-            const value = usefulMinutes > 0 ? Math.round((usedMinutes / usefulMinutes) * 100) : 0;
-            return { name: or.name, value, goal: 100 };
-        });
-
-        const avgOcc = orOccupancyData.length > 0
-            ? Math.round(orOccupancyData.reduce((acc, curr) => acc + curr.value, 0) / orOccupancyData.length)
-            : 0;
+        const metrics = calculateDashboardMetrics(
+            enrichedSurgeries,
+            rawOrs,
+            holidays,
+            startDate,
+            endDate
+        );
 
         let volumeInterval = [];
         let displayFormat = 'MMM';
@@ -765,7 +1027,7 @@ const ResultsDashboard: React.FC = () => {
         }
 
         const processedVolume = volumeInterval.map(date => {
-            const count = rawSurgeries.filter((s: any) => {
+            const count = enrichedSurgeries.filter((s: any) => {
                 if (!s.surgery_date || s.status !== 'completed') return false;
                 const sDate = parseLocalDate(s.surgery_date);
                 return sDate && checkSamefn(sDate, date);
@@ -781,21 +1043,24 @@ const ResultsDashboard: React.FC = () => {
 
         return {
             volumeData: processedVolume,
-            orOccupancy: orOccupancyData,
+            orOccupancy: metrics.orOccupancyData,
             stats: {
-                totalCompleted: completedCount,
-                successRate: `${succRate}%`,
-                suspensionRate: `${suspRate}%`,
-                avgOccupancy: `${avgOcc}%`,
-                totalPeriod: total,
-                effectiveExpected: effectiveExpectedCount,
-                activeScheduledCount: activeScheduledList.length,
-                suspendedCount: suspendedCount,
-                cancelledCount: cancelledCount
+                totalCompleted: metrics.totalCompleted,
+                suspensionRate: metrics.suspensionRateStr,
+                avgOccupancy: metrics.avgOccupancyStr,
+                totalPeriod: metrics.totalPeriod,
+                effectiveExpected: metrics.effectiveExpected,
+                activeScheduledCount: metrics.activeScheduledCount,
+                suspendedCount: metrics.suspendedCount,
+                cancelledCount: metrics.cancelledCount,
+                punctualityRate: metrics.punctualityRateStr,
+                punctualityAvgDelay: metrics.punctualityAvgDelay,
+                punctualityCount: metrics.punctualityCount
             },
-            surgeries: filteredSurgeries
+            punctualityItems: metrics.punctualityItems,
+            surgeries: metrics.surgeries
         };
-    }, [rawSurgeries, rawOrs, rawAdmissions, isLocalVolumen, periodVolumen, customRangeVolumen, period, referenceDate, globalCustomRange, holidays]);
+    }, [enrichedSurgeries, rawOrs, isLocalVolumen, periodVolumen, customRangeVolumen, period, referenceDate, globalCustomRange, holidays]);
 
     // --- Reactively calculate Card 2 (Motivos de Suspensión) ---
     const card2Data = useMemo(() => {
@@ -803,29 +1068,27 @@ const ResultsDashboard: React.FC = () => {
             ? getPeriodDates(periodSuspensiones, new Date(), customRangeSuspensiones)
             : getPeriodDates(period, referenceDate, globalCustomRange);
 
-        const filtered = rawSurgeries.filter((s: any) => {
+        const filtered = enrichedSurgeries.filter((s: any) => {
             if (!s.surgery_date) return false;
             const sDate = parseLocalDate(s.surgery_date);
             return sDate && sDate >= startDate && sDate <= endDate;
         });
 
         const suspendedList = filtered.filter((s: any) => s.status === 'suspended');
-        const suspendedCount = suspendedList.length;
 
-        const reasons = suspendedCount > 0 ? Object.entries(
-            suspendedList.filter((s: any) => s.suspension_reason)
-                .reduce((acc: any, s: any) => {
-                    acc[s.suspension_reason] = (acc[s.suspension_reason] || 0) + 1;
-                    return acc;
-                }, {})
-        ).map(([label, count]: [string, any]) => ({
+        const countsByReason = suspendedList.reduce((acc: Record<string, number>, s: any) => {
+            const reason = (s.suspension_reason || 'Sin motivo especificado').trim();
+            acc[reason] = (acc[reason] || 0) + 1;
+            return acc;
+        }, {});
+
+        const items = Object.entries(countsByReason).map(([label, count]) => ({
             label,
-            value: Math.round((count / suspendedCount) * 100),
-            color: label.includes('Material') ? 'bg-orange-500' : 'bg-blue-500'
-        })) : [];
+            count
+        })).sort((a, b) => b.count - a.count);
 
-        return reasons;
-    }, [rawSurgeries, isLocalSuspensiones, periodSuspensiones, customRangeSuspensiones, period, referenceDate, globalCustomRange]);
+        return calculateRoundedPercentages(items);
+    }, [enrichedSurgeries, isLocalSuspensiones, periodSuspensiones, customRangeSuspensiones, period, referenceDate, globalCustomRange]);
 
     // --- Reactively calculate Card 3 (Derivaciones) ---
     const card3Data = useMemo(() => {
@@ -842,7 +1105,7 @@ const ResultsDashboard: React.FC = () => {
             referralEndDate = endDate;
         }
 
-        const referrals = rawSurgeries.filter((s: any) => {
+        const referrals = enrichedSurgeries.filter((s: any) => {
             if (!s.referring_doctor_id || !s.surgery_date) return false;
             if (s.referring_doctor_id === s.doctor_id) return false;
             const sDate = parseLocalDate(s.surgery_date);
@@ -859,7 +1122,7 @@ const ResultsDashboard: React.FC = () => {
             }).sort((a, b) => a.name.localeCompare(b.name));
 
         return { referrals, uniqueReferrers, startDate: referralStartDate, endDate: referralEndDate };
-    }, [rawSurgeries, isReferralFilterIndependent, periodDerivaciones, referralDateRange, period, referenceDate, globalCustomRange]);
+    }, [enrichedSurgeries, isReferralFilterIndependent, periodDerivaciones, referralDateRange, period, referenceDate, globalCustomRange]);
 
     // --- Reactively calculate Card 4 (Operaciones por Cirujano) ---
     const card4Data = useMemo(() => {
@@ -867,7 +1130,7 @@ const ResultsDashboard: React.FC = () => {
             ? getPeriodDates(periodCirujanos, new Date(), customRangeCirujanos)
             : getPeriodDates(period, referenceDate, globalCustomRange);
 
-        const filtered = rawSurgeries.filter((s: any) => {
+        const filtered = enrichedSurgeries.filter((s: any) => {
             if (!s.surgery_date) return false;
             const sDate = parseLocalDate(s.surgery_date);
             return sDate && sDate >= startDate && sDate <= endDate;
@@ -905,13 +1168,12 @@ const ResultsDashboard: React.FC = () => {
             scheduled: doc.totalScheduled,
             performed: doc.totalPerformed,
             avgTime: doc.totalScheduled > 0 ? `${Math.round(doc.totalDuration / doc.totalScheduled)} min` : '0 min',
-            complications: '0%',
             performance: Math.min(5, Math.ceil(doc.totalPerformed / 5)),
             surgeries: doc.surgeries
         })).sort((a, b) => b.performed - a.performed);
 
         return processedEfficiency;
-    }, [rawSurgeries, isLocalCirujanos, periodCirujanos, customRangeCirujanos, period, referenceDate, globalCustomRange]);
+    }, [enrichedSurgeries, isLocalCirujanos, periodCirujanos, customRangeCirujanos, period, referenceDate, globalCustomRange]);
 
     // --- Reactively calculate Card 5 (Inteligencia Predictiva) ---
     const card5Data = useMemo(() => {
@@ -919,7 +1181,7 @@ const ResultsDashboard: React.FC = () => {
             ? getPeriodDates(periodPredictiva, new Date(), customRangePredictiva)
             : getPeriodDates(period, referenceDate, globalCustomRange);
 
-        const predictiveList = rawSurgeries.filter((s: any) => {
+        const predictiveList = enrichedSurgeries.filter((s: any) => {
             if (s.status !== 'completed' || !s.actual_start_time || !s.actual_end_time) return false;
             const sDate = parseLocalDate(s.surgery_date);
             if (!sDate || sDate < startDate || sDate > endDate) return false;
@@ -1047,7 +1309,7 @@ const ResultsDashboard: React.FC = () => {
                 }, 0) / predictiveList.length)
                 : 0
         };
-    }, [rawSurgeries, isLocalPredictiva, periodPredictiva, customRangePredictiva, period, referenceDate, globalCustomRange, user?.role]);
+    }, [enrichedSurgeries, isLocalPredictiva, periodPredictiva, customRangePredictiva, period, referenceDate, globalCustomRange]);
 
     // --- Reactively calculate Card 6 (Casuística por Procedimiento) ---
     const card6Data = useMemo(() => {
@@ -1055,7 +1317,7 @@ const ResultsDashboard: React.FC = () => {
             ? getPeriodDates(periodCasuistica, new Date(), customRangeCasuistica)
             : getPeriodDates(period, referenceDate, globalCustomRange);
 
-        const filtered = rawSurgeries.filter((s: any) => {
+        const filtered = enrichedSurgeries.filter((s: any) => {
             if (!s.surgery_date) return false;
             const sDate = parseLocalDate(s.surgery_date);
             return sDate && sDate >= startDate && sDate <= endDate;
@@ -1129,7 +1391,7 @@ const ResultsDashboard: React.FC = () => {
             .sort((a, b) => b.count - a.count);
 
         return processedCasuistry;
-    }, [rawSurgeries, isLocalCasuistica, periodCasuistica, customRangeCasuistica, period, referenceDate, globalCustomRange]);
+    }, [enrichedSurgeries, isLocalCasuistica, periodCasuistica, customRangeCasuistica, period, referenceDate, globalCustomRange]);
 
     // --- Sync computed data with states used in JSX ---
     useEffect(() => {
@@ -1212,12 +1474,143 @@ const ResultsDashboard: React.FC = () => {
     const activeReferrer = selectedReferrerId; // Helper for closure if needed
 
 
-    const kpis = [
-        { title: 'Cirugías Realizadas', value: stats.totalCompleted, trend: '+12%', isPositive: true, icon: 'medical_services', color: 'blue' },
-        { title: 'Tasa de Éxito', value: stats.successRate, trend: '+0.5%', isPositive: true, icon: 'check_circle', color: 'emerald' },
-        { title: 'Tasa de Suspensión', value: stats.suspensionRate, trend: '-1.5%', isPositive: true, icon: 'cancel', color: 'red' },
-        { title: 'Ocupación Quirófano', value: stats.avgOccupancy, trend: '+5%', isPositive: true, icon: 'door_sliding', color: 'purple' },
-    ];
+    // --- Previous period calculation & KPI Variations ---
+    const { startDate: currentPeriodStart, endDate: currentPeriodEnd } = useMemo(() => {
+        return getPeriodDates(period, referenceDate, globalCustomRange);
+    }, [period, referenceDate, globalCustomRange]);
+
+    const { prevStartDate, prevEndDate } = useMemo(() => {
+        return getPreviousPeriodDates(period, currentPeriodStart, currentPeriodEnd);
+    }, [period, currentPeriodStart, currentPeriodEnd]);
+
+    const prevMetrics = useMemo(() => {
+        return calculateDashboardMetrics(enrichedSurgeries, rawOrs, holidays, prevStartDate, prevEndDate);
+    }, [enrichedSurgeries, rawOrs, holidays, prevStartDate, prevEndDate]);
+
+    const comparisonLabel = useMemo(() => {
+        return formatComparisonRange(prevStartDate, prevEndDate);
+    }, [prevStartDate, prevEndDate]);
+
+    const kpis = useMemo(() => {
+        const activeStats = globalStats;
+
+        // 1. Cirugías Realizadas (variación relativa %)
+        const currCompleted = activeStats.totalCompleted;
+        const prevCompleted = prevMetrics.totalCompleted;
+        let completedTrend = 'Sin datos del período anterior';
+        let completedHasTrend = false;
+        let completedIsPositive = true;
+
+        if (prevMetrics.hasData && prevMetrics.totalPeriod > 0) {
+            completedHasTrend = true;
+            if (prevCompleted === 0) {
+                const diff = currCompleted > 0 ? 100 : 0;
+                completedTrend = (diff >= 0 ? '+' : '') + `${diff}%`;
+                completedIsPositive = diff >= 0;
+            } else {
+                const diffRel = ((currCompleted - prevCompleted) / prevCompleted) * 100;
+                completedTrend = (diffRel >= 0 ? '+' : '') + `${Math.round(diffRel)}%`;
+                completedIsPositive = diffRel >= 0;
+            }
+        }
+
+        // 2. Puntualidad Primer Turno (diferencia en pp)
+        const currPunctRate = activeStats.punctualityRate;
+        const prevPunctRate = prevMetrics.punctualityRate;
+        let punctTrend = 'Sin datos del período anterior';
+        let punctHasTrend = false;
+        let punctIsPositive = true;
+
+        if (prevMetrics.hasData && prevMetrics.punctualityCount > 0) {
+            punctHasTrend = true;
+            const diffPp = currPunctRate - prevPunctRate;
+            punctTrend = (diffPp >= 0 ? '+' : '') + `${diffPp.toFixed(1).replace('.', ',')} pp`;
+            punctIsPositive = diffPp >= 0;
+        }
+
+        // 3. Tasa de Suspensión (diferencia en pp; baja = verde)
+        const currSuspRate = activeStats.suspensionRate;
+        const prevSuspRate = prevMetrics.suspensionRate;
+        let suspTrend = 'Sin datos del período anterior';
+        let suspHasTrend = false;
+        let suspIsPositive = true;
+
+        if (prevMetrics.hasData && prevMetrics.totalPeriod > 0) {
+            suspHasTrend = true;
+            const diffPp = currSuspRate - prevSuspRate;
+            suspTrend = (diffPp >= 0 ? '+' : '') + `${diffPp.toFixed(1).replace('.', ',')} pp`;
+            suspIsPositive = diffPp <= 0; // Suspensión que baja = verde
+        }
+
+        // 4. Ocupación Quirófano (diferencia en pp; sube = verde)
+        const currOccRate = activeStats.avgOccupancy;
+        const prevOccRate = prevMetrics.avgOccupancy;
+        let occTrend = 'Sin datos del período anterior';
+        let occHasTrend = false;
+        let occIsPositive = true;
+
+        if (prevMetrics.hasData && prevMetrics.orOccupancyData.some((o: any) => o.usefulMinutes > 0)) {
+            occHasTrend = true;
+            const diffPp = currOccRate - prevOccRate;
+            occTrend = (diffPp >= 0 ? '+' : '') + `${diffPp.toFixed(1).replace('.', ',')} pp`;
+            occIsPositive = diffPp >= 0;
+        }
+
+        return [
+            {
+                title: 'Cirugías Realizadas',
+                value: activeStats.totalCompleted,
+                trend: completedTrend,
+                hasTrend: completedHasTrend,
+                isPositive: completedIsPositive,
+                comparisonPeriod: comparisonLabel,
+                icon: 'medical_services',
+                color: 'blue',
+                tooltip: 'Cirugías con estado completado, horario real de finalización cargado o con alta médica de internación registrada (±2 días).',
+                onClick: () => {
+                    setVolumeModalFilter('completed');
+                    setVolumeModalOpen(true);
+                }
+            },
+            {
+                title: 'Puntualidad Primer Turno',
+                value: activeStats.punctualityRateStr,
+                subtext: `Demora promedio: ${activeStats.punctualityAvgDelay} min (${activeStats.punctualityCount} cirugías)`,
+                trend: punctTrend,
+                hasTrend: punctHasTrend,
+                isPositive: punctIsPositive,
+                comparisonPeriod: comparisonLabel,
+                icon: 'schedule',
+                color: 'emerald',
+                tooltip: 'Porcentaje de primeras cirugías programadas del día por quirófano (lunes a viernes hábiles, no guardia) iniciadas con demora ≤ 15 min.',
+                onClick: () => {
+                    setPunctualityModalOpen(true);
+                }
+            },
+            {
+                title: 'Tasa de Suspensión',
+                value: activeStats.suspensionRateStr,
+                trend: suspTrend,
+                hasTrend: suspHasTrend,
+                isPositive: suspIsPositive,
+                comparisonPeriod: comparisonLabel,
+                icon: 'cancel',
+                color: 'red',
+                tooltip: '(Cirugías suspendidas / Total de cirugías programadas en el período) × 100. Las canceladas están excluidas.'
+            },
+            {
+                title: 'Ocupación Quirófano',
+                value: activeStats.avgOccupancyStr,
+                trend: occTrend,
+                hasTrend: occHasTrend,
+                isPositive: occIsPositive,
+                comparisonPeriod: comparisonLabel,
+                icon: 'door_sliding',
+                color: 'purple',
+                tooltip: '(Minutos de cirugías realizadas / Minutos útiles) en días hábiles (lunes a viernes de 06:30 a 20:00, 810 min/día por quirófano), excluyendo feriados nacionales y cirugías de guardia.'
+            }
+        ];
+    }, [globalStats, prevMetrics, comparisonLabel]);
 
     // Simple CSS Chart Components
     const BarChartItem = ({ label, height, colorClass, isCurrent, subLabel }: any) => (
@@ -1360,37 +1753,58 @@ const ResultsDashboard: React.FC = () => {
                 {/* KPI Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {kpis.map((kpi, idx) => {
-                        const isClickable = kpi.title === 'Cirugías Realizadas';
+                        const isClickable = typeof kpi.onClick === 'function';
+                        const colorClasses = KPI_COLOR_MAP[kpi.color] || { bg: 'bg-slate-50', text: 'text-slate-600' };
                         return (
                             <div 
                                 key={idx} 
-                                onClick={() => {
-                                    if (isClickable) {
-                                        setVolumeModalFilter('completed');
-                                        setVolumeModalOpen(true);
-                                    }
-                                }}
-                                className={`bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between ${
-                                    isClickable ? 'cursor-pointer hover:border-blue-400 hover:shadow-md transition-all group active:scale-[0.99]' : ''
+                                onClick={kpi.onClick}
+                                className={`bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between relative group ${
+                                    isClickable ? 'cursor-pointer hover:border-indigo-400 hover:shadow-md transition-all active:scale-[0.99]' : ''
                                 }`}
-                                title={isClickable ? 'Clic para ver las cirugías realizadas contempladas' : undefined}
+                                title={isClickable ? 'Hacer clic para ver el detalle de cirugías' : undefined}
                             >
-                                <div>
-                                    <div className="flex items-center gap-1 mb-1">
+                                <div className="flex-1 pr-2">
+                                    <div className="flex items-center gap-1.5 mb-1">
                                         <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{kpi.title}</p>
                                         {isClickable && (
-                                            <span className="material-symbols-outlined text-[13px] text-slate-400 group-hover:text-blue-600 transition-colors">open_in_new</span>
+                                            <span className="material-symbols-outlined text-[13px] text-slate-400 group-hover:text-indigo-600 transition-colors">open_in_new</span>
+                                        )}
+                                        {kpi.tooltip && (
+                                            <div className="relative group/tooltip inline-flex items-center">
+                                                <span className="material-symbols-outlined text-[14px] text-slate-300 hover:text-slate-500 cursor-help transition-colors">info</span>
+                                                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover/tooltip:block w-64 p-2 bg-slate-900 text-white text-[11px] font-medium rounded-lg shadow-xl z-30 pointer-events-none leading-snug text-center">
+                                                    {kpi.tooltip}
+                                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900"></div>
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                     <h3 className="text-3xl font-black text-slate-900">{kpi.value}</h3>
-                                    <div className={`flex items-center gap-1 mt-2 text-xs font-bold ${kpi.isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
-                                        <span className="material-symbols-outlined text-sm">
-                                            {kpi.isPositive ? 'trending_up' : 'trending_down'}
-                                        </span>
-                                        <span>{kpi.trend} vs periodo anterior</span>
+                                    {kpi.subtext && (
+                                        <p className="text-[11px] text-slate-400 font-semibold mt-0.5">{kpi.subtext}</p>
+                                    )}
+                                    <div className="mt-2 flex flex-col gap-0.5">
+                                        {kpi.hasTrend ? (
+                                            <div className={`flex items-center gap-1 text-xs font-bold ${kpi.isPositive ? 'text-emerald-600' : 'text-red-600'}`}>
+                                                <span className="material-symbols-outlined text-sm">
+                                                    {kpi.isPositive ? 'trending_up' : 'trending_down'}
+                                                </span>
+                                                <span>{kpi.trend} vs período anterior</span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1 text-xs font-medium text-slate-400">
+                                                <span>Sin datos del período anterior</span>
+                                            </div>
+                                        )}
+                                        {kpi.comparisonPeriod && (
+                                            <span className="text-[10px] text-slate-400 font-medium">
+                                                vs {kpi.comparisonPeriod}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
-                                <div className={`p-3 rounded-lg bg-${kpi.color}-50 text-${kpi.color}-600`}>
+                                <div className={`p-3 rounded-lg ${colorClasses.bg} ${colorClasses.text} shrink-0`}>
                                     <span className="material-symbols-outlined text-2xl">{kpi.icon}</span>
                                 </div>
                             </div>
@@ -1485,12 +1899,19 @@ const ResultsDashboard: React.FC = () => {
                         </div>
 
                         {/* Calculation Legend */}
-                        <div className="px-4 py-2 bg-slate-50 border-x border-slate-100 flex items-center gap-2">
-                            <span className="material-symbols-outlined text-slate-400 text-sm">info</span>
-                            <p className="text-[9px] text-slate-500 leading-tight">
-                                <span className="font-bold">Cálculo de Ocupación:</span> (Minutos de cirugías realizadas / Minutos útiles).
-                                El tiempo útil considera Lunes a Viernes de 06:30 a 20:00 (810 min/día), excluyendo feriados nacionales.
-                            </p>
+                        <div className="px-4 py-2 bg-slate-50 border-x border-slate-100 flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-slate-400 text-sm">info</span>
+                                <p className="text-[9px] text-slate-500 leading-tight">
+                                    <span className="font-bold">Cálculo de Ocupación:</span> (Minutos de cirugías realizadas / Minutos útiles).
+                                    El tiempo útil considera Lunes a Viernes de 06:30 a 20:00 (810 min/día por quirófano), excluyendo feriados nacionales y cirugías de guardia.
+                                </p>
+                            </div>
+                            {missingHolidayYears.length > 0 && (
+                                <p className="text-[9px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block font-medium">
+                                    ⚠️ Ocupación calculada sin feriados de {missingHolidayYears.join(', ')}
+                                </p>
+                            )}
                         </div>
 
                         {(() => {
@@ -1584,7 +2005,7 @@ const ResultsDashboard: React.FC = () => {
                                 <div key={suspensionIndex}>
                                     <div className="flex justify-between text-xs mb-1 font-medium">
                                         <span className="text-slate-700">{reason.label}</span>
-                                        <span className="text-slate-900">{reason.value}%</span>
+                                        <span className="text-slate-900 font-bold">{reason.value}% ({reason.count})</span>
                                     </div>
                                     <div className="w-full bg-slate-100 rounded-full h-2">
                                         <div className={`h-2 rounded-full ${reason.color}`} style={{ width: `${reason.value}%` }}></div>
@@ -1818,8 +2239,7 @@ const ResultsDashboard: React.FC = () => {
                                     'Especialidad': row.specialty,
                                     'Programadas': row.scheduled,
                                     'Realizadas': row.performed,
-                                    'Tiempo Promedio': row.avgTime,
-                                    'Tasa Complicaciones': row.complications
+                                    'Tiempo Promedio': row.avgTime
                                 }));
                                 const ws = utils.json_to_sheet(exportData);
                                 const wb = utils.book_new();
@@ -1841,7 +2261,6 @@ const ResultsDashboard: React.FC = () => {
                                     <th className="px-6 py-4 text-center">Programadas</th>
                                     <th className="px-6 py-4 text-center">Realizadas</th>
                                     <th className="px-6 py-4 text-center">Tiempo Promedio</th>
-                                    <th className="px-6 py-4 text-center">Tasa Complicaciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -1862,18 +2281,11 @@ const ResultsDashboard: React.FC = () => {
                                             <td className="px-6 py-4 text-center text-sm font-medium">{row.scheduled}</td>
                                             <td className="px-6 py-4 text-center text-sm font-bold text-emerald-600">{row.performed}</td>
                                             <td className="px-6 py-4 text-center text-sm font-mono text-slate-600 bg-slate-50/50">{row.avgTime}</td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${parseFloat(row.complications) === 0 ? 'bg-emerald-100 text-emerald-800' :
-                                                    parseFloat(row.complications) < 5 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                                                    }`}>
-                                                    {row.complications}
-                                                </span>
-                                            </td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={6} className="px-6 py-8 text-center text-slate-400 italic">No hay datos de eficiencia disponibles para el periodo seleccionado.</td>
+                                        <td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">No hay datos de eficiencia disponibles para el periodo seleccionado.</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -2675,6 +3087,179 @@ const ResultsDashboard: React.FC = () => {
                                     onClick={() => {
                                         setVolumeModalOpen(false);
                                         setVolumeModalSearch('');
+                                    }}
+                                    className="px-6 py-2.5 bg-slate-900 text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-slate-800 transition-all active:scale-95 shadow-md"
+                                >
+                                    Cerrar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {/* Modal de Puntualidad del Primer Turno */}
+            {punctualityModalOpen && (() => {
+                const activeStats = card1Data?.stats || stats;
+                const punctualityList = (activeStats.firstTurnSurgeries || []).filter((s: any) => {
+                    if (!punctualityModalSearch.trim()) return true;
+                    const q = punctualityModalSearch.toLowerCase();
+                    const patient = (s.patients?.full_name || '').toLowerCase();
+                    const doc = (s.doctors?.full_name || '').toLowerCase();
+                    const proc = (s.procedure_name || '').toLowerCase();
+                    const or = (rawOrs.find((o: any) => o.id === s.operating_room_id)?.name || '').toLowerCase();
+                    return patient.includes(q) || doc.includes(q) || proc.includes(q) || or.includes(q);
+                });
+
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-100 animate-in zoom-in-95 duration-200">
+                            {/* Modal Header */}
+                            <div className="px-8 py-5 bg-slate-900 text-white flex justify-between items-center">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-emerald-400 text-2xl">schedule</span>
+                                        <h3 className="text-xl font-black tracking-tight">Primeros Turnos Quirúrgicos</h3>
+                                    </div>
+                                    <p className="text-xs text-slate-400 font-medium mt-0.5">
+                                        Primeras cirugías programadas por quirófano en días hábiles (lunes a viernes, no guardia) realizadas
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={exportPunctualityToExcel}
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center gap-2 transition-all active:scale-95 shadow-md shadow-emerald-950/20"
+                                    >
+                                        <Download className="w-3.5 h-3.5" />
+                                        <span>Exportar Excel</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setPunctualityModalOpen(false);
+                                            setPunctualityModalSearch('');
+                                        }}
+                                        className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Summary / Search Banner */}
+                            <div className="px-8 py-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
+                                <div className="flex items-center gap-4 text-xs font-bold">
+                                    <div className="flex items-center gap-1.5 bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-lg">
+                                        <span className="material-symbols-outlined text-base">check_circle</span>
+                                        <span>Puntualidad: {activeStats.punctualityRateStr || '0%'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg">
+                                        <span className="material-symbols-outlined text-base">timer</span>
+                                        <span>Demora Promedio: {activeStats.avgPunctualityDelayMin ?? 0} min</span>
+                                    </div>
+                                    <span className="text-slate-500 font-medium text-[11px]">
+                                        Tolerancia: ≤ {PUNCTUALITY_TOLERANCE_MIN} min
+                                    </span>
+                                </div>
+
+                                <div className="relative w-full md:w-80">
+                                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar quirófano, cirujano o paciente..."
+                                        value={punctualityModalSearch}
+                                        onChange={(e) => setPunctualityModalSearch(e.target.value)}
+                                        className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                                    />
+                                    {punctualityModalSearch && (
+                                        <button
+                                            onClick={() => setPunctualityModalSearch('')}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Modal Table Content */}
+                            <div className="overflow-y-auto flex-1 p-0 custom-scrollbar">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="sticky top-0 bg-white border-b border-slate-200 shadow-xs z-10">
+                                        <tr className="text-[10px] uppercase font-black text-slate-400 tracking-widest">
+                                            <th className="px-6 py-3">Fecha</th>
+                                            <th className="px-6 py-3">Quirófano</th>
+                                            <th className="px-6 py-3">Cirujano</th>
+                                            <th className="px-6 py-3">Paciente / Procedimiento</th>
+                                            <th className="px-6 py-3 text-center">Hora Programada</th>
+                                            <th className="px-6 py-3 text-center">Hora Real</th>
+                                            <th className="px-6 py-3 text-right">Demora</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {punctualityList.map((s: any) => {
+                                            const or = rawOrs.find((o: any) => o.id === s.operating_room_id);
+                                            const delay = s._delayMin ?? 0;
+                                            const isPunctual = delay <= PUNCTUALITY_TOLERANCE_MIN;
+                                            return (
+                                                <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="px-6 py-3.5 text-xs font-mono text-slate-600 whitespace-nowrap">
+                                                        {s.surgery_date ? format(new Date(s.surgery_date + 'T12:00:00'), 'dd/MM/yyyy') : 'N/A'}
+                                                    </td>
+                                                    <td className="px-6 py-3.5">
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 text-xs font-bold">
+                                                            {or ? or.name : 'Sin asignar'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-3.5">
+                                                        <p className="font-bold text-slate-800 text-xs">{s.doctors?.full_name || 'Sin Asignar'}</p>
+                                                        <p className="text-[10px] text-slate-400">{s.doctors?.specialty || 'General'}</p>
+                                                    </td>
+                                                    <td className="px-6 py-3.5">
+                                                        <p className="font-bold text-slate-900 text-xs">{s.patients?.full_name || 'Desconocido'}</p>
+                                                        <p className="text-[10px] text-slate-500 max-w-xs truncate" title={s.procedure_name}>
+                                                            {s.procedure_name || 'Sin especificar'}
+                                                        </p>
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-center text-xs font-mono font-medium text-slate-600">
+                                                        {s.start_time ? s.start_time.slice(0, 5) : '-'}
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-center text-xs font-mono font-bold text-slate-900">
+                                                        {s.actual_start_time ? s.actual_start_time.slice(0, 5) : '-'}
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-right">
+                                                        <div className="flex flex-col items-end gap-0.5">
+                                                            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                                                isPunctual
+                                                                    ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200'
+                                                                    : 'bg-red-100 text-red-700 ring-1 ring-red-200'
+                                                            }`}>
+                                                                {isPunctual ? 'Puntual' : 'Demorado'} ({delay} min)
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {punctualityList.length === 0 && (
+                                            <tr>
+                                                <td colSpan={7} className="text-center py-12 text-slate-400 text-xs italic">
+                                                    No se encontraron primeros turnos con los criterios seleccionados.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="px-8 py-4 bg-white border-t border-slate-100 flex justify-between items-center">
+                                <span className="text-xs text-slate-500 font-bold">
+                                    Mostrando {punctualityList.length} de {(activeStats.firstTurnSurgeries || []).length} primeros turnos
+                                </span>
+                                <button
+                                    onClick={() => {
+                                        setPunctualityModalOpen(false);
+                                        setPunctualityModalSearch('');
                                     }}
                                     className="px-6 py-2.5 bg-slate-900 text-white text-xs font-black uppercase tracking-wider rounded-xl hover:bg-slate-800 transition-all active:scale-95 shadow-md"
                                 >

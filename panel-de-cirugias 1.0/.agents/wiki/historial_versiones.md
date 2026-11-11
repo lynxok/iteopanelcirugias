@@ -2,6 +2,18 @@
 
 Este documento registra los cambios de versiones documentados anteriormente en el archivo monolítico `KNOWLEDGE.md`.
 
+*   **v3.13.37 [2026-11-11]**: Lanzada la versión **v3.13.37**.
+    *   **Tablero de Dirección con Datos Reales y Consistentes (`pages/ResultsDashboard.tsx`)**:
+        *   **Eliminación de Métricas Obsoletas**: Se removió "Tasa de Éxito" (`successRate`) de los KPIs ejecutivos y la columna hardcodeada de "Tasa Complicaciones" (tabla y exportación Excel) en Operaciones por Cirujano.
+        *   **Tendencias Reales vs Período Anterior (`getPreviousPeriodDates`)**: Comparación dinámica para *Esta Semana*, *Este Mes*, *Este Trimestre*, *Este Año* y *Personalizado*, con recorte automático "a la fecha" para períodos en curso. Variación relativa (%) para Cirugías Realizadas y diferencia en puntos porcentuales ($pp$) para Suspensión, Ocupación y Puntualidad. Subtítulo con rango comparado (`vs dd/MM–dd/MM/yyyy`) y colores según conveniencia (suspensión que baja es verde).
+        *   **Consistencia de Cirugía Realizada (`enrichSurgeryStatus`)**: Unificación mediante mapa de internaciones cruzadas (`admissionsMap` con `useMemo`), aplicado uniformemente en KPIs, Volumen, Eficiencia por Cirujano, Casuística e Inteligencia Predictiva. La tasa de suspensión mantiene excluida estrictamente a las canceladas.
+        *   **Nuevo KPI "Puntualidad del Primer Turno"**: Evaluación de las primeras cirugías programadas por día hábil y quirófano (lunes a viernes no feriados, sin guardia, realizadas, con inicio programado y real). Tolerancia $\le 15$ min (`PUNCTUALITY_TOLERANCE_MIN = 15`), subtexto con demora promedio y modal interactivo con buscador y exportación a Excel.
+        *   **Ocupación Quirúrgica Depurada**: Numerador restringido a cirugías realizadas no-guardia en días hábiles. Franja útil de 810 min/día por quirófano.
+        *   **Gestión Multi-Año de Feriados**: Consulta a `quirofano.calendar_holidays` (nacionales y recurrentes proyectados a todos los años del rango), fallback automático a la API de `argentinadatos.com` con caché en `localStorage`, y aviso discreto si faltan feriados de algún año.
+        *   **Redondeo de Motivos de Suspensión**: Método del mayor resto (*Hare-Niemeyer*) para sumar exactamente 100%, con visualización de cantidad absoluta (`% (N)`).
+        *   **Correcciones Técnicas**: Mapeo completo en exportación Excel de volumen (`cancelled` $\to$ Cancelada), paginación estable con `.order('id')` y filtro `surgery_date >= startOfYear(subYears(hoy, 2))`, mapa estático de clases de color Tailwind (`KPI_COLOR_MAP`), y tooltips informativos con la fórmula de cada KPI.
+
+
 *   **v3.13.29 [2026-11-05]**: Lanzada la versión **v3.13.29**.
     *   **Blindaje Antirace y Descarte de Metadatos Obsoletos en Puente OBS (`ObsBackgroundController.tsx`, `ObsRecordingSection.tsx`)**:
         *   **Eliminación Asíncrona Garantizada (`await removeChannel`)**: Resuelto el bloqueo de `socket.channels` de `realtime-js` esperando la confirmación de remoción del canal viejo antes de crear el nuevo; bandera `isResubscribingRef` previene solapamiento entre watchdog, wake, online y retry.

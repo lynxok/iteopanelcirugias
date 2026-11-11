@@ -76,7 +76,28 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
 
 ### Métricas del Dashboard de Resultados (Volumen y Eficiencia)
 *   **Cirugías Programadas**: Total de cirugías agendadas dentro del intervalo de tiempo evaluado (`totalPeriod`).
-*   **Cirugías Realizadas**: Cirugías con estado `completed` o que cuenten con horario real de finalización (`actual_end_time`) o alta cruzada de internación (`totalCompleted`).
+*   **Cirugías Realizadas**: Cirugías computadas con la función común `enrichSurgeryStatus` (estado `completed`, o con horario real de finalización `actual_end_time`, o con alta de internación cruzada en rango ±2 días con horario real de inicio `actual_start_time`). Se utiliza de forma uniforme en todas las tarjetas del tablero: KPI, Volumen, Operaciones por Cirujano, Inteligencia Predictiva y Casuística.
+*   **Tasa de Suspensión**:
+    $$\text{Tasa de Suspensión} = \left(\frac{\text{Cirugías Suspendidas}}{\text{Total de Cirugías Programadas}}\right) \times 100$$
+    *Regla estricta*: Las cirugías canceladas **están formalmente excluidas** del cálculo de suspensión.
+*   **Motivos de Suspensión**: La distribución porcentual de causas de suspensión se redondea utilizando el método del mayor resto (*Hare-Niemeyer*) para garantizar que la suma total sea exactamente el 100%, indicando además la cantidad absoluta registrada (`40% (6)`).
+*   **Puntualidad del Primer Turno (reemplaza Tasa de Éxito)**:
+    *   *Universo*: Primeras cirugías programadas del día por quirófano (menor `start_time`), en días hábiles (lunes a viernes, no feriados), con `is_guardia` distinto de `true`, que hayan sido efectivamente realizadas y que cuenten con `start_time` y `actual_start_time` registrados.
+    *   *Demora*: $\text{Demora} = \max(0, \text{actual\_start\_time} - \text{start\_time})$ en minutos.
+    *   *Meta/Tolerancia*: Cumplimiento con demora $\le 15$ minutos (`PUNCTUALITY_TOLERANCE_MIN = 15`).
+    *   *Visualización*: Porcentaje de cumplimiento, demora promedio en minutos, total de cirugías evaluadas y modal detallado con exportación a Excel.
+*   **Ocupación de Quirófano**:
+    *   *Numerador*: Minutos reales de cirugías realizadas en días hábiles (lunes a viernes no feriados nacionales) con `is_guardia` distinto de `true`. Las cirugías de guardia no suman minutos a la ocupación útil.
+    *   *Denominador*: $\text{Días hábiles del período} \times 810\text{ min/día}$ por quirófano (franja útil de 06:30 a 20:00).
+    *   *Feriados*: Obtenidos de `quirofano.calendar_holidays` (tipo `nacional`, proyectando fechas con `is_recurring_yearly = true` a todos los años del rango evaluado). Fallback automático con consulta y guardado en `localStorage` mediante API de `argentinadatos.com` ante años sin registros en base de datos.
+*   **Tendencias vs Período Anterior**:
+    *   Calculadas dinámicamente con la función común `getPreviousPeriodDates` (Esta Semana $\to$ semana anterior; Este Mes $\to$ mes anterior; Este Trimestre $\to$ 3 meses anteriores; Este Año $\to$ año anterior; Personalizado $\to$ misma cantidad de días inmediatamente anteriores).
+    *   *Recorte a la fecha*: Si el período evaluado está en curso (incluye hoy), el período anterior se recorta a la misma cantidad de días transcurridos para una comparación proporcional justa.
+    *   *Unidades y Dirección*:
+        *   Cirugías Realizadas: variación porcentual relativa ($\%$). Subir es favorable (verde).
+        *   Tasa de Suspensión: diferencia en puntos porcentuales ($pp$). Bajar es favorable (verde).
+        *   Ocupación de Quirófano y Puntualidad: diferencia en puntos porcentuales ($pp$). Subir es favorable (verde).
+        *   Si no hay cirugías en el período anterior, se indica neutralmente `"Sin datos del período anterior"`.
 *   **Diferencia (`Δ sin completar`)**: Cantidad de cirugías programadas que no se han realizado a la fecha (`totalPeriod - totalCompleted`). Al hacer clic, el modal desglosa cuántas fueron canceladas o suspendidas (con su motivo registrado) y cuántas continúan pendientes en agenda.
 *   **Efectivas Esperadas**: Métrica gerencial para proyectar el volumen total de cirugías concretadas al cierre del período:
     $$\text{Efectivas Esperadas} = \text{Programadas Totales} - \text{Suspendidas} - \text{Canceladas} = \text{Realizadas} + \text{Programadas vigentes en agenda}$$
