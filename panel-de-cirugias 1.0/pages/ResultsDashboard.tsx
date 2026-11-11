@@ -623,9 +623,12 @@ const ResultsDashboard: React.FC = () => {
         XLSX.writeFile(wb, `Cirugias_${filterType}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
     };
 
-    const exportPunctualityToExcel = (items: any[]) => {
-        if (!items || !items.length) return;
-        const exportData = items.map(p => ({
+    const exportPunctualityToExcel = (items?: any[]) => {
+        const targetList = Array.isArray(items) && items.length > 0 
+            ? items 
+            : ((card1Data?.metrics || globalStats)?.punctualityItems || []);
+        if (!targetList.length) return;
+        const exportData = targetList.map(p => ({
             "Fecha": p.date ? format(new Date(p.date + 'T12:00:00'), 'dd/MM/yyyy') : 'N/A',
             "Quirófano": p.orName,
             "Cirujano": p.surgeonName,
@@ -3100,15 +3103,15 @@ const ResultsDashboard: React.FC = () => {
 
             {/* Modal de Puntualidad del Primer Turno */}
             {punctualityModalOpen && (() => {
-                const activeStats = card1Data?.stats || stats;
-                const punctualityList = (activeStats.firstTurnSurgeries || []).filter((s: any) => {
+                const activeMetrics = card1Data?.metrics || globalStats;
+                const punctualityList = (activeMetrics.punctualityItems || []).filter((p: any) => {
                     if (!punctualityModalSearch.trim()) return true;
                     const q = punctualityModalSearch.toLowerCase();
-                    const patient = (s.patients?.full_name || '').toLowerCase();
-                    const doc = (s.doctors?.full_name || '').toLowerCase();
-                    const proc = (s.procedure_name || '').toLowerCase();
-                    const or = (rawOrs.find((o: any) => o.id === s.operating_room_id)?.name || '').toLowerCase();
-                    return patient.includes(q) || doc.includes(q) || proc.includes(q) || or.includes(q);
+                    const patient = (p.procedureName || '').toLowerCase(); // procedure / patient
+                    const doc = (p.surgeonName || '').toLowerCase();
+                    const proc = (p.procedureName || '').toLowerCase();
+                    const or = (p.orName || '').toLowerCase();
+                    return doc.includes(q) || proc.includes(q) || or.includes(q);
                 });
 
                 return (
@@ -3127,7 +3130,7 @@ const ResultsDashboard: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <button
-                                        onClick={exportPunctualityToExcel}
+                                        onClick={() => exportPunctualityToExcel(punctualityList)}
                                         className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center gap-2 transition-all active:scale-95 shadow-md shadow-emerald-950/20"
                                     >
                                         <Download className="w-3.5 h-3.5" />
@@ -3150,11 +3153,11 @@ const ResultsDashboard: React.FC = () => {
                                 <div className="flex items-center gap-4 text-xs font-bold">
                                     <div className="flex items-center gap-1.5 bg-emerald-100 text-emerald-800 px-3 py-1.5 rounded-lg">
                                         <span className="material-symbols-outlined text-base">check_circle</span>
-                                        <span>Puntualidad: {activeStats.punctualityRateStr || '0%'}</span>
+                                        <span>Puntualidad: {activeMetrics.punctualityRateStr || '0%'}</span>
                                     </div>
                                     <div className="flex items-center gap-1.5 bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg">
                                         <span className="material-symbols-outlined text-base">timer</span>
-                                        <span>Demora Promedio: {activeStats.avgPunctualityDelayMin ?? 0} min</span>
+                                        <span>Demora Promedio: {activeMetrics.punctualityAvgDelay ?? 0} min</span>
                                     </div>
                                     <span className="text-slate-500 font-medium text-[11px]">
                                         Tolerancia: ≤ {PUNCTUALITY_TOLERANCE_MIN} min
@@ -3165,7 +3168,7 @@ const ResultsDashboard: React.FC = () => {
                                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                     <input
                                         type="text"
-                                        placeholder="Buscar quirófano, cirujano o paciente..."
+                                        placeholder="Buscar quirófano, cirujano o procedimiento..."
                                         value={punctualityModalSearch}
                                         onChange={(e) => setPunctualityModalSearch(e.target.value)}
                                         className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
@@ -3189,42 +3192,39 @@ const ResultsDashboard: React.FC = () => {
                                             <th className="px-6 py-3">Fecha</th>
                                             <th className="px-6 py-3">Quirófano</th>
                                             <th className="px-6 py-3">Cirujano</th>
-                                            <th className="px-6 py-3">Paciente / Procedimiento</th>
+                                            <th className="px-6 py-3">Procedimiento</th>
                                             <th className="px-6 py-3 text-center">Hora Programada</th>
                                             <th className="px-6 py-3 text-center">Hora Real</th>
                                             <th className="px-6 py-3 text-right">Demora</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {punctualityList.map((s: any) => {
-                                            const or = rawOrs.find((o: any) => o.id === s.operating_room_id);
-                                            const delay = s._delayMin ?? 0;
-                                            const isPunctual = delay <= PUNCTUALITY_TOLERANCE_MIN;
+                                        {punctualityList.map((p: any) => {
+                                            const delay = p.delay ?? 0;
+                                            const isPunctual = p.isPunctual;
                                             return (
-                                                <tr key={s.id} className="hover:bg-slate-50 transition-colors">
+                                                <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                                                     <td className="px-6 py-3.5 text-xs font-mono text-slate-600 whitespace-nowrap">
-                                                        {s.surgery_date ? format(new Date(s.surgery_date + 'T12:00:00'), 'dd/MM/yyyy') : 'N/A'}
+                                                        {p.date ? format(new Date(p.date + 'T12:00:00'), 'dd/MM/yyyy') : 'N/A'}
                                                     </td>
                                                     <td className="px-6 py-3.5">
                                                         <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 text-xs font-bold">
-                                                            {or ? or.name : 'Sin asignar'}
+                                                            {p.orName || 'Sin asignar'}
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-3.5">
-                                                        <p className="font-bold text-slate-800 text-xs">{s.doctors?.full_name || 'Sin Asignar'}</p>
-                                                        <p className="text-[10px] text-slate-400">{s.doctors?.specialty || 'General'}</p>
+                                                        <p className="font-bold text-slate-800 text-xs">{p.surgeonName || 'Sin Asignar'}</p>
                                                     </td>
                                                     <td className="px-6 py-3.5">
-                                                        <p className="font-bold text-slate-900 text-xs">{s.patients?.full_name || 'Desconocido'}</p>
-                                                        <p className="text-[10px] text-slate-500 max-w-xs truncate" title={s.procedure_name}>
-                                                            {s.procedure_name || 'Sin especificar'}
+                                                        <p className="text-xs text-slate-700 max-w-xs truncate" title={p.procedureName}>
+                                                            {p.procedureName || 'Sin especificar'}
                                                         </p>
                                                     </td>
                                                     <td className="px-6 py-3.5 text-center text-xs font-mono font-medium text-slate-600">
-                                                        {s.start_time ? s.start_time.slice(0, 5) : '-'}
+                                                        {p.scheduledTime ? p.scheduledTime.slice(0, 5) : '-'}
                                                     </td>
                                                     <td className="px-6 py-3.5 text-center text-xs font-mono font-bold text-slate-900">
-                                                        {s.actual_start_time ? s.actual_start_time.slice(0, 5) : '-'}
+                                                        {p.actualTime ? p.actualTime.slice(0, 5) : '-'}
                                                     </td>
                                                     <td className="px-6 py-3.5 text-right">
                                                         <div className="flex flex-col items-end gap-0.5">
@@ -3254,7 +3254,7 @@ const ResultsDashboard: React.FC = () => {
                             {/* Modal Footer */}
                             <div className="px-8 py-4 bg-white border-t border-slate-100 flex justify-between items-center">
                                 <span className="text-xs text-slate-500 font-bold">
-                                    Mostrando {punctualityList.length} de {(activeStats.firstTurnSurgeries || []).length} primeros turnos
+                                    Mostrando {punctualityList.length} de {(activeMetrics.punctualityItems || []).length} primeros turnos
                                 </span>
                                 <button
                                     onClick={() => {
