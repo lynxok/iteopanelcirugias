@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v3.13.36 (2026-11-11)
+- **Corrección de Nombres de Pacientes y Búsqueda Integral en Panel de Técnicos (`TecnicoPanel.tsx`)**:
+    * **Resolución de Nombres en Modal Manual**:
+        - Corrección en la extracción del nombre del paciente (`s.patient?.full_name` en lugar de `.name`), eliminando la visualización forzada de "Paciente sin nombre" en la totalidad de opciones del modal.
+        - Implementación de helper robusto `getSurgeryPatientName` con soporte para objetos directos, arrays de relaciones de Supabase y fallbacks sanitizados.
+    * **Ampliación de Cirugías del Período Realizadas**:
+        - Reemplazo del filtro estricto `.eq('status', 'completed')` por `.or('status.eq.completed,actual_start_time.not.is.null')` con exclusión explícita de intervenciones suspendidas/canceladas para permitir la selección de cualquier cirugía efectivamente realizada en el mes.
+    * **Buscador en Tiempo Real en Modal de Cirugías Manuales**:
+        - Agregado input reactivo con filtrado por paciente, procedimiento/código o fecha.
+        - Contador dinámico de resultados disponibles y tarjeta interactiva de vista previa con detalles de horario de inicio real.
+
 ## v3.13.35 (2026-11-10)
 - **Validación Estricta de Identidad y Doble Factor en GlobalApp (`globalapp_scraper.py`, `SurgeryForm.tsx`, `globalappSync.ts`)**:
     * **Doble Chequeo Clínico (DNI Exacto + Nombre/Apellido)**:

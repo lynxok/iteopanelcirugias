@@ -264,6 +264,7 @@ export default function TecnicoPanel() {
 
     // Listados de datos
     const [tecnicos, setTecnicos] = useState<any[]>([]);
+    const [allCollaborators, setAllCollaborators] = useState<any[]>([]);
     const [surgeries, setSurgeries] = useState<any[]>([]);
     const [attendanceLogs, setAttendanceLogs] = useState<Attendance[]>([]);
     const [allMonthAttendance, setAllMonthAttendance] = useState<Attendance[]>([]);
@@ -271,6 +272,7 @@ export default function TecnicoPanel() {
     const [allManualSurgeries, setAllManualSurgeries] = useState<ManualSurgery[]>([]);
     const [isAddManualModalOpen, setIsAddManualModalOpen] = useState<boolean>(false);
     const [selectedManualSurgeryId, setSelectedManualSurgeryId] = useState<string>('');
+    const [manualSurgerySearch, setManualSurgerySearch] = useState<string>('');
     const [isSavingManualSurgery, setIsSavingManualSurgery] = useState<boolean>(false);
     const [isCoAssignModalOpen, setIsCoAssignModalOpen] = useState<boolean>(false);
     const [coAssignSurgeryId, setCoAssignSurgeryId] = useState<string>('');
@@ -466,6 +468,16 @@ export default function TecnicoPanel() {
         }
     }, []);
 
+    // Helper para extraer nombre del paciente de forma consistente y segura
+    const getSurgeryPatientName = (s: any) => {
+        if (!s) return 'Paciente sin nombre';
+        const p = s.patient || s.patients;
+        if (Array.isArray(p)) {
+            return p[0]?.full_name || p[0]?.name || s.patient_name || 'Paciente sin nombre';
+        }
+        return p?.full_name || p?.name || s.patient_name || 'Paciente sin nombre';
+    };
+
     const fetchData = useCallback(async () => {
         try {
             const monthStr = String(selectedMonth + 1).padStart(2, '0');
@@ -496,9 +508,9 @@ export default function TecnicoPanel() {
             ] = await Promise.all([
                 supabase
                     .from('users')
-                    .select('id, name, email, is_turno_tarde, has_tecnico_section_access, does_guardias')
-                    .eq('role', 'Tecnico')
-                    .eq('active', true),
+                    .select('id, name, email, role, is_turno_tarde, has_tecnico_section_access, does_guardias')
+                    .eq('active', true)
+                    .order('name'),
                 supabase
                     .from('tecnico_rates')
                     .select('*'),
@@ -528,9 +540,11 @@ export default function TecnicoPanel() {
                         procedure:procedure_name, 
                         date:surgery_date, 
                         actual_start_time, 
-                        actual_end_time
+                        actual_end_time,
+                        status
                     `)
-                    .eq('status', 'completed')
+                    .or('status.eq.completed,actual_start_time.not.is.null')
+                    .not('status', 'in', '("cancelled","suspended")')
                     .gte('surgery_date', surgStartStr)
                     .lte('surgery_date', surgEndStr)
                     .order('surgery_date', { ascending: true })
@@ -566,12 +580,29 @@ export default function TecnicoPanel() {
                     .limit(5) : Promise.resolve({ data: [] })
             ]);
 
-            // Procesar Técnicos
+            // Procesar Técnicos y Colaboradores
             if (usersRes?.data) {
-                const filteredTecs = usersRes.data.filter((t: any) => t.does_guardias || t.is_turno_tarde);
-                setTecnicos(filteredTecs);
-                if (!targetTecnicoId && filteredTecs.length > 0 && isLevelAdmin) {
-                    targetTecnicoId = filteredTecs[0].id;
+                const allActive = usersRes.data;
+                setAllCollaborators(allActive);
+
+                // Técnicos específicos para la gestión del panel (rol Técnico, Instrumentadora, o con acceso de sección)
+                const tecs = allActive.filter((t: any) => 
+                    t.role === 'Tecnico' || 
+                    t.role === 'Instrumentadora' || 
+                    t.has_tecnico_section_access
+                );
+
+                // Ordenar: primero los habituales de guardia o turno tarde, luego el resto por nombre
+                tecs.sort((a: any, b: any) => {
+                    const aPriority = (a.does_guardias || a.is_turno_tarde) ? 1 : 0;
+                    const bPriority = (b.does_guardias || b.is_turno_tarde) ? 1 : 0;
+                    if (aPriority !== bPriority) return bPriority - aPriority;
+                    return (a.name || '').localeCompare(b.name || '');
+                });
+
+                setTecnicos(tecs);
+                if (!targetTecnicoId && tecs.length > 0 && isLevelAdmin) {
+                    targetTecnicoId = tecs[0].id;
                     setSelectedTecnicoId(targetTecnicoId);
                 }
             }
@@ -644,7 +675,7 @@ export default function TecnicoPanel() {
                 const allManData = manualSurgeriesRes.data;
                 setAllManualSurgeries(allManData);
                 if (targetTecnicoId) {
-                    setManualSurgeryIds(allManData.filter((m: any) => m.user_id === targetTecnicoId).map((m: any) => m.surgery_id));
+                    setManualSurgeryIds(allManData.filter((m: any) => m.user_id === targetTecnicoId && m.status !== 'rejected').map((m: any) => m.surgery_id));
                 } else {
                     setManualSurgeryIds([]);
                 }
@@ -1058,7 +1089,18 @@ export default function TecnicoPanel() {
         };
     }, [selectedYear, selectedMonth, selectedTecnicoId, tecnicos, getOnDutyTecnicoForDate, holidaysSet, attendanceHoursReport, attendanceJustifications, overtimeTolerance]);
 
-
+    // Filtrado para el modal de agregar cirugía manual (con búsqueda reactiva en tiempo real)
+    const availableSurgeries = useMemo(() => {
+        if (!manualSurgerySearch.trim()) return surgeries;
+        const q = manualSurgerySearch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+        return surgeries.filter(s => {
+            const pat = getSurgeryPatientName(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const proc = (s.procedure || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const date = (s.date || '');
+            const time = (s.actual_start_time || '');
+            return pat.includes(q) || proc.includes(q) || date.includes(q) || time.includes(q);
+        });
+    }, [surgeries, manualSurgerySearch]);
 
     // Filtrado de cirugías en las que participó el técnico seleccionado
     const filteredSurgeries = useMemo(() => {
@@ -1066,6 +1108,12 @@ export default function TecnicoPanel() {
         if (!tec) return [];
 
         return surgeries.filter(s => {
+            // Si la cirugía fue expresamente restada / excluida para este técnico, omitir
+            const isExplicitlyExcluded = allManualSurgeries.some(
+                m => m.user_id === selectedTecnicoId && m.surgery_id === s.id && m.status === 'rejected'
+            );
+            if (isExplicitlyExcluded) return false;
+
             // Si la cirugía fue agregada manualmente por este técnico, incluir siempre
             if (manualSurgeryIds.includes(s.id)) return true;
 
@@ -1362,16 +1410,17 @@ export default function TecnicoPanel() {
             const estimatedShare = myShare;
 
             // REGLA (06/11/2026): Fichada obligatoria para computar cirugías en días hábiles
-            // De lunes a viernes que no sean feriados, una cirugía solo se liquida si estaba fichado al momento de la cirugía.
+            // De lunes a viernes que no sean feriados, una cirugía automática habitual solo se liquida si estaba fichado al momento de la cirugía.
             // Sábados, domingos y feriados NO requieren fichada.
+            // EXCEPCIÓN MANUAL: Si la cirugía fue asignada manualmente (isManual) y está aprobada, se liquida directamente haya o no cubierto el turno.
             const isHolidayDay = isHoliday(surgDate, holidaysSet);
-            const requiresAttendance = isWeekDay && !isHolidayDay;
+            const requiresAttendance = isWeekDay && !isHolidayDay && !isManual;
             const presente = s.actual_start_time 
                 ? isTecnicoPresentForSurgery(selectedTecnicoId, s.date, s.actual_start_time, false, dayOfWeek)
                 : hasCheckedInOnDate(selectedTecnicoId, s.date);
             const isMissingAttendance = requiresAttendance && !presente;
 
-            // Si la cirugía fue agregada manualmente y no está aprobada, O si falta fichada requerida -> $0
+            // Si la cirugía fue agregada manualmente y no está aprobada, O si falta fichada requerida en asignación automática -> $0
             const actualShare = ((isManual && manualStatus !== 'approved') || isMissingAttendance) ? 0 : myShare;
 
             return {
@@ -1402,6 +1451,12 @@ export default function TecnicoPanel() {
                 notes: shareNotes,
                 isSingleAssignee: !hasMultipleAssignees,
                 coAssignedCount: approvedManualAssignees.length,
+                assignedCollaborators: allManualSurgeries
+                    .filter(m => m.surgery_id === s.id && m.status !== 'rejected')
+                    .map(m => {
+                        const u = allCollaborators.find(c => c.id === m.user_id) || tecnicos.find(c => c.id === m.user_id);
+                        return { userId: m.user_id, name: u?.name || 'Colaborador', status: m.status, id: m.id };
+                    }),
                 formInstrumentadora: formInstrumentadora || null,
                 isInstrumentadoraMismatch: !!isInstrumentadoraMismatch,
                 rateUpdatedAt: firstPractice?.rateUpdatedAt,
@@ -1762,7 +1817,7 @@ export default function TecnicoPanel() {
     const handleAddManualSurgery = async () => {
         if (!selectedManualSurgeryId || !selectedTecnicoId) return;
         setIsSavingManualSurgery(true);
-        const targetTecnico = tecnicos.find(t => t.id === selectedTecnicoId);
+        const targetTecnico = tecnicos.find(t => t.id === selectedTecnicoId) || allCollaborators.find(t => t.id === selectedTecnicoId);
         const targetSurgery = surgeries.find(s => s.id === selectedManualSurgeryId);
 
         const isValidator = canValidateManualSurgeries;
@@ -1803,6 +1858,7 @@ export default function TecnicoPanel() {
                 setManualSurgeryIds(prev => [...prev, selectedManualSurgeryId]);
                 setIsAddManualModalOpen(false);
                 setSelectedManualSurgeryId('');
+                setManualSurgerySearch('');
                 fetchData();
 
                 if (!isValidator) {
@@ -1822,7 +1878,7 @@ export default function TecnicoPanel() {
     const handleCoAssignTecnico = async () => {
         if (!coAssignSurgeryId || !coAssignTecnicoId) return;
         setIsSavingManualSurgery(true);
-        const targetTecnico = tecnicos.find(t => t.id === coAssignTecnicoId);
+        const targetTecnico = allCollaborators.find(t => t.id === coAssignTecnicoId) || tecnicos.find(t => t.id === coAssignTecnicoId);
         const targetSurgery = surgeries.find(s => s.id === coAssignSurgeryId);
 
         const isValidator = canValidateManualSurgeries;
@@ -1889,7 +1945,7 @@ export default function TecnicoPanel() {
         if (!manRecord) return;
 
         const targetSurgery = surgeries.find(s => s.id === manRecord.surgery_id);
-        const targetTecnico = tecnicos.find(t => t.id === manRecord.user_id);
+        const targetTecnico = tecnicos.find(t => t.id === manRecord.user_id) || allCollaborators.find(t => t.id === manRecord.user_id);
 
         const newStatus = action === 'approve' ? 'approved' : 'rejected';
         const actionLabel = action === 'approve' ? 'VALIDAR Y APROBAR' : 'RECHAZAR';
@@ -1924,6 +1980,61 @@ export default function TecnicoPanel() {
         } catch (err: any) {
             console.error('Error al validar cirugía manual:', err);
             alert('Error al validar la cirugía: ' + err.message);
+        }
+    };
+
+    // Restar / Excluir a una técnica de una cirugía (sea manual o asignada por turno habitual)
+    const handleRemoveOrExcludeTecnico = async (surgeryId: string, targetUserId: string) => {
+        const targetTecnico = allCollaborators.find(t => t.id === targetUserId) || tecnicos.find(t => t.id === targetUserId);
+        const targetSurgery = surgeries.find(s => s.id === surgeryId);
+
+        if (!confirm(`¿Está seguro de que desea restar a ${targetTecnico?.name || 'la técnica'} de esta cirugía (${targetSurgery?.procedure} - ${targetSurgery?.patient?.full_name || targetSurgery?.patient?.name || 'Paciente'})?\n\nLa cirugía dejará de computarse para este profesional.`)) {
+            return;
+        }
+
+        try {
+            setIsSavingManualSurgery(true);
+            const existingMan = allManualSurgeries.find(m => m.user_id === targetUserId && m.surgery_id === surgeryId);
+
+            if (existingMan && existingMan.status !== 'rejected') {
+                const { error } = await supabase
+                    .from('tecnico_manual_surgeries')
+                    .delete()
+                    .eq('id', existingMan.id);
+                if (error) throw error;
+            } else {
+                const { error } = await supabase
+                    .from('tecnico_manual_surgeries')
+                    .upsert({
+                        user_id: targetUserId,
+                        surgery_id: surgeryId,
+                        status: 'rejected',
+                        created_by: user?.id,
+                        created_by_name: user?.name || user?.email || 'Usuario',
+                        created_by_role: user?.role || 'Tecnico',
+                        validated_at: new Date().toISOString(),
+                        validated_by: user?.id,
+                        validated_by_name: user?.name || 'Administrador',
+                        notes: 'Exclusión manual de técnica'
+                    });
+                if (error) throw error;
+            }
+
+            await logAudit(
+                'DELETE',
+                'Técnicos - Restar Técnica',
+                surgeryId,
+                `${user?.name || 'Usuario'} restó a la técnica ${targetTecnico?.name || 'Técnico'} de la cirugía de ${targetSurgery?.patient?.full_name || 'Paciente'}.`,
+                { user_id: targetUserId, surgery_id: surgeryId }
+            );
+
+            await fetchData();
+            alert('Técnica restada de la cirugía con éxito.');
+        } catch (err: any) {
+            console.error('Error al restar técnica:', err);
+            alert('Error al restar técnica: ' + (err.message || 'Error desconocido'));
+        } finally {
+            setIsSavingManualSurgery(false);
         }
     };
 
@@ -2838,16 +2949,25 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                 <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full md:w-auto">
                     {isLevelAdmin && (
                         <div className="flex flex-col">
-                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Técnico</label>
+                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">Técnico / Colaborador</label>
                             <select
                                 className="bg-transparent border-none text-xs font-bold focus:ring-0 text-slate-700 py-1"
                                 value={selectedTecnicoId}
                                 onChange={e => setSelectedTecnicoId(e.target.value)}
                             >
                                 <option value="">Seleccione Técnico...</option>
-                                {tecnicos.map(t => (
-                                    <option key={t.id} value={t.id}>{t.name} {t.is_turno_tarde ? '(Fijo)' : '(Guardia)'}</option>
-                                ))}
+                                <optgroup label="Técnicos de Guardia / Fijos">
+                                    {tecnicos.filter(t => t.does_guardias || t.is_turno_tarde).map(t => (
+                                        <option key={t.id} value={t.id}>{t.name} {t.is_turno_tarde ? '(Fijo)' : '(Guardia)'}</option>
+                                    ))}
+                                </optgroup>
+                                {tecnicos.some(t => !t.does_guardias && !t.is_turno_tarde) && (
+                                    <optgroup label="Otros Técnicos / Colaboradores">
+                                        {tecnicos.filter(t => !t.does_guardias && !t.is_turno_tarde).map(t => (
+                                            <option key={t.id} value={t.id}>{t.name} ({t.role || 'Colaborador'})</option>
+                                        ))}
+                                    </optgroup>
+                                )}
                             </select>
                         </div>
                     )}
@@ -3761,6 +3881,31 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                                  {s.notes}
                                                              </span>
                                                          )}
+
+                                                        {/* Badges de Técnicas / Colaboradores asignados con opción de restar */}
+                                                        {s.assignedCollaborators && s.assignedCollaborators.length > 0 && (
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                {s.assignedCollaborators.map((c: any) => (
+                                                                    <span key={c.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-bold" title={`Técnica coparticipante: ${c.name}`}>
+                                                                        <span className="material-symbols-outlined text-[11px] text-indigo-500">group</span>
+                                                                        <span>{c.name} (50%)</span>
+                                                                        {(isLevelAdmin || canValidateManualSurgeries) && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleRemoveOrExcludeTecnico(s.id, c.userId);
+                                                                                }}
+                                                                                className="hover:text-rose-600 text-slate-400 font-black ml-0.5"
+                                                                                title={`Restar a ${c.name} de esta cirugía`}
+                                                                            >
+                                                                                ×
+                                                                            </button>
+                                                                        )}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                          
                                                          {s.isInstrumentadoraMismatch && (
                                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 text-[10px]" title={`Técnico en ficha: ${s.formInstrumentadora}`}>
@@ -3831,7 +3976,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                             )
                                                         )}
 
-                                                        {/* Botón Sumar Técnico / Colaboradora */}
+                                                        {/* Botón Sumar / Restar Técnicas de la Cirugía */}
                                                         {(s.isSingleAssignee || isLevelAdmin || canValidateManualSurgeries) && (!s.isManual || s.manualStatus === 'approved') && (
                                                             <button
                                                                 onClick={() => {
@@ -3839,21 +3984,22 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                                                     setIsCoAssignModalOpen(true);
                                                                 }}
                                                                 className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
-                                                                title="Sumar o asignar colaboradora a esta cirugía"
+                                                                title="Sumar o restar técnicas de esta cirugía"
                                                             >
-                                                                <span className="material-symbols-outlined text-base">person_add</span>
-                                                                <span className="hidden xl:inline">+ Colaboradora</span>
+                                                                <span className="material-symbols-outlined text-base">group_add</span>
+                                                                <span className="hidden xl:inline">Técnicas (+ / -)</span>
                                                             </button>
                                                         )}
 
-                                                        {/* Botón Quitar/Eliminar Cirugía Manual */}
-                                                        {s.isManual && (
+                                                        {/* Botón Restar a la técnica seleccionada de esta cirugía */}
+                                                        {(isLevelAdmin || canValidateManualSurgeries || s.isManual) && (
                                                             <button
-                                                                onClick={() => handleRemoveManualSurgery(s.id)}
-                                                                className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg transition-colors"
-                                                                title={s.manualStatus === 'pending' ? "Cancelar solicitud de adición" : "Quitar cirugía del listado"}
+                                                                onClick={() => handleRemoveOrExcludeTecnico(s.id, selectedTecnicoId)}
+                                                                className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
+                                                                title="Restar a esta técnica de esta cirugía"
                                                             >
-                                                                <span className="material-symbols-outlined text-base">delete</span>
+                                                                <span className="material-symbols-outlined text-base text-rose-500">person_remove</span>
+                                                                <span className="hidden xl:inline text-rose-600">Restar</span>
                                                             </button>
                                                         )}
                                                     </div>
@@ -5460,6 +5606,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                 onClick={() => {
                                     setIsAddManualModalOpen(false);
                                     setSelectedManualSurgeryId('');
+                                    setManualSurgerySearch('');
                                 }}
                                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
                             >
@@ -5468,7 +5615,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                         </div>
 
                         <p className="text-xs text-slate-500">
-                            Seleccione una cirugía completada en el período para incluirla en el listado del técnico seleccionado.
+                            Seleccione una cirugía completada o realizada en el período para incluirla manualmente en el listado de <strong>{(tecnicos.find(t => t.id === selectedTecnicoId) || allCollaborators.find(t => t.id === selectedTecnicoId))?.name || 'este colaborador'}</strong>.
                         </p>
 
                         {!canValidateManualSurgeries && (
@@ -5481,22 +5628,72 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                         )}
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-700">Cirugías Disponibles ({surgeries.length}):</label>
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold text-slate-700">
+                                    Cirugías Disponibles ({availableSurgeries.length}{manualSurgerySearch ? ` de ${surgeries.length}` : ''}):
+                                </label>
+                                {manualSurgerySearch && (
+                                    <span className="text-[11px] text-indigo-600 font-medium">Filtrando por búsqueda</span>
+                                )}
+                            </div>
+
+                            {/* Buscador reactivo por paciente, práctica o fecha */}
+                            <div className="relative">
+                                <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
+                                <input
+                                    type="text"
+                                    placeholder="Buscar paciente, práctica o fecha..."
+                                    value={manualSurgerySearch}
+                                    onChange={e => setManualSurgerySearch(e.target.value)}
+                                    className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                                />
+                                {manualSurgerySearch && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setManualSurgerySearch('')}
+                                        className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5 rounded"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">close</span>
+                                    </button>
+                                )}
+                            </div>
+
                             <select
                                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
                                 value={selectedManualSurgeryId}
                                 onChange={e => setSelectedManualSurgeryId(e.target.value)}
                             >
-                                <option value="">-- Seleccionar Cirugía --</option>
-                                {surgeries.map(s => {
+                                <option value="">-- Seleccionar Cirugía ({availableSurgeries.length} disponibles) --</option>
+                                {availableSurgeries.map(s => {
                                     const isAlreadyIncluded = filteredSurgeries.some(fs => fs.id === s.id);
+                                    const patName = getSurgeryPatientName(s);
                                     return (
                                         <option key={s.id} value={s.id} disabled={isAlreadyIncluded}>
-                                            {s.date} | {s.patient?.name || 'Paciente sin nombre'} - {s.procedure} ({s.actual_start_time || 'Sin hora'}) {isAlreadyIncluded ? '(Ya incluida)' : ''}
+                                            {s.date} | {patName} - {s.procedure} ({s.actual_start_time || 'Sin hora'}) {isAlreadyIncluded ? '(Ya incluida)' : ''}
                                         </option>
                                     );
                                 })}
                             </select>
+
+                            {selectedManualSurgeryId && (() => {
+                                const selSurg = surgeries.find(s => s.id === selectedManualSurgeryId);
+                                if (!selSurg) return null;
+                                const patName = getSurgeryPatientName(selSurg);
+                                const isAlready = filteredSurgeries.some(fs => fs.id === selSurg.id);
+                                return (
+                                    <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl text-xs space-y-1 mt-2">
+                                        <div className="flex items-center justify-between font-bold text-indigo-950">
+                                            <span className="uppercase">{patName}</span>
+                                            <span className="text-[10px] font-mono px-2 py-0.5 bg-white border border-indigo-200 rounded text-indigo-700">{selSurg.date}</span>
+                                        </div>
+                                        <p className="text-slate-600 line-clamp-2">{selSurg.procedure}</p>
+                                        <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-1">
+                                            <span>Hora real: <strong>{selSurg.actual_start_time || 'Sin hora'}</strong></span>
+                                            {isAlready && <span className="text-amber-600 font-bold">(Esta cirugía ya está en el listado)</span>}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
@@ -5504,6 +5701,7 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                 onClick={() => {
                                     setIsAddManualModalOpen(false);
                                     setSelectedManualSurgeryId('');
+                                    setManualSurgerySearch('');
                                 }}
                                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
                             >
@@ -5521,14 +5719,14 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                 </div>
             )}
 
-            {/* Modal para Sumar/Coparticipar a Segundo Técnico */}
+            {/* Modal para Sumar / Restar Técnicos de la Cirugía */}
             {isCoAssignModalOpen && (
                 <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
                         <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-indigo-600">person_add</span>
-                                Sumar Técnico a la Cirugía
+                                <span className="material-symbols-outlined text-indigo-600">group_work</span>
+                                Sumar / Restar Técnicas de la Cirugía
                             </h3>
                             <button
                                 onClick={() => {
@@ -5542,33 +5740,139 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                             </button>
                         </div>
 
-                        <p className="text-xs text-slate-500">
-                            Seleccione un técnico disponible (fijo o de guardia) para coparticipar al 50% en los honorarios de esta cirugía.
-                        </p>
+                        {/* Detalle de la cirugía */}
+                        {(() => {
+                            const curSurg = surgeries.find(s => s.id === coAssignSurgeryId);
+                            const assignedManuals = allManualSurgeries.filter(m => m.surgery_id === coAssignSurgeryId && m.status !== 'rejected');
+                            const isCurTecnicoInManuals = assignedManuals.some(m => m.user_id === selectedTecnicoId);
+                            const titularTec = allCollaborators.find(t => t.id === selectedTecnicoId) || tecnicos.find(t => t.id === selectedTecnicoId);
 
-                        {!canValidateManualSurgeries && (
-                            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
-                                <span className="material-symbols-outlined text-base text-amber-600 shrink-0 mt-0.5">info</span>
-                                <p>
-                                    <strong>Nota de validación:</strong> La coparticipación quedará en estado <strong>"Pendiente de Validación"</strong> hasta ser aprobada por <strong>SuperAdmin, Dirección o Administrativo de Gerencia</strong>.
-                                </p>
+                            return (
+                                <div className="space-y-4">
+                                    {curSurg && (
+                                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 flex flex-col gap-1">
+                                            <div className="flex justify-between items-center font-bold">
+                                                <span>{curSurg.date} {curSurg.actual_start_time ? `| ${curSurg.actual_start_time} hs` : ''}</span>
+                                                <span className="text-slate-400 text-[10px]">ID: {curSurg.id.slice(0, 8)}</span>
+                                            </div>
+                                            <div className="font-black text-slate-900">{curSurg.patient?.full_name || curSurg.patient?.name || 'Paciente'}</div>
+                                            <div className="text-indigo-600 font-semibold">{curSurg.procedure}</div>
+                                        </div>
+                                    )}
+
+                                    {/* Técnicas / Colaboradores asignados actualmente con botón para Restar */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                                            <span>Técnicas / Instrumentadoras asignadas:</span>
+                                            <span className="text-[10px] text-slate-400 font-normal">Pulse "Restar" para des-asignar</span>
+                                        </label>
+                                        <div className="space-y-1.5">
+                                            {/* Técnica de la vista actual (si no está ya en los registros manuales) */}
+                                            {!isCurTecnicoInManuals && titularTec && (
+                                                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl text-xs border border-slate-200">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="material-symbols-outlined text-base text-slate-600">person</span>
+                                                        <div>
+                                                            <span className="font-bold text-slate-800">{titularTec.name}</span>
+                                                            <span className="ml-1 text-[10px] text-slate-500 font-semibold">
+                                                                (Asignada {assignedManuals.length > 0 ? '50%' : '100%'})
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveOrExcludeTecnico(coAssignSurgeryId, titularTec.id)}
+                                                        className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 active:scale-95"
+                                                        title="Restar a esta técnica de esta cirugía"
+                                                    >
+                                                        <span className="material-symbols-outlined text-xs text-rose-600">person_remove</span>
+                                                        <span>Restar</span>
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {/* Colaboradores coparticipantes sumados */}
+                                            {assignedManuals.map(m => {
+                                                const colab = allCollaborators.find(c => c.id === m.user_id) || tecnicos.find(c => c.id === m.user_id);
+                                                return (
+                                                    <div key={m.id} className="flex items-center justify-between p-2.5 bg-indigo-50/70 rounded-xl text-xs border border-indigo-100">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="material-symbols-outlined text-base text-indigo-600">group</span>
+                                                            <div>
+                                                                <span className="font-bold text-indigo-950">{colab?.name || 'Colaborador'}</span>
+                                                                <span className="ml-1 text-[10px] text-indigo-600 font-semibold">
+                                                                    (Coparticipante 50% - {m.status === 'approved' ? 'Validada' : 'Pendiente'})
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveOrExcludeTecnico(coAssignSurgeryId, m.user_id)}
+                                                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 active:scale-95"
+                                                            title="Restar a esta técnica de esta cirugía"
+                                                        >
+                                                            <span className="material-symbols-outlined text-xs text-rose-600">person_remove</span>
+                                                            <span>Restar</span>
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        <div className="border-t border-slate-100 pt-3 space-y-3">
+                            <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-sm text-indigo-600">person_add</span>
+                                Sumar otra Técnica / Colaborador a esta cirugía:
+                            </h4>
+
+                            {!canValidateManualSurgeries && (
+                                <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                                    <span className="material-symbols-outlined text-sm text-amber-600 shrink-0 mt-0.5">info</span>
+                                    <p className="text-[11px]">
+                                        La coparticipación sumada quedará en <strong>"Pendiente de Validación"</strong> hasta ser aprobada por SuperAdmin, Dirección o Gerencia.
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="space-y-1.5">
+                                <select
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                                    value={coAssignTecnicoId}
+                                    onChange={e => setCoAssignTecnicoId(e.target.value)}
+                                >
+                                    <option value="">-- Seleccionar Técnica / Colaborador a Sumar --</option>
+                                    <optgroup label="Técnicos e Instrumentadores">
+                                        {(allCollaborators.length > 0 ? allCollaborators : tecnicos)
+                                            .filter(c => (c.role === 'Tecnico' || c.role === 'Instrumentadora' || c.has_tecnico_section_access) && c.id !== selectedTecnicoId)
+                                            .map(c => {
+                                                const isAlreadyAssigned = allManualSurgeries.some(m => m.surgery_id === coAssignSurgeryId && m.user_id === c.id && m.status !== 'rejected');
+                                                return (
+                                                    <option key={c.id} value={c.id} disabled={isAlreadyAssigned}>
+                                                        {c.name} {c.does_guardias ? '(Guardia)' : c.is_turno_tarde ? '(Fijo Tarde)' : `(${c.role || 'Técnico'})`} {isAlreadyAssigned ? '(Ya asignada)' : ''}
+                                                    </option>
+                                                );
+                                            })}
+                                    </optgroup>
+                                    {allCollaborators.some(c => c.role !== 'Tecnico' && c.role !== 'Instrumentadora' && !c.has_tecnico_section_access && c.id !== selectedTecnicoId) && (
+                                        <optgroup label="Otros Colaboradores">
+                                            {allCollaborators
+                                                .filter(c => c.role !== 'Tecnico' && c.role !== 'Instrumentadora' && !c.has_tecnico_section_access && c.id !== selectedTecnicoId)
+                                                .map(c => {
+                                                    const isAlreadyAssigned = allManualSurgeries.some(m => m.surgery_id === coAssignSurgeryId && m.user_id === c.id && m.status !== 'rejected');
+                                                    return (
+                                                        <option key={c.id} value={c.id} disabled={isAlreadyAssigned}>
+                                                            {c.name} ({c.role || 'Colaborador'}) {isAlreadyAssigned ? '(Ya asignada)' : ''}
+                                                        </option>
+                                                    );
+                                                })}
+                                        </optgroup>
+                                    )}
+                                </select>
                             </div>
-                        )}
-
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-700">Técnico a incorporar:</label>
-                            <select
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
-                                value={coAssignTecnicoId}
-                                onChange={e => setCoAssignTecnicoId(e.target.value)}
-                            >
-                                <option value="">-- Seleccionar Técnico --</option>
-                                {tecnicos.filter(t => t.id !== selectedTecnicoId).map(t => (
-                                    <option key={t.id} value={t.id}>
-                                        {t.name} {t.is_turno_tarde ? '(Fijo Tarde)' : '(Guardia)'}
-                                    </option>
-                                ))}
-                            </select>
                         </div>
 
                         <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
@@ -5580,14 +5884,15 @@ emitida a través del Sistema de Coordinación de Quirófano ITEO.
                                 }}
                                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
                             >
-                                Cancelar
+                                Cerrar
                             </button>
                             <button
                                 onClick={handleCoAssignTecnico}
                                 disabled={!coAssignTecnicoId || isSavingManualSurgery}
                                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1"
                             >
-                                {isSavingManualSurgery ? 'Guardando...' : 'Confirmar Coparticipación'}
+                                <span className="material-symbols-outlined text-sm">person_add</span>
+                                <span>{isSavingManualSurgery ? 'Guardando...' : 'Sumar a la Cirugía'}</span>
                             </button>
                         </div>
                     </div>
