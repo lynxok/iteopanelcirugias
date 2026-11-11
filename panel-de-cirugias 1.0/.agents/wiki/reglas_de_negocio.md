@@ -23,8 +23,68 @@ Las columnas del Kanban de Planificación se mapean a los siguientes campos bool
     *   **Identificación Visual en Detalle**: En el encabezado del detalle quirúrgico (`SurgeryHeader`), cuando la cirugía se encuentra cancelada, el badge de **"ESTADO Y REGISTRO"** muestra de forma inequívoca el rótulo **"Cancelada"** en color rojo suave, en concordancia con el banner de cancelación definitiva.
 
 ### Organización de Flujo Pre-Quirúrgico (Planificación)
-*   **Sección `OSER sin aprobar material`**: Agrupa en un bloque dedicado aquellas cirugías que cuentan con fecha de autorización (OSER) y **requieren prótesis/materiales**, pero cuya validación por parte de la ortopedia se encuentra **pendiente** (`materialStatus !== 'OK'`). Las cirugías que no requieren materiales quedan excluidas automáticamente de este grupo.
-*   **Sección `OSER material aprobado (Capital)`**: Agrupa en un bloque dedicado las cirugías con fecha de autorización (OSER) asignadas a **Ortopedia Capital** cuya validación de materiales ya ha sido **aprobada/confirmada** (`materialStatus === 'OK'`).
+
+*   **Definición de "Fecha de Autorización" (`authorization_date`)**:
+    *   El campo `surgeries.authorization_date` representa la **Fecha autorizada de internación** (no la fecha en que se emitió la aprobación).
+    *   Puede ser válidamente una fecha **futura** respecto a la fecha actual y no admite validaciones de fecha máxima.
+    *   **Badges de Internación en Tarjeta**:
+        *   Muestra `"Internación: dd/mm"`. Si la fecha es hoy o futura, añade `" (en N días)"` o `" (hoy)"`.
+        *   Si la cirugía requiere prótesis/material y su estado está pendiente (`materialStatus !== 'OK'`), se calculan los días respecto a la fecha autorizada:
+            *   Internación en $\le 2$ días (o hoy): badge rojo `"Internación en N días · material pendiente"` (o `"Internación hoy · material pendiente"`).
+            *   Internación en 3 a 7 días: badge ámbar `"Internación en N días · material pendiente"`.
+            *   Fecha de internación ya pasada: badge rojo `"Internación vencida hace N días · material pendiente"`.
+            *   A más de 7 días: no se muestra este badge de advertencia.
+
+*   **Protocolo ART (Plazo Máximo de 6 Días Corridos)**:
+    *   Las cirugías de ART deben resolverse en un plazo máximo de **6 días corridos** desde su carga inicial (`created_at`).
+    *   **Identificación Estricta**: Se consulta `quirofano.coverages.type = 'ART'` como fuente principal con mapeo normalizado. Fallback: coincidencia de palabra completa mediante regex `/\bART\b/i` (sin substring falso en "PARTICULAR").
+    *   **Ranking y Flujo**: ART y Particulares **NO requieren fecha autorizada de internación** para aparecer en las columnas y etapas correspondientes.
+    *   **Badges de Plazo ART (sin fecha de cirugía)**:
+        *   Días 0–3: Verde `"ART · día N de 6"`.
+        *   Días 4–5: Ámbar `"ART · día N de 6"`.
+        *   Día 6: Rojo `"ART · día 6 de 6"`.
+        *   Día $\ge 7$: Rojo animado (`pulse`) `"ART vencida hace N días"`.
+        *   Al asignarse fecha a la cirugía, el badge se oculta automáticamente.
+    *   **Orden en ART y Particulares**: Urgentes/Emergencias primero, luego ART por días restantes (mayor proximidad a vencer arriba), y finalmente Particulares por `created_at` ascendente.
+
+*   **Criterio Universal: Urgentes Primero en Todas las Listas (`byUrgencyThen`)**:
+    *   Toda lista, columna o sección de Planificación ordena primero las cirugías de prioridad `emergency` (Alta), luego `urgent` (Urgente) y luego el resto según el criterio secundario de la sección.
+    *   **Borde Lateral en Tarjeta**: El borde rojo de Urgente/Alta tiene prioridad estricta sobre el fondo/borde naranja de OSER sin material.
+
+*   **Flujo Pre-Quirúrgico en Etapas Excluyentes (a..g)**:
+    Cada cirugía activa sin fecha pasada pertenece estrictamente a **una sola etapa**, en el siguiente orden:
+    1.  **a. OSER sin aprobar material**: Con autorización de internación, cobertura OSER, requiere prótesis/material y su estado se encuentra pendiente (`materialStatus !== 'OK'`).
+    2.  **b. OSER material aprobado (Capital)**: Con autorización de internación, cobertura OSER, material aprobado o no requiere, asignada a Ortopedia Capital.
+    3.  **c. Otras coberturas con internación autorizada sin fecha**: Con autorización de internación cargada (prepagas, otras obras sociales o proveedores).
+    4.  **d. Sin autorización de internación**: Sin fecha de cirugía ni fecha autorizada de internación (no ART ni Particular).
+    5.  **e. ART y Particulares sin fecha**: Solicitudes de estas coberturas pendientes de programación (sin requerir autorización).
+    6.  **f. Listas para programar**: Sin fecha quirúrgica y con material, clínico y quirófano validados (`OK`), con o sin fecha de autorización. Las emergencias con material pendiente y clínico + quirófano `OK` también clasifican en esta etapa sin bloqueo de agendado.
+    7.  **g. Con fecha asignada**: Únicamente cirugías con `surgery_date >= hoy` (hora local). Las de fecha anterior sin cerrar pertenecen exclusivamente a la pestaña "Pasadas sin cerrar".
+    *   *Verificación*: En desarrollo se comprueba mediante aserción estricta que $\sum (a..g) = \text{Total Activas Vigentes}$.
+    *   *Eliminación de Secciones Redundantes*: Se suprimen las antiguas secciones inferiores de "Falta Material", "Falta Exámenes" y "Falta Quirófano" (que duplicaban tarjetas) y la sección de "Suspendidas" en el flujo principal. Se reemplazan por **chips de filtrado rápido** combinables ("Falta material", "Falta exámenes", "Falta quirófano", "Operan en $\le 7$ días").
+
+*   **Bloque "Atención Inmediata"**:
+    Tabla compacta situada en la cabecera del flujo (sin sumar a los totales generales) con acceso directo a la Ficha Quirúrgica:
+    *   Cirugías programadas entre hoy y hoy+7 días con algún pendiente (material, exámenes o quirófano), indicando el responsable específico (Ortopedia / Internación / Quirófano).
+    *   Cirugías ART vencidas o en día 6 sin fecha agendada.
+    *   Cirugías con material pendiente e internación autorizada en $\le 2$ días o ya vencida.
+    *   Emergencias con material pendiente programadas en los próximos 7 días (Responsable: Ortopedia).
+    *   Si no hay pendientes críticos, muestra neutralmente `"Sin pendientes urgentes"`.
+
+*   **Emergencias y Estado Real de Material**:
+    *   Se elimina la excepción que forzaba artificialmente `matStatus = 'OK'` en cirugías con prioridad `emergency`.
+    *   Las emergencias calculan y exhiben el estado real de sus materiales (`OK`, `Pend`, `Falta`).
+    *   El material pendiente no bloquea su programación ni agendado. Cada tarjeta exhibe la advertencia visual `"Emergencia · material sin validar"` (rojo) o `"Emergencia · material OK"` (verde).
+
+*   **Acciones Operativas y Auditoría de Planificación**:
+    *   **Baja Definitiva con Motivo Obligatorio**: Se reemplaza el cuadro de confirmación nativo por un modal interactivo que exige el motivo de cancelación, grabándolo en `suspension_reason`, registrando auditoría completa y notificando por email al proveedor.
+    *   **Cierre Rápido de Pasadas sin Cerrar**:
+        *   Los campos de inicio y fin real inician vacíos (sin horas inventadas `08:00` / `10:00`).
+        *   Se valida que la hora de fin sea posterior a la de inicio; si es igual o anterior, se exige confirmación explícita de cruce de medianoche.
+        *   Se solicita la instrumentadora/técnica participante para garantizar la liquidación de técnicas en `quirofano.surgery_forms`.
+    *   **Botón Reprogramar en Suspendidas**: Conduce de manera directa a la Ficha Quirúrgica del paciente para la reasignación de fecha.
+    *   **Actualización en Tiempo Real sin Bloqueo de Caché**: Las notificaciones de Supabase Realtime aplican un debounce de 1s y forzan la recarga con `forceRefresh = true` para reflejar cancelaciones y validaciones de inmediato.
+
 *   **Vista Opcional "Ranking" (4 Columnas)**: Permite alternar mediante un botón en el header de Planificación entre la vista de flujo tradicional y una estructura de 4 columnas (`Urgencias y Emergencias`, `OSER`, `Prepagas`, `ART y Particulares`). 
     *   **Robustez Multi-Dispositivo**: Se previenen fallos de renderizado en tablets y móviles garantizando el acceso seguro al objeto de quirófano (`orGroup?.is_ambulatory`) y restaurando los handlers de acción de tarjetas suspendidas (`handleCancelSurgery`).
     *   **Columna Urgencias y Emergencias**: Agrupa todas las cirugías no electivas (`priority === 'Urgente' || 'Alta'`) independientemente de su cobertura médica, mostrándolas con prioridad máxima sin requerir filtro previo de autorización.

@@ -151,6 +151,99 @@ def select_vs_combobox_option(page, combobox_selector: str, option_text: str):
         log(f"Advertencia seleccionando {option_text} en {combobox_selector}: {e}")
     return False
 
+def check_and_select_internacion_modalidad(page) -> dict:
+    """
+    Cuando la modalidad es 'Int', interactúa con el selector contiguo a Tipo (#vs5__combobox)
+    para verificar y asociar la internación activa del paciente.
+    """
+    log("Verificando si el paciente tiene una internación cargada al lado de 'Int'...")
+    try:
+        # 1. Estrategias para encontrar el combobox de internación contiguo a Tipo (#vs4)
+        combo = page.locator("#vs5__combobox").first
+        if combo.count() == 0 or not combo.is_visible():
+            # Buscar dentro del mismo contenedor de fila de #vs4
+            try:
+                row = page.locator("#vs4__combobox").locator("xpath=ancestor::*[contains(@class, 'flex') or contains(@class, 'grid')][1]")
+                row_combos = row.locator("[role='combobox'], .vs__dropdown-toggle, input.vs__search")
+                for i in range(row_combos.count()):
+                    cand = row_combos.nth(i)
+                    cand_id = cand.get_attribute("id") or ""
+                    if "vs4" not in cand_id and cand.is_visible():
+                        combo = cand
+                        break
+            except Exception:
+                pass
+
+        if combo.count() == 0 or not combo.is_visible():
+            # Buscar el siguiente combobox inmediatamente después de #vs4
+            try:
+                following_combo = page.locator("#vs4__combobox").locator("xpath=following::*[@role='combobox' or contains(@class, 'v-select')][1]")
+                if following_combo.count() > 0 and following_combo.is_visible():
+                    combo = following_combo
+            except Exception:
+                pass
+
+        if combo.count() == 0 or not combo.is_visible():
+            log("Aviso: No se localizó visualmente el selector de internación contiguo a 'Int'.")
+            return {"success": False, "reason": "COMBO_NOT_FOUND"}
+
+        # 2. Verificar si ya tiene una internación seleccionada previamente
+        try:
+            v_select = combo.locator("xpath=ancestor::*[contains(@class, 'v-select')][1]")
+            selected_badge = v_select.locator(".vs__selected")
+            if selected_badge.count() > 0 and selected_badge.first.is_visible():
+                curr_val = selected_badge.first.inner_text().strip()
+                if curr_val:
+                    log(f"Internación ya asignada en Globalapp: '{curr_val}'. Se conserva.")
+                    return {"success": True, "selected": True, "internacion": curr_val, "already_set": True}
+        except Exception:
+            pass
+
+        # 3. Desplegar el combobox para consultar las internaciones disponibles
+        combo.click()
+        page.wait_for_timeout(600)
+
+        # 4. Inspeccionar opciones en el menú desplegable (.vs__dropdown-menu)
+        menu_items = page.locator(".vs__dropdown-menu li").all()
+        if not menu_items:
+            menu_items = page.get_by_role("option").all()
+
+        valid_options = []
+        for item in menu_items:
+            try:
+                cls = item.get_attribute("class") or ""
+                if "vs__no-options" in cls or "vs__dropdown-option--disabled" in cls:
+                    continue
+                txt = item.inner_text().strip()
+                if txt and not any(ign in txt.lower() for ign in ["no matching", "sin opciones", "no hay"]):
+                    valid_options.append((item, txt))
+            except Exception:
+                continue
+
+        if valid_options:
+            chosen_item, chosen_txt = valid_options[0]
+            log(f"Internación activa encontrada para el paciente: '{chosen_txt}'. Seleccionando...")
+            chosen_item.click()
+            page.wait_for_timeout(400)
+            return {"success": True, "selected": True, "internacion": chosen_txt}
+        else:
+            log("Aviso: El paciente NO tiene ninguna internación activa cargada en GlobalApp.")
+            # Cerrar el dropdown para que no obstruya los campos inferiores
+            try:
+                page.keyboard.press("Escape")
+            except Exception:
+                pass
+            page.wait_for_timeout(200)
+            return {"success": True, "selected": False, "reason": "NO_ACTIVE_INTERNACION"}
+
+    except Exception as e:
+        log(f"Advertencia al verificar internación contigua a 'Int': {e}")
+        try:
+            page.keyboard.press("Escape")
+        except Exception:
+            pass
+        return {"success": False, "error": str(e)}
+
 def set_date_input_ddmmyyyy(page, input_locator, date_yyyy_mm_dd: str):
     """Formats YYYY-MM-DD to DD/MM/YYYY and fills a Globalapp date input."""
     try:
@@ -464,6 +557,8 @@ def create_new_surgery_in_globalapp(page, payload: dict) -> bool:
     # 5. Select Tipo: Int or Amb
     modalidad_label = "Amb" if is_ambulatory else "Int"
     select_vs_combobox_option(page, "#vs4__combobox", modalidad_label)
+    if modalidad_label == "Int":
+        payload["internacionResult"] = check_and_select_internacion_modalidad(page)
 
     # 6. Select Anesthesia Type in #vs7__combobox
     mapped_anes = map_anesthesia(anesthesia_type)
@@ -532,6 +627,8 @@ def update_existing_surgery_in_globalapp(page, payload: dict) -> bool:
     if is_ambulatory is not None:
         modalidad_label = "Amb" if bool(is_ambulatory) else "Int"
         select_vs_combobox_option(page, "#vs4__combobox", modalidad_label)
+        if modalidad_label == "Int":
+            payload["internacionResult"] = check_and_select_internacion_modalidad(page)
 
     # 4. Review Anesthesia Type
     if anesthesia_type:
@@ -978,6 +1075,9 @@ def run_sync(payload: dict):
                 else:
                     create_new_surgery_in_globalapp(page, payload)
                     result["mode"] = "created"
+
+                if "internacionResult" in payload:
+                    result["internacionResult"] = payload["internacionResult"]
 
                 # Si está tildado Arco en C y aún no se sincronizó, procesarlo a continuación
                 if arco_en_c and not arco_en_c_synced:

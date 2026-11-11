@@ -669,7 +669,7 @@ export const PatientSection: React.FC<PatientSectionProps> = ({
 
                         {/* Authorization Date Field */}
                         <div>
-                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-0.5">Fecha Autorización</label>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-0.5">Fecha autorizada de internación</label>
                             <div className="relative group">
                                 <input
                                     className="w-full rounded border border-slate-200 bg-white text-slate-900 focus:border-primary focus:ring-4 focus:ring-primary/10 text-sm px-3 py-2 transition-all outline-none"

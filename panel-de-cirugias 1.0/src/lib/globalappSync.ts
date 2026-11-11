@@ -97,7 +97,6 @@ export async function buildGlobalappPayload(
 
         const isAmbulatory = Boolean(
             sx.is_ambulatory === true ||
-            sx.is_guardia === true ||
             sx.operating_room?.is_ambulatory === true
         );
 

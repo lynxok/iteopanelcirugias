@@ -1,5 +1,73 @@
 # CHANGELOG
 
+## v3.13.40 (2026-11-11)
+- **Corrección de Modalidad Quirúrgica en Sincronizador GlobalApp (`src/lib/globalappSync.ts`, `globalapp_scraper.py`)**:
+    * **Desacople de Cirugía de Guardia de Modalidad Ambulatoria**:
+        - Eliminación de la regla que forzaba `isAmbulatory: true` ante `is_guardia === true`. Las cirugías originadas en guardia que son internaciones ahora conservan estrictamente su modalidad `Int`.
+        - Sincronización fidedigna en GlobalApp seleccionando `Int` y vinculando automáticamente la internación activa del paciente en el combobox contiguo (`check_and_select_internacion_modalidad`).
+- **Ajustes Críticos de Estabilidad y Precisión Operativa en Planificación (`pages/Kanban.tsx`)**:
+    * **Corrección de Interpolación JSX en Badge de Internación**:
+        - Corrección en badge de internación en 3 a 7 días con material pendiente, asegurando renderizado directo JSX `{authDiffDays}` sin el caracter literal `$`.
+    * **Recarga en Tiempo Real Silenciosa y Sin Pérdida de Scroll**:
+        - Desacoplamiento de `setLoading(true)` para que aplique únicamente en carga inicial sin datos ni caché (`patients.length === 0 && !kanbanCache`).
+        - Las recargas disparadas por Realtime o acciones de usuario ahora son silenciosas mediante el estado `refreshing` y la barra de progreso superior, preservando intacto el scroll de la página y evitando el flash "Cargando planificación...".
+        - Desvinculación de la consulta histórica de ortopedia del listener de Realtime (se ejecuta al montar y con intervalo periódico cada 10 minutos).
+    * **Paginación y Muestra Real en Histórico de Respuesta de Ortopedia**:
+        - Paginación automática con `.range()` para superar el límite estricto de 1000 registros de Supabase y traer el 100% de los datos de los últimos 12 meses (>1000 cirugías).
+        - Filtrado estricto de cirugías que efectivamente requirieron material (`requires_prosthesis === true` o `surgery_materials.length > 0`).
+        - Inclusión en UI del total de casos evaluados: `"(sobre N cirugías)"`.
+    * **Restricción Estricta de Excepción en Listas para Programar (`isReadyForScheduling`)**:
+        - La excepción que habilita ingresar a "Listas para programar" con material pendiente aplica exclusivamente a cirugías de prioridad `'Alta'` (emergencia).
+        - Las cirugías `'Urgente'` con material pendiente siguen su curso regular por etapas de cobertura (a/b/c/d/e) hasta contar con validación de materiales.
+    * **Cierre Rápido Blindado y Liquidación de Técnicas**:
+        - Eliminación del modal `confirm()` nativo y agregado de dos botones explícitos: `"Abrir ficha para cargarla"` y `"Cerrar sin técnica"`.
+        - Al elegir `"Cerrar sin técnica"`, se requiere confirmación explícita advirtiendo que la cirugía no será imputada en la liquidación de ninguna instrumentadora.
+        - Selector estricto `<select>` con el listado oficial de colaboradoras (`collaboratorsList`), evitando discrepancias tipográficas que impidan el cobro de honorarios en `TecnicoPanel.tsx`, con fallback visual si la cirugía ya tenía una instrumentadora asignada fuera del listado.
+
+## v3.13.39 (2026-11-11)
+- **Reestructuración Integral del Tablero de Planificación (`pages/Kanban.tsx`, `components/surgery-detail/PatientSection.tsx`)**:
+    * **Fecha Autorizada de Internación y Alertas**:
+        - Clarificación de label en Ficha Clínica a "Fecha autorizada de internación" (`surgeries.authorization_date`), con soporte explícito para fechas futuras sin restricciones erróneas.
+        - Tarjeta: badge de internación con fecha local ("Internación: dd/mm") y aviso de proximidad `(hoy)` o `(en N días)`.
+        - Reemplazo de demora post-autorización por alertas precisas con material pendiente: internación en $\le 2$ días o vencida (rojo), y en 3 a 7 días (ámbar).
+        - Pestaña Pendientes Ortopedia: métrica interactiva "Internación en $\le 7$ días con material pendiente" (clickeable para filtrar) y cálculo del histórico de respuesta en últimos 12 meses sobre base de datos (con status `completed`) junto al `% validadas antes de internación`.
+    * **Protocolo ART de 6 Días Corridos**:
+        - Detección de ART basada en `quirofano.coverages.type = 'ART'` con fallback por palabra completa `\bART\b` (evitando colisión con "PARTICULAR").
+        - Columna de ART y Particulares en Ranking visible sin requerir fecha de autorización.
+        - Badges dinámicos: "ART · día N de 6" (0–3 verde, 4–5 ámbar, 6 rojo, $\ge 7$ rojo animado "ART vencida hace N días"). Orden: urgentes, ART por días restantes, Particulares por antigüedad.
+    * **Prioridad Universal de Urgencias y Emergencias**:
+        - Ordenamiento `byUrgencyThen` aplicado en todas las vistas, columnas y secciones (Urgente y Alta primero).
+        - Borde lateral rojo en tarjeta prioritario sobre el naranja de OSER.
+    * **Flujo Pre-Quirúrgico en 7 Etapas Excluyentes (a..g)**:
+        - Cada cirugía activa pertenece exactamente a una sola etapa: a) OSER sin aprobar material, b) OSER material aprobado (Capital), c) Otras coberturas autorizadas sin fecha, d) Sin autorización de internación, e) ART y Particulares sin fecha, f) Listas para programar, g) Con fecha asignada ($\ge \text{hoy}$).
+        - Eliminación de secciones redundantes de bloqueos y reemplazo por chips de filtrado rápido ("Falta material", "Falta exámenes", "Falta quirófano", "Operan en $\le 7$ días").
+        - Bloque de cabecera "Atención Inmediata" en tabla compacta para cirugías críticas en próximos 7 días con pendientes, ART críticas e internaciones urgentes.
+        - Resumen de Estado responsive (2 columnas en móviles/tablets, 4 en desktop) con tarjetas interactivas vinculadas a los filtros rápidos.
+    * **Corrección de Datos y Visualización**:
+        - Ordenamiento por antigüedad corregido utilizando `createdAtRaw` (ISO) en lugar de cadenas locales.
+        - Incorporación de `oser_status` en la consulta para visualización de "Cerrada OSER".
+        - Cálculo de edad real considerando mes y día de nacimiento.
+        - Fijación de zona horaria de Buenos Aires (`localTodayStr`) en comparación de fechas y pasadas sin cerrar.
+        - Formateo consistente de fechas en formato `dd/mm` / `dd/mm/aaaa` y nombres en Title Case.
+        - Buscador ampliado a cirujano, procedimiento y cobertura médica.
+    * **Auditoría y Operatoria Segura**:
+        - Actualización en tiempo real sin bloqueo de caché (debounce 1s con `forceRefresh = true`).
+        - Modal de "Baja Definitiva" con motivo obligatorio, auditoría y notificación al proveedor.
+        - Visualización de motivo, observaciones y tiempo de suspensión en suspendidas.
+        - Cierre rápido sin horarios inventados precargados, validación de orden horario con confirmación de medianoche y registro de técnica/instrumentadora.
+        - Corrección en botón "Reprogramar" para navegar a la ficha quirúrgica correspondiente.
+        - Eliminación de excepción que forzaba falsamente material `OK` en emergencias; visualización de estado real y aviso en tarjeta.
+
+## v3.13.38 (2026-11-11)
+- **Vinculación y Verificación Automática de Internación Activa en GlobalApp (`globalapp_scraper.py`)**:
+    * **Selector Contiguo a Tipo (Modalidad `Int`)**:
+        - Detección reactiva de modalidad `Int` al crear o actualizar partes quirúrgicos.
+        - Inspección automática del selector de internación contiguo (`#vs5__combobox` / hermano en grilla de Tipo).
+        - Si la cirugía ya contaba con una internación vinculada (`.vs__selected`), se preserva sin alteraciones.
+        - Si no está asociada, despliega las opciones y selecciona la internación activa del paciente.
+        - Si el paciente aún no fue ingresado a piso/habitación en GlobalApp, emite aviso informativo en log y repliega el selector limpiamente sin bloquear el guardado.
+
+
 ## v3.13.36 (2026-11-11)
 - **Corrección de Nombres de Pacientes y Búsqueda Integral en Panel de Técnicos (`TecnicoPanel.tsx`)**:
     * **Resolución de Nombres en Modal Manual**:
