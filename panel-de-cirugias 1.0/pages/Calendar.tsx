@@ -6,8 +6,7 @@ import { createOrUpdateDoctorAlert } from '../src/lib/alertService';
 import { OperatingRoom } from '../types';
 import ProgressBar from '../components/ProgressBar';
 import { captureError } from '../src/lib/errorLogger';
-
-const SurgeryForm = lazy(() => import('../components/SurgeryForm'));
+import { useSurgeryForm } from '../src/lib/SurgeryFormContext';
 
 // In-memory cache to make calendar navigation instant
 const calendarCache: Record<string, {
@@ -167,7 +166,7 @@ const Calendar: React.FC = () => {
     const [previousView, setPreviousView] = useState<ViewMode | null>(null);
     const [showRulesSummary, setShowRulesSummary] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
-    const [showSurgeryFormId, setShowSurgeryFormId] = useState<string | null>(null);
+    const { openForm: openSurgeryForm } = useSurgeryForm();
     const [rolePermissions, setRolePermissions] = useState<Record<string, string[]>>({});
     const canViewGuardias = user?.role === 'SuperAdmin' || (() => {
         const perms = rolePermissions[user?.role || ''];
@@ -516,6 +515,15 @@ const Calendar: React.FC = () => {
         const month = currentDate.getMonth();
         fetchInitialData(year, month);
     }, [currentDate.getFullYear(), currentDate.getMonth(), user?.id, user?.role]); // Re-fetch on month/year or user/role change
+
+    // Sincronizar cambios en fichas de cirugía guardadas globalmente
+    useEffect(() => {
+        const handleSurgerySaved = () => {
+            fetchInitialData(currentDate.getFullYear(), currentDate.getMonth(), true);
+        };
+        window.addEventListener('surgery-saved', handleSurgerySaved);
+        return () => window.removeEventListener('surgery-saved', handleSurgerySaved);
+    }, [currentDate]);
 
     // -- Cascade Displacement Logic --
     const calculateDisplacement = (
@@ -1017,23 +1025,13 @@ const Calendar: React.FC = () => {
                     const endDate = new Date(startDate);
                     endDate.setMinutes(startDate.getMinutes() + (s.estimated_duration || 60));
 
-                    const hasRealEndTime = !!s.actual_end_time;
-                    
-                    // Fallback check: check if patient has a discharged admission (check_out not null) within 2 days of surgery_date
-                    // ONLY if the surgery has actually started (actual_start_time is present)
-                    let hasCompletedAdmission = false;
-                    if (s.patient_id && s.surgery_date && s.actual_start_time) {
-                        const sDate = new Date(s.surgery_date + 'T12:00:00Z');
-                        const adms = admissionsMap[s.patient_id] || [];
-                        hasCompletedAdmission = adms.some(adm => {
-                            if (!adm.check_in || !adm.check_out) return false;
-                            const checkInDate = new Date(adm.check_in.substring(0, 10) + 'T12:00:00Z');
-                            const diffDays = Math.abs(sDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24);
-                            return diffDays <= 2;
-                        });
-                    }
+                    const todayLocalStr = getLocalStr(now);
+                    const hasRealEndTime = Boolean(s.surgery_date && s.actual_end_time);
+                    const isCompletedPastAmbulatory = isAmbulatorySurgery && s.status === 'completed' && s.surgery_date < todayLocalStr;
 
-                    const isFinished = s.status === 'completed' || hasRealEndTime || hasCompletedAdmission;
+                    // Una cirugía se marca como realizada únicamente si tiene cargada fecha y hora de fin de cirugía
+                    // (con excepción de las ambulatorias pasadas autocompletadas)
+                    const isFinished = hasRealEndTime || isCompletedPastAmbulatory;
 
                     if (isFinished) {
                         eventColor = 'bg-violet-800'; // Past/Completed: Dark Violet
@@ -1073,7 +1071,7 @@ const Calendar: React.FC = () => {
                         end: endDate,
                         color: eventColor,
                         icon: isBlocked ? 'lock' : (s.is_guardia ? 'emergency' : 'medical_services'),
-                        completed: s.status === 'completed',
+                        completed: isFinished,
                         suspended: false,
                         orId: s.operating_room_id,
                         isBlocked: isBlocked,
@@ -2749,7 +2747,15 @@ const Calendar: React.FC = () => {
                                 {['Enfermeria', 'Internacion', 'Tecnico', 'SuperAdmin', 'Direccion', 'Medico', 'Residente', 'Anestesista', 'Cirujano'].includes(user?.role || '') && (
                                     <button
                                         onClick={() => {
-                                            setShowSurgeryFormId(selectedMobileEvent.id);
+                                            openSurgeryForm({
+                                                id: selectedMobileEvent.id,
+                                                patient: selectedMobileEvent?.patientName || '',
+                                                procedure: selectedMobileEvent?.title || '',
+                                                date: selectedMobileEvent?.start ? getLocalStr(selectedMobileEvent.start) : '',
+                                                status: selectedMobileEvent?.completed ? 'previous' : 'scheduled',
+                                                doctor: selectedMobileEvent?.originalDoctor || '',
+                                                readOnly: user?.role !== 'Tecnico' && user?.role !== 'SuperAdmin',
+                                            });
                                         }}
                                         className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider hover:bg-indigo-800 transition-all active:scale-95 flex items-center justify-center gap-1"
                                     >
@@ -3747,7 +3753,15 @@ const Calendar: React.FC = () => {
                                                             medicalCoverage: surgery.medical_coverage,
                                                             dateStr: selectedCancelledDate
                                                         });
-                                                        setShowSurgeryFormId(surgery.id);
+                                                        openSurgeryForm({
+                                                            id: surgery.id,
+                                                            patient: patientName,
+                                                            procedure: surgery.procedure_name || '',
+                                                            date: selectedCancelledDate,
+                                                            status: 'suspended',
+                                                            doctor: doctorName,
+                                                            readOnly: user?.role !== 'Tecnico' && user?.role !== 'SuperAdmin',
+                                                        });
                                                     }}
                                                     className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-black text-slate-700 uppercase tracking-wider transition-all flex items-center gap-1 active:scale-95 shadow-xs"
                                                 >
@@ -3759,37 +3773,6 @@ const Calendar: React.FC = () => {
                                     );
                                 });
                             })()}
-                        </div>
-                    </div>
-                </div>
-            )}
-            {showSurgeryFormId && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 overflow-hidden">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col border border-slate-200">
-                        <div className="flex-1 overflow-y-auto">
-                            <Suspense fallback={
-                                <div className="p-12 flex flex-col items-center justify-center gap-3">
-                                    <div className="size-8 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
-                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Cargando formulario...</span>
-                                </div>
-                            }>
-                                <SurgeryForm
-                                    surgery={{
-                                        id: showSurgeryFormId,
-                                        patient: selectedMobileEvent?.patientName || '',
-                                        procedure: selectedMobileEvent?.title || '',
-                                        date: selectedMobileEvent?.start ? getLocalStr(selectedMobileEvent.start) : '',
-                                        status: selectedMobileEvent?.completed ? 'previous' : 'scheduled',
-                                        doctor: selectedMobileEvent?.originalDoctor || ''
-                                    } as any}
-                                    readOnly={user?.role !== 'Tecnico' && user?.role !== 'SuperAdmin'}
-                                    onClose={() => setShowSurgeryFormId(null)}
-                                    onSave={() => {
-                                        setShowSurgeryFormId(null);
-                                        fetchInitialData(currentDate.getFullYear(), currentDate.getMonth(), true);
-                                    }}
-                                />
-                            </Suspense>
                         </div>
                     </div>
                 </div>

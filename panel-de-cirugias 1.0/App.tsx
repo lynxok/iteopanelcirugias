@@ -2,10 +2,12 @@ import React, { Suspense } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './src/lib/AuthContext';
 import { OserSyncProvider } from './src/lib/OserSyncContext';
+import { SurgeryFormProvider } from './src/lib/SurgeryFormContext';
 import { supabase } from './src/lib/supabase';
 import ErrorBoundary from './components/ErrorBoundary';
 import UpdateNotification from './components/UpdateNotification';
 import OserSyncOverlay from './components/OserSyncOverlay';
+import GlobalSurgeryFormOverlay from './components/GlobalSurgeryFormOverlay';
 import DependencyCheckerOverlay from './components/DependencyCheckerOverlay';
 import { lazyWithRetry } from './src/lib/lazyWithRetry';
 
@@ -188,14 +190,15 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
       <OserSyncProvider>
-        <ErrorBoundary>
-        <UpdateNotification />
-        <DependencyCheckerOverlay />
-        <ObsBackgroundController />
-        <GlobalappBackgroundController />
-        <AmbulatoryAutoCompleter />
-        <NetworkStatusBanner />
-        <HashRouter>
+        <SurgeryFormProvider>
+          <ErrorBoundary>
+          <UpdateNotification />
+          <DependencyCheckerOverlay />
+          <ObsBackgroundController />
+          <GlobalappBackgroundController />
+          <AmbulatoryAutoCompleter />
+          <NetworkStatusBanner />
+          <HashRouter>
           <CommandPalette />
           <Suspense fallback={
             <div className="h-screen w-full flex items-center justify-center bg-slate-50">
@@ -238,8 +241,10 @@ const App: React.FC = () => {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
+          <GlobalSurgeryFormOverlay />
         </HashRouter>
       </ErrorBoundary>
+      </SurgeryFormProvider>
       </OserSyncProvider>
     </AuthProvider>
   );

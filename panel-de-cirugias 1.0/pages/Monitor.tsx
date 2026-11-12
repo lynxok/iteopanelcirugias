@@ -5,8 +5,7 @@ import ProgressBar from '../components/ProgressBar';
 import { OperatingRoom, SurgeryStatus } from '../types';
 import { useAuth } from '../src/lib/AuthContext';
 import { triggerGlobalappSync } from '../src/lib/globalappSync';
-
-const SurgeryForm = lazy(() => import('../components/SurgeryForm'));
+import { useSurgeryForm } from '../src/lib/SurgeryFormContext';
 
 // In-memory cache for instant monitor opening
 let monitorCache: {
@@ -51,15 +50,12 @@ interface RoomMonitorData {
 const Monitor: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { openForm: openSurgeryForm } = useSurgeryForm();
     const [currentTime, setCurrentTime] = useState(new Date());
     const [roomsData, setRoomsData] = useState<RoomMonitorData[]>([]);
     const [loading, setLoading] = useState(true);
     const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
-    const [selectedSurgeryForForm, setSelectedSurgeryForForm] = useState<MonitorCase | null>(null);
-    const [showFormModal, setShowFormModal] = useState(false);
     const [activeRoomIdx, setActiveRoomIdx] = useState(0);
-    const [minimizedForms, setMinimizedForms] = useState<MonitorCase[]>([]);
-    const [activeForms, setActiveForms] = useState<MonitorCase[]>([]);
     const [manuallyExpandedRooms, setManuallyExpandedRooms] = useState<string[]>([]);
 
     const toggleRoomExpansion = (roomId: string) => {
@@ -133,6 +129,15 @@ const Monitor: React.FC = () => {
             clearInterval(refreshTimer);
             supabase.removeChannel(channel);
         };
+    }, []);
+
+    // Escuchar eventos globales de guardado de ficha técnica para refrescar el monitor en vivo
+    useEffect(() => {
+        const handleSurgerySaved = () => {
+            fetchMonitorData(true);
+        };
+        window.addEventListener('surgery-saved', handleSurgerySaved);
+        return () => window.removeEventListener('surgery-saved', handleSurgerySaved);
     }, []);
 
     const fetchMonitorData = async (forceRefresh = false) => {
@@ -624,65 +629,12 @@ const Monitor: React.FC = () => {
         }
     };
 
-    const handleMinimizeForm = () => {
-        if (!selectedSurgeryForForm) return;
-        
-        if (activeForms.length >= 3) {
-            alert('Solo puedes tener hasta 3 fichas abiertas o minimizadas al mismo tiempo. Por favor, cierra una antes de abrir otra.');
-            return;
-        }
-
-        // Add to active forms if not already there
-        if (!activeForms.some(f => f.id === selectedSurgeryForForm.id)) {
-            setActiveForms(prev => [...prev, selectedSurgeryForForm]);
-        }
-
-        // Check if already minimized
-        if (minimizedForms.some(f => f.id === selectedSurgeryForForm.id)) {
-            setShowFormModal(false);
-            setSelectedSurgeryForForm(null);
-            return;
-        }
-
-        setMinimizedForms(prev => [...prev, selectedSurgeryForForm]);
-        setSelectedSurgeryForForm(null);
-        setShowFormModal(false);
-    };
-
     const handleOpenForm = (surgery: MonitorCase) => {
-        if (!activeForms.some(f => f.id === surgery.id)) {
-            if (activeForms.length >= 3) {
-                alert('Solo puedes tener hasta 3 fichas abiertas. Cierra una para abrir esta.');
-                return;
-            }
-            setActiveForms(prev => [...prev, surgery]);
-        }
-        
-        // Ensure it's not in minimized if we are opening it
-        setMinimizedForms(prev => prev.filter(f => f.id !== surgery.id));
-        setSelectedSurgeryForForm(surgery);
-        setShowFormModal(true);
-    };
-
-    const handleCloseActiveForm = (id: string) => {
-        setActiveForms(prev => prev.filter(f => f.id !== id));
-        setMinimizedForms(prev => prev.filter(f => f.id !== id));
-        if (selectedSurgeryForForm?.id === id) {
-            setSelectedSurgeryForForm(null);
-            setShowFormModal(false);
-        }
-    };
-
-    const handleRestoreForm = (surgery: MonitorCase) => {
-        setMinimizedForms(prev => prev.filter(f => f.id !== surgery.id));
-        setSelectedSurgeryForForm(surgery);
-        setShowFormModal(true);
-    };
-
-    const handleCloseMinimizedForm = (e: React.MouseEvent, id: string) => {
-        e.stopPropagation();
-        setMinimizedForms(prev => prev.filter(f => f.id !== id));
-        setActiveForms(prev => prev.filter(f => f.id !== id));
+        openSurgeryForm({
+            ...surgery,
+            readOnly: !isTecnico,
+            operatingRoomId: surgery.operatingRoomId,
+        });
     };
 
     // View Mode State (Persistence)
@@ -1139,57 +1091,6 @@ const Monitor: React.FC = () => {
                     </div>
                 )}
             </main>
-
-            {/* Active and Minimized Forms (Keep mounted to preserve state) */}
-            {activeForms.map((sx) => (
-                <div 
-                    key={sx.id} 
-                    className={selectedSurgeryForForm?.id === sx.id ? 'contents' : 'hidden'}
-                >
-                    <Suspense fallback={
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
-                            <div className="size-8 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
-                        </div>
-                    }>
-                        <SurgeryForm
-                            surgery={sx}
-                            onClose={() => handleCloseActiveForm(sx.id)}
-                            onMinimize={handleMinimizeForm}
-                            onSave={() => {
-                                fetchMonitorData(true);
-                            }}
-                        />
-                    </Suspense>
-                </div>
-            ))}
-
-            {/* Minimized Forms Bar */}
-            {minimizedForms.length > 0 && (
-                <div className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none">
-                    {minimizedForms.map((sx) => (
-                        <div 
-                            key={`min-${sx.id}`}
-                            onClick={() => handleRestoreForm(sx)}
-                            className="pointer-events-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-xl shadow-2xl border border-white/20 flex items-center gap-3 cursor-pointer animate-in slide-in-from-right-10 duration-300 group min-w-[280px]"
-                        >
-                            <div className="bg-white/20 rounded-lg p-1.5 flex items-center justify-center">
-                                <span className="material-symbols-outlined text-xl">description</span>
-                            </div>
-                            <div className="flex-1 overflow-hidden">
-                                <p className="text-[10px] font-black uppercase tracking-wider opacity-70 leading-none mb-1">Ficha Técnica</p>
-                                <p className="text-sm font-bold truncate leading-tight">{sx.patient}</p>
-                                <p className="text-[10px] opacity-80 truncate">{sx.procedure}</p>
-                            </div>
-                            <button 
-                                onClick={(e) => handleCloseMinimizedForm(e, sx.id)}
-                                className="size-8 rounded-full hover:bg-black/20 flex items-center justify-center transition-colors"
-                            >
-                                <span className="material-symbols-outlined text-lg">close</span>
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
         </div>
     );
 };

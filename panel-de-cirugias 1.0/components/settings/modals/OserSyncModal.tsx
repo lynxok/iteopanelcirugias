@@ -438,8 +438,12 @@ const OserSyncModal: React.FC = () => {
                                                     <div className="mx-6 mt-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-3 text-amber-700">
                                                         <span className="material-symbols-outlined text-amber-600 animate-pulse">info</span>
                                                         <div className="text-xs">
-                                                            <p className="font-black uppercase tracking-wider">⚠️ Atención: Internación Cerrada</p>
-                                                            <p className="font-bold opacity-90 mt-0.5">Esta cirugía fue marcada como CERRADA en el portal de OSER. Al sincronizar, la tarjeta local del paciente se actualizará al estado "REALIZADA / COMPLETADA" y no se volverá a auditar en la próxima sincronización.</p>
+                                                            <p className="font-black uppercase tracking-wider">⚠️ Atención: Internación Cerrada en OSER</p>
+                                                            <p className="font-bold opacity-90 mt-0.5">
+                                                                {result.surgery?.surgery_date && result.surgery?.actual_end_time
+                                                                    ? 'Esta cirugía figura como CERRADA en el portal de OSER y posee fecha y hora de fin de cirugía cargadas. Al sincronizar, pasará al estado "REALIZADA / COMPLETADA".'
+                                                                    : 'Esta orden figura como CERRADA en el portal de OSER. Se actualizará el estado OSER a "CERRADA", pero la cirugía NO se marcará como Realizada porque aún no tiene fecha y hora de fin de cirugía cargadas.'}
+                                                            </p>
                                                         </div>
                                                     </div>
                                                 ) : null}

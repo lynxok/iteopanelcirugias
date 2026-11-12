@@ -381,6 +381,26 @@ async function getNextNumeroParte(cookie: string): Promise<number> {
   return Number(data?.numero_parte || 1);
 }
 
+async function findActiveInternacion(cookie: string, idpaciente: number): Promise<any | null> {
+  try {
+    const filters = JSON.stringify({
+      idpaciente,
+      cerrada: false,
+    });
+    const url = `${API_BASE}/internaciones/get-all-int?filters=${encodeURIComponent(filters)}`;
+    const resp = await fetch(url, { headers: { ...BROWSER_HEADERS, Cookie: cookie } });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const rows = Array.isArray(data?.rows) ? data.rows : (Array.isArray(data) ? data : []);
+    if (rows.length === 0) return null;
+    rows.sort((a: any, b: any) => Number(b.id || 0) - Number(a.id || 0));
+    return rows[0];
+  } catch (err) {
+    console.warn("[globalapp-sync] Error buscando internación activa:", err);
+    return null;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -469,7 +489,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // 4. Build timestamps and fields (dynamic patologia lookup)
+    // 4. Build timestamps and fields (dynamic patologia lookup + active internacion when tipo === "Int")
     const inicioIso = toArgentinaUtcIso(payload.surgeryDate, payload.startTime);
     const finIso = toArgentinaUtcIso(payload.surgeryDate, payload.endTime);
     const tipo = payload.isAmbulatory ? "Amb" : "Int";
@@ -477,6 +497,8 @@ Deno.serve(async (req: Request) => {
     const auxiliares = hasAnatomiaPatologica(payload.anatomiaPatologica) ? ["Anat. Patol\u00f3gica"] : [];
     const idpatologia = await resolvePatologiaId(cookie, payload.specialty);
     const idquirofano = 10; // QUIROFANO
+    const activeInternacion = tipo === "Int" ? await findActiveInternacion(cookie, patient.id) : null;
+    const resolvedIdInternacion = tipo === "Int" ? (activeInternacion?.id ?? null) : null;
 
     // 5. Check if surgery already exists in Globalapp for this patient + date
     const existing = await findExistingParte(cookie, patient.id, payload.surgeryDate);
@@ -492,11 +514,11 @@ Deno.serve(async (req: Request) => {
         id: existing.id,
         numero_parte: existing.numero_parte,
         idpaciente: patient.id,
-        idcobertura: existing.idcobertura || patient.idcobertura || null,
+        idcobertura: existing.idcobertura || patient.idcobertura || activeInternacion?.idcobertura || null,
         idquirofano: existing.idquirofano || idquirofano,
         idpatologia: idpatologia || existing.idpatologia || 15,
-        idinternacion: existing.idinternacion ?? null,
-        idturno: existing.idturno ?? null,
+        idinternacion: tipo === "Int" ? (existing.idinternacion ?? resolvedIdInternacion) : null,
+        idturno: tipo === "Amb" ? (existing.idturno ?? null) : null,
         inicio: inicioIso,
         fin: finIso,
         tipo,
@@ -527,6 +549,8 @@ Deno.serve(async (req: Request) => {
           mode: "updated",
           parteId: existing.id,
           idpatologia: updateBody.idpatologia,
+          idinternacion: updateBody.idinternacion,
+          numerointernacion: activeInternacion?.numerointernacion ?? null,
           patientId: patient.id,
           patientName: patient.nombre,
           profesionales: updateBody.profesionales,
@@ -539,10 +563,10 @@ Deno.serve(async (req: Request) => {
       const createBody = {
         numero_parte: nextNum,
         idpaciente: patient.id,
-        idcobertura: patient.idcobertura || null,
+        idcobertura: patient.idcobertura || activeInternacion?.idcobertura || null,
         idquirofano,
         idpatologia,
-        idinternacion: null,
+        idinternacion: resolvedIdInternacion,
         idturno: null,
         inicio: inicioIso,
         fin: finIso,
@@ -577,6 +601,8 @@ Deno.serve(async (req: Request) => {
           parteId: createdData?.id || createdData?.parte?.id || null,
           numero_parte: nextNum,
           idpatologia,
+          idinternacion: resolvedIdInternacion,
+          numerointernacion: activeInternacion?.numerointernacion ?? null,
           patientId: patient.id,
           patientName: patient.nombre,
           profesionales,

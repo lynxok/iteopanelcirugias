@@ -787,10 +787,15 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen = false, setMobileOpen }) 
       {/* Profile Modal */}
       {
         showProfileModal && user && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fadeIn">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
+          <div 
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowProfileModal(false);
+            }}
+          >
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 flex flex-col max-h-[92vh]">
               {/* Modal Header */}
-              <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+              <div className="px-5 sm:px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
                 <div>
                   <h3 className="text-xl font-bold text-slate-900">Mi Perfil</h3>
                   <p className="text-xs text-slate-500">Gestione sus datos personales y preferencias.</p>
@@ -804,7 +809,7 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen = false, setMobileOpen }) 
               </div>
 
               {/* Modal Body */}
-              <div className="p-6 flex flex-col gap-6">
+              <div className="p-5 sm:p-6 flex flex-col gap-5 sm:gap-6 overflow-y-auto overscroll-contain">
                 {/* Avatar Section */}
                 <div className="flex flex-col items-center gap-4">
                   <div className="relative group">
@@ -1008,7 +1013,7 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen = false, setMobileOpen }) 
       {
         showCropper && imageToCrop && (
           <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[110] flex flex-col items-center justify-center p-4 animate-fadeIn">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col h-[600px] border border-slate-200">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col h-[600px] max-h-[90vh] border border-slate-200">
               {/* Cropper Header */}
               <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center">
                 <div>

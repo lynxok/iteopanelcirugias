@@ -171,21 +171,17 @@ const parseTimeToMinutes = (timeStr?: string | null): number | null => {
     return parts[0] * 60 + parts[1];
 };
 
-const enrichSurgeryStatus = (surgery: any, admissionsMap: Record<string, any[]>) => {
-    const hasRealEndTime = !!surgery.actual_end_time;
-    let hasCompletedAdmission = false;
-    if (surgery.patient_id && surgery.surgery_date && surgery.actual_start_time) {
-        const sDate = new Date(surgery.surgery_date + 'T12:00:00Z');
-        const adms = admissionsMap[surgery.patient_id] || [];
-        hasCompletedAdmission = adms.some(adm => {
-            if (!adm.check_in || !adm.check_out) return false;
-            const checkInDate = new Date(adm.check_in.substring(0, 10) + 'T12:00:00Z');
-            const diffDays = Math.abs(sDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24);
-            return diffDays <= 2;
-        });
+const enrichSurgeryStatus = (surgery: any, _admissionsMap: Record<string, any[]>) => {
+    const hasRealEndTime = Boolean(surgery.surgery_date && surgery.actual_end_time);
+    const isAmbulatory = Boolean(surgery.is_ambulatory || surgery.operating_rooms?.is_ambulatory);
+    const isFinished = hasRealEndTime || (isAmbulatory && surgery.status === 'completed');
+    if (isFinished) {
+        return { ...surgery, status: 'completed' };
     }
-    const isFinished = surgery.status === 'completed' || hasRealEndTime || hasCompletedAdmission;
-    return isFinished ? { ...surgery, status: 'completed' } : surgery;
+    if (surgery.status === 'completed') {
+        return { ...surgery, status: surgery.surgery_date ? 'scheduled' : 'pending_validation' };
+    }
+    return surgery;
 };
 
 const getPeriodDates = (

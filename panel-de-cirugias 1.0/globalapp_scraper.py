@@ -134,10 +134,26 @@ def extract_search_tokens(person_name: str, license_number: str = "") -> list:
             candidates.append(parts[0])
     return candidates
 
-def select_vs_combobox_option(page, combobox_selector: str, option_text: str):
+def get_modal_combobox(page, modal_index: int, fallback_selector: str = None):
+    """
+    Returns the nth [role='combobox'] inside .parte-quirurgico-create:
+      0 = Quirófano
+      1 = Tipo (Amb / Int)
+      2 = Internación / Turno (a la derecha de Tipo)
+      3 = Rol Profesional (Espe., Anes., Ayu. 1, Ayu 2)
+      4 = Tipo de Anestesia
+    """
+    modal_combos = page.locator(".parte-quirurgico-create [role='combobox']")
+    if modal_combos.count() > modal_index:
+        return modal_combos.nth(modal_index)
+    if fallback_selector:
+        return page.locator(fallback_selector).first
+    return modal_combos.first
+
+def select_vs_combobox_option(page, combobox_selector: str, option_text: str, modal_index: int = None):
     """Opens a Vue-Select combobox and clicks the matching option."""
     try:
-        combo = page.locator(combobox_selector).first
+        combo = get_modal_combobox(page, modal_index, combobox_selector) if modal_index is not None else page.locator(combobox_selector).first
         combo.click()
         page.wait_for_timeout(400)
         opt = page.get_by_role("option", name=option_text, exact=True)
@@ -153,48 +169,29 @@ def select_vs_combobox_option(page, combobox_selector: str, option_text: str):
 
 def check_and_select_internacion_modalidad(page) -> dict:
     """
-    Cuando la modalidad es 'Int', interactúa con el selector contiguo a Tipo (#vs5__combobox)
-    para verificar y asociar la internación activa del paciente.
+    Cuando la modalidad es 'Int', interactúa con el selector contiguo a Tipo
+    (.parte-quirurgico-create [role='combobox'] índice 2) para verificar y asociar
+    la internación activa del paciente.
     """
     log("Verificando si el paciente tiene una internación cargada al lado de 'Int'...")
     try:
-        # 1. Estrategias para encontrar el combobox de internación contiguo a Tipo (#vs4)
-        combo = page.locator("#vs5__combobox").first
-        if combo.count() == 0 or not combo.is_visible():
-            # Buscar dentro del mismo contenedor de fila de #vs4
-            try:
-                row = page.locator("#vs4__combobox").locator("xpath=ancestor::*[contains(@class, 'flex') or contains(@class, 'grid')][1]")
-                row_combos = row.locator("[role='combobox'], .vs__dropdown-toggle, input.vs__search")
-                for i in range(row_combos.count()):
-                    cand = row_combos.nth(i)
-                    cand_id = cand.get_attribute("id") or ""
-                    if "vs4" not in cand_id and cand.is_visible():
-                        combo = cand
-                        break
-            except Exception:
-                pass
+        # Dar margen a que GlobalApp complete GET /api/internaciones/get-all-int tras elegir 'Int'
+        page.wait_for_timeout(900)
 
-        if combo.count() == 0 or not combo.is_visible():
-            # Buscar el siguiente combobox inmediatamente después de #vs4
-            try:
-                following_combo = page.locator("#vs4__combobox").locator("xpath=following::*[@role='combobox' or contains(@class, 'v-select')][1]")
-                if following_combo.count() > 0 and following_combo.is_visible():
-                    combo = following_combo
-            except Exception:
-                pass
-
+        # 1. Localizar estrictamente el 3er combobox dentro de .parte-quirurgico-create (índice 2 = a la derecha de Tipo)
+        combo = get_modal_combobox(page, 2)
         if combo.count() == 0 or not combo.is_visible():
             log("Aviso: No se localizó visualmente el selector de internación contiguo a 'Int'.")
             return {"success": False, "reason": "COMBO_NOT_FOUND"}
 
-        # 2. Verificar si ya tiene una internación seleccionada previamente
+        # 2. Verificar si ya tiene una internación autocompletada o seleccionada previamente
         try:
             v_select = combo.locator("xpath=ancestor::*[contains(@class, 'v-select')][1]")
             selected_badge = v_select.locator(".vs__selected")
             if selected_badge.count() > 0 and selected_badge.first.is_visible():
                 curr_val = selected_badge.first.inner_text().strip()
                 if curr_val:
-                    log(f"Internación ya asignada en Globalapp: '{curr_val}'. Se conserva.")
+                    log(f"Internación asignada en Globalapp: '{curr_val}'. Se conserva.")
                     return {"success": True, "selected": True, "internacion": curr_val, "already_set": True}
         except Exception:
             pass
@@ -266,8 +263,8 @@ def search_and_add_professional(page, role_label: str, person_name: str, license
 
     log(f"Cargando profesional [{role_label}]: {person_name} (Mat: {license_number or 'N/A'})...")
 
-    # 1. Select explicit role in #vs6__combobox so we can skip Anes. if absent
-    select_vs_combobox_option(page, "#vs6__combobox", role_label)
+    # 1. Select explicit role in modal combobox index 3 so we can skip Anes. if absent
+    select_vs_combobox_option(page, "#vs6__combobox", role_label, modal_index=3)
 
     # 2. Search professional in gmed-search-suggest
     candidates = extract_search_tokens(person_name, license_number)
@@ -276,7 +273,7 @@ def search_and_add_professional(page, role_label: str, person_name: str, license
 
     for token in candidates:
         try:
-            suggest_box = page.locator(".w-full.relative.gmed-search-suggest.flex-1 input.vs-inputx").first
+            suggest_box = page.locator(".parte-quirurgico-create .gmed-search-suggest input.vs-inputx").last
             suggest_box.click()
             suggest_box.fill("")
             page.wait_for_timeout(200)
@@ -284,8 +281,8 @@ def search_and_add_professional(page, role_label: str, person_name: str, license
             page.wait_for_timeout(1200)
 
             # Look for suggestion item containing "- "
-            items = page.locator("li, div, span").filter(has_text=f"- ")
-            matched_item = None
+            items = page.locator(".parte-quirurgico-create li, .parte-quirurgico-create div, .parte-quirurgico-create span").filter(has_text="- ")
+            matched_txt = None
 
             # Try matching all words or surname
             count = items.count()
@@ -296,11 +293,11 @@ def search_and_add_professional(page, role_label: str, person_name: str, license
                 norm_txt = normalize_str(txt)
                 primary_surname = norm_full_words[0] if norm_full_words else ""
                 if "-" in norm_txt and primary_surname and primary_surname in norm_txt.split():
-                    matched_item = items.nth(idx)
+                    matched_txt = txt
                     break
 
-            if matched_item:
-                matched_item.click()
+            if matched_txt:
+                page.locator(".parte-quirurgico-create").get_by_text(matched_txt, exact=True).last.click()
                 selected = True
                 page.wait_for_timeout(500)
                 break
@@ -311,10 +308,10 @@ def search_and_add_professional(page, role_label: str, person_name: str, license
         log(f"No se encontró coincidencia en Globalapp para [{role_label}] {person_name}.")
         return False
 
-    # 3. If Anesthesia type is provided (usually on first specialist load), select it in #vs7__combobox
+    # 3. If Anesthesia type is provided (usually on first specialist load), select it in modal combobox index 4
     if anesthesia_type:
         mapped_anes = map_anesthesia(anesthesia_type)
-        select_vs_combobox_option(page, "#vs7__combobox", mapped_anes)
+        select_vs_combobox_option(page, "#vs7__combobox", mapped_anes, modal_index=4)
 
     # 4. Click the '+' button to add professional to the table
     # In codegen: page.get_by_role("button").nth(4).click()
@@ -508,33 +505,31 @@ def create_new_surgery_in_globalapp(page, payload: dict) -> bool:
     pat_input.fill(search_term)
     page.wait_for_timeout(1500)
 
-    matched_pat = None
+    matched_pat_txt = None
     discrepancy_msg = None
-    suggestions = page.locator("li, div, span").filter(has_text="- ")
+    suggestions = page.locator(".parte-quirurgico-create li, .parte-quirurgico-create div, .parte-quirurgico-create span").filter(has_text="- ")
     for i in range(min(suggestions.count(), 30)):
         txt = suggestions.nth(i).inner_text().strip()
         if "\n" in txt or len(txt) > 100:
             continue
         is_match, reason, msg = validate_patient_identity(dni, patient_name, txt)
         if is_match:
-            matched_pat = suggestions.nth(i)
+            matched_pat_txt = txt
             break
         elif reason == "DISCREPANCY":
             discrepancy_msg = msg
 
-    if matched_pat:
-        matched_pat.click()
-        page.wait_for_timeout(500)
+    if matched_pat_txt:
+        page.locator(".parte-quirurgico-create").get_by_text(matched_pat_txt, exact=True).last.click()
+        page.wait_for_timeout(600)
     elif discrepancy_msg:
         raise RuntimeError(discrepancy_msg)
     else:
         raise RuntimeError(f"No se encontró al paciente con DNI {dni} ({patient_name}) en el padrón de GlobalApp. Verifique si está registrado.")
 
-    # 2. Select Quirófano (Quirófano 1 -> QUIROFANO)
+    # 2. Select Quirófano (Quirófano 1 -> QUIROFANO) in modal combobox index 0
     target_or = map_operating_room(or_name)
-    page.locator(".vs__actions").first.click()
-    page.wait_for_timeout(400)
-    page.get_by_role("option", name=target_or).first.click()
+    select_vs_combobox_option(page, ".vs__actions", target_or, modal_index=0)
     page.wait_for_timeout(400)
 
     # 3. Select Servicio / Patología (TRAUMATOLOGIA by default)
@@ -554,15 +549,15 @@ def create_new_surgery_in_globalapp(page, payload: dict) -> bool:
     page.locator("div:nth-child(4) > .w-full.flex.items-center > .w-24").fill(end_time)
     page.wait_for_timeout(300)
 
-    # 5. Select Tipo: Int or Amb
+    # 5. Select Tipo: Int or Amb in modal combobox index 1
     modalidad_label = "Amb" if is_ambulatory else "Int"
-    select_vs_combobox_option(page, "#vs4__combobox", modalidad_label)
+    select_vs_combobox_option(page, "#vs4__combobox", modalidad_label, modal_index=1)
     if modalidad_label == "Int":
         payload["internacionResult"] = check_and_select_internacion_modalidad(page)
 
-    # 6. Select Anesthesia Type in #vs7__combobox
+    # 6. Select Anesthesia Type in modal combobox index 4
     mapped_anes = map_anesthesia(anesthesia_type)
-    select_vs_combobox_option(page, "#vs7__combobox", mapped_anes)
+    select_vs_combobox_option(page, "#vs7__combobox", mapped_anes, modal_index=4)
 
     # 7. Check Anatomía Patológica if already present
     anat_check = page.get_by_role("checkbox").first
@@ -623,17 +618,17 @@ def update_existing_surgery_in_globalapp(page, payload: dict) -> bool:
         except Exception as e:
             log(f"Aviso actualizando hora fin: {e}")
 
-    # 3. Review Tipo (Int / Amb)
+    # 3. Review Tipo (Int / Amb) in modal combobox index 1
     if is_ambulatory is not None:
         modalidad_label = "Amb" if bool(is_ambulatory) else "Int"
-        select_vs_combobox_option(page, "#vs4__combobox", modalidad_label)
+        select_vs_combobox_option(page, "#vs4__combobox", modalidad_label, modal_index=1)
         if modalidad_label == "Int":
             payload["internacionResult"] = check_and_select_internacion_modalidad(page)
 
-    # 4. Review Anesthesia Type
+    # 4. Review Anesthesia Type in modal combobox index 4
     if anesthesia_type:
         mapped_anes = map_anesthesia(anesthesia_type)
-        select_vs_combobox_option(page, "#vs7__combobox", mapped_anes)
+        select_vs_combobox_option(page, "#vs7__combobox", mapped_anes, modal_index=4)
 
     # 5. Review Anatomía Patológica checkbox
     try:

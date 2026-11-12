@@ -1015,7 +1015,7 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
 
     return (
         <>
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fadeIn modal-backdrop print:static print:p-0">
+            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fadeIn modal-backdrop print:static print:p-0">
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden print-container print:max-h-none print:overflow-visible print:shadow-none">
                     {/* Documento Clínico Formal (Impresión) - PORTAL DIRECTO AL BODY PARA EVITAR HERENCIA DE LAYOUTS */}
                     {createPortal(
@@ -2032,7 +2032,7 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
             }} />
             {/* PIN Validation Modal */}
             {showPinModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-fadeIn">
+                <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-fadeIn">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200">
                         <div className="p-6 bg-indigo-600 text-white text-center">
                             <div className="size-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mx-auto mb-4">
