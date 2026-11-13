@@ -163,6 +163,11 @@ def relevar_cirugias(payload):
                 prest_rows = prest_resp if isinstance(prest_resp, list) else prest_resp.get("rows", [])
 
                 for pr in prest_rows:
+                    pr_fecha = str(pr.get("fecha") or "")[:10]
+                    # Solo contemplar las prestaciones que se realizaron ese día (fecha de cirugía)
+                    if pr_fecha and pr_fecha != fecha_cirugia:
+                        continue
+
                     prest_obj = pr.get("prestacion") or {}
                     cod = str(prest_obj.get("codigo") or pr.get("codigo") or "").strip()
                     desc = prest_obj.get("descripcion") or pr.get("nombre") or ""
@@ -216,8 +221,10 @@ def relevar_cirugias(payload):
             except Exception as e:
                 log(f"  Aviso al consultar protocolo quirúrgico #{np}: {e}")
 
-        # Si no hubo prestaciones cargadas en internación, buscar códigos AOTER o NUN en el protocolo quirúrgico
-        if not prestaciones and protocolo_text:
+        # Si no hubo prestaciones quirúrgicas principales cargadas en internación (o solo vino radioscopía 340907),
+        # buscar prácticas quirúrgicas en el texto del protocolo operatorio
+        tiene_practica_quirurgica_base = any(p.get('codigo') != '340907' for p in prestaciones)
+        if not tiene_practica_quirurgica_base and protocolo_text:
             # 1. Búsqueda de códigos NUN alfanuméricos (ej: PC.08.03, PP.07.07, MS.07.02)
             for m in re.finditer(r'(?:(?:cod(?:igo|\.|\:)?\s*)?nun\s*[:\s]*|cod(?:igo|\.|\:)?\s*[:\s]*)([A-Z]{2}[\.\s]?\d{2}[\.\s]?\d{2})', protocolo_text, re.IGNORECASE):
                 c_clean = re.sub(r'[^A-Za-z0-9]', '', m.group(1)).upper()
@@ -234,7 +241,7 @@ def relevar_cirugias(payload):
                     if not tratamiento_str:
                         tratamiento_str = desc
 
-            # 2. Búsqueda de códigos numéricos tradicionales (ej: 120406, 1210406, 340907)
+            # 2. Búsqueda de códigos numéricos tradicionales (ej: 120406, 1210406, 1240704, 1240803)
             for m in re.finditer(r'(?:cod(?:igo|\.|\:)?\s*)?(\d{2,3}[\.\-]?\d{2}[\.\-]?\d{2})', protocolo_text, re.IGNORECASE):
                 c_raw = m.group(1)
                 c_clean = re.sub(r'[^0-9]', '', c_raw)
@@ -252,28 +259,76 @@ def relevar_cirugias(payload):
                         if not tratamiento_str:
                             tratamiento_str = desc
 
-        # Detección de Recargos y Radioscopía (340907):
-        # Regla unificada de recargo del 5%:
-        # Si se detecta radioscopia (por código 340907 en internación/protocolo, o texto 'radioscopia'/'arco en c')
-        # O si el checkbox '5%' está tildado en la HC -> recargo 5% activo (NO DUPLICAR AMBOS).
-        has_radioscopia = any(p['codigo'] == '340907' for p in prestaciones) or bool(
+            # 3. Detección semántica de procedimientos quirúrgicos ortopédicos frecuentes en el protocolo
+            proto_upper = protocolo_text.upper()
+            if not any(p.get('codigo') != '340907' for p in prestaciones):
+                if "THOMPSON" in proto_upper or "REEMPLAZO PARCIAL DE CADERA" in proto_upper or "PROTESIS PARCIAL DE CADERA" in proto_upper:
+                    cod_t = "1240704"
+                    desc_t = aoter_catalog.get(cod_t, "Reemplazo parcial de cadera")
+                    log(f"  [Auto-Detección Semántica] Detectada prótesis de Thompson / Reemplazo parcial de cadera -> {cod_t}: {desc_t}")
+                    prestaciones.append({
+                        "codigo": cod_t,
+                        "descripcion": desc_t,
+                        "porcentaje_especialista": 100,
+                        "porcentaje_ayudante_1": 100,
+                        "porcentaje_ayudante_2": 100
+                    })
+                    if not tratamiento_str:
+                        tratamiento_str = desc_t
+                elif "ARTROPLASTIA TOTAL DE CADERA" in proto_upper or "PROTESIS TOTAL DE CADERA" in proto_upper or "RTC" in proto_upper:
+                    cod_t = "1240803"
+                    desc_t = aoter_catalog.get(cod_t, "Artroplastia total de cadera")
+                    log(f"  [Auto-Detección Semántica] Detectada Artroplastia total de cadera -> {cod_t}: {desc_t}")
+                    prestaciones.append({
+                        "codigo": cod_t,
+                        "descripcion": desc_t,
+                        "porcentaje_especialista": 100,
+                        "porcentaje_ayudante_1": 100,
+                        "porcentaje_ayudante_2": 100
+                    })
+                    if not tratamiento_str:
+                        tratamiento_str = desc_t
+
+        # Detección de Recargos y Radioscopía:
+        # Semántica estricta de recargos:
+        # - Radioscopía (340907): NUNCA puede tener 25%, es estrictamente 5%.
+        # - Si tiene 5%: es porque se hizo Radioscopía.
+        # - Si tiene 20%: es sobrecargo por edad (>65 años o pediátrico).
+        # - Si tiene 25%: es porque se hizo Radioscopía (5%) + sobrecargo por edad (20%).
+        # - Si tiene 30%: recargo adicional según nomenclador/convenio.
+        # Los porcentajes de recargo son sobre TODAS las prácticas quirúrgicas cargadas.
+        has_radioscopia_en_cirugia = any(p['codigo'] == '340907' for p in prestaciones) or bool(
             re.search(r'\b(?:radioscopia|radioscopias|arco\s*en\s*c|340907)\b', protocolo_text, re.IGNORECASE)
         )
-        has_5pct = "5%" in recargo_checkbox_vals or bool(re.search(r'\b5\s*%\b', protocolo_text, re.IGNORECASE))
+        has_checkbox_5 = "5%" in recargo_checkbox_vals or bool(re.search(r'\b5\s*%\b', protocolo_text, re.IGNORECASE))
+        has_checkbox_20 = "20%" in recargo_checkbox_vals or bool(re.search(r'\b20\s*%\b', protocolo_text, re.IGNORECASE))
+        has_checkbox_25 = "25%" in recargo_checkbox_vals or bool(re.search(r'\b25\s*%\b', protocolo_text, re.IGNORECASE))
+        has_checkbox_30 = "30%" in recargo_checkbox_vals or bool(re.search(r'\b30\s*%\b', protocolo_text, re.IGNORECASE))
 
-        recargo_5 = has_radioscopia or has_5pct
-        recargo_20 = "20%" in recargo_checkbox_vals or bool(re.search(r'\b20\s*%\b', protocolo_text, re.IGNORECASE))
-        recargo_25 = "25%" in recargo_checkbox_vals or bool(re.search(r'\b25\s*%\b', protocolo_text, re.IGNORECASE))
-        recargo_30 = "30%" in recargo_checkbox_vals or bool(re.search(r'\b30\s*%\b', protocolo_text, re.IGNORECASE))
+        # Lista de recargos únicos a aplicar
+        recargos_a_aplicar = [] # Tuplas de (porcentaje, etiqueta_motivo)
 
-        # En prestaciones, mantener la práctica principal (excluyendo el 340907 como práctica separada si ya genera el recargo 5%)
-        # Para cada recargo activo (5%, 20%, 25%, 30%), duplicar la prestación principal al porcentaje correspondiente
-        prestaciones_principales = [p for p in prestaciones if p.get('codigo') != '340907']
-        if not prestaciones_principales and prestaciones:
-            prestaciones_principales = prestaciones
+        if has_checkbox_25:
+            # 25% = Radioscopía (5%) + Edad (20%)
+            recargos_a_aplicar.append((25, "Recargo 25% (Radioscopía + Edad)"))
+        else:
+            if has_checkbox_20:
+                recargos_a_aplicar.append((20, "Recargo 20% (Edad)"))
+            # Si tiene checkbox 5% O tiene radioscopía detectada (y no tenía 25%), aplicar 5% (NO DUPLICAR)
+            if has_checkbox_5 or has_radioscopia_en_cirugia:
+                recargos_a_aplicar.append((5, "Recargo 5% (Radioscopía)"))
+
+        if has_checkbox_30:
+            recargos_a_aplicar.append((30, "Recargo 30%"))
+
+        # Prácticas principales quirúrgicas (excluyendo 340907 de la lista de cirugías base para no sobrecargar el estudio)
+        prestaciones_quirurgicas = [p for p in prestaciones if p.get('codigo') != '340907']
+        if not prestaciones_quirurgicas and prestaciones:
+            # Si solo vino 340907 y no hubo otra, no se le aplica recargo a la radioscopia
+            prestaciones_quirurgicas = prestaciones
 
         prestaciones_finales = []
-        for p in prestaciones_principales:
+        for p in prestaciones_quirurgicas:
             prestaciones_finales.append({
                 "codigo": p["codigo"],
                 "descripcion": p["descripcion"],
@@ -283,31 +338,22 @@ def relevar_cirugias(payload):
                 "tipo": "principal"
             })
 
-        # Práctica base sobre la que se calculan los recargos
-        base_prest = prestaciones_finales[0] if prestaciones_finales else None
-
-        active_surcharges = []
-        if recargo_5:
-            active_surcharges.append(5)
-        if recargo_20:
-            active_surcharges.append(20)
-        if recargo_25:
-            active_surcharges.append(25)
-        if recargo_30:
-            active_surcharges.append(30)
-
-        if base_prest:
-            for s_pct in active_surcharges:
+        # Aplicar los recargos sobre TODAS las prácticas quirúrgicas cargadas
+        # Nota: las radioscopias nunca llevan recargo de 25% ni de 5%.
+        for p_base in list(prestaciones_finales):
+            if p_base["codigo"] == "340907":
+                continue  # Nunca aplicar recargo sobre la radioscopía en sí
+            for pct, etiqueta in recargos_a_aplicar:
                 prestaciones_finales.append({
-                    "codigo": base_prest["codigo"],
-                    "descripcion": f"{base_prest['descripcion']} (Recargo {s_pct}%)",
-                    "porcentaje_especialista": s_pct,
-                    "porcentaje_ayudante_1": s_pct,
-                    "porcentaje_ayudante_2": s_pct,
+                    "codigo": p_base["codigo"],
+                    "descripcion": f"{p_base['descripcion']} ({etiqueta})",
+                    "porcentaje_especialista": pct,
+                    "porcentaje_ayudante_1": pct,
+                    "porcentaje_ayudante_2": pct,
                     "tipo": "recargo"
                 })
 
-        recargo_display = ", ".join(f"{s}%" for s in active_surcharges) if active_surcharges else ""
+        recargo_display = ", ".join(f"{pct}%" for pct, _ in recargos_a_aplicar) if recargos_a_aplicar else ""
 
         partes_procesados.append({
             "id": f"ga_{pid}",

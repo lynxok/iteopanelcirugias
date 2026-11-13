@@ -433,6 +433,93 @@ export const Tripticos: React.FC = () => {
     );
   };
 
+  // Manejo de prácticas por cirugía (Agregar, Eliminar, Editar)
+  const handleAddPractice = (surgeryId: string, cod?: string, desc?: string, pct: number = 100) => {
+    const newCod = cod || '1240704';
+    const newDesc = desc || (AOTER_NOMENCLADOR as any)[newCod] || 'Práctica Nomenclada AOTER';
+    const newPr: TripticoPrestacion = {
+      codigo: newCod,
+      descripcion: newDesc,
+      porcentaje_especialista: pct,
+      porcentaje_ayudante_1: pct,
+      porcentaje_ayudante_2: pct,
+      tipo: 'principal'
+    };
+
+    setCirugias(prev =>
+      prev.map(c => {
+        if (c.id === surgeryId) {
+          return { ...c, prestaciones: [...(c.prestaciones || []), newPr] };
+        }
+        return c;
+      })
+    );
+
+    if (selectedItemForDetail && selectedItemForDetail.id === surgeryId) {
+      setSelectedItemForDetail((prev: any) => ({
+        ...prev,
+        prestaciones: [...(prev.prestaciones || []), newPr]
+      }));
+    }
+  };
+
+  const handleRemovePractice = (surgeryId: string, indexToRemove: number) => {
+    setCirugias(prev =>
+      prev.map(c => {
+        if (c.id === surgeryId) {
+          const updated = [...(c.prestaciones || [])];
+          updated.splice(indexToRemove, 1);
+          return { ...c, prestaciones: updated };
+        }
+        return c;
+      })
+    );
+
+    if (selectedItemForDetail && selectedItemForDetail.id === surgeryId) {
+      setSelectedItemForDetail((prev: any) => {
+        const updated = [...(prev.prestaciones || [])];
+        updated.splice(indexToRemove, 1);
+        return { ...prev, prestaciones: updated };
+      });
+    }
+  };
+
+  const handleUpdatePracticeField = (
+    surgeryId: string,
+    index: number,
+    field: keyof TripticoPrestacion,
+    value: any
+  ) => {
+    setCirugias(prev =>
+      prev.map(c => {
+        if (c.id === surgeryId) {
+          const updated = [...(c.prestaciones || [])];
+          if (updated[index]) {
+            updated[index] = { ...updated[index], [field]: value };
+            if (field === 'codigo' && (AOTER_NOMENCLADOR as any)[value]) {
+              updated[index].descripcion = (AOTER_NOMENCLADOR as any)[value];
+            }
+          }
+          return { ...c, prestaciones: updated };
+        }
+        return c;
+      })
+    );
+
+    if (selectedItemForDetail && selectedItemForDetail.id === surgeryId) {
+      setSelectedItemForDetail((prev: any) => {
+        const updated = [...(prev.prestaciones || [])];
+        if (updated[index]) {
+          updated[index] = { ...updated[index], [field]: value };
+          if (field === 'codigo' && (AOTER_NOMENCLADOR as any)[value]) {
+            updated[index].descripcion = (AOTER_NOMENCLADOR as any)[value];
+          }
+        }
+        return { ...prev, prestaciones: updated };
+      });
+    }
+  };
+
   // Edición rápida de campos por cirugía
   const handleUpdateSurgeryField = (id: string, field: keyof TripticoCirugia, value: any) => {
     setCirugias(prev =>
@@ -1073,28 +1160,47 @@ export const Tripticos: React.FC = () => {
 
                             {/* Códigos AOTER y % */}
                             <td className="py-3 px-3">
-                              {surg.prestaciones && surg.prestaciones.length > 0 ? (
-                                <div className="flex flex-col gap-1">
-                                  {surg.prestaciones.map((pr, pIdx) => (
+                              <div className="flex flex-col gap-1">
+                                {surg.prestaciones && surg.prestaciones.length > 0 ? (
+                                  surg.prestaciones.map((pr, pIdx) => (
                                     <div
                                       key={pIdx}
-                                      className="inline-flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded text-[11px] border border-slate-200 text-slate-800"
+                                      className="inline-flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded text-[11px] border border-slate-200 text-slate-800 group/pr"
                                     >
                                       <span className="font-mono font-bold text-teal-800">{pr.codigo}</span>
-                                      <span className="text-slate-500 truncate max-w-[150px]" title={pr.descripcion}>
+                                      <span className="text-slate-500 truncate max-w-[130px]" title={pr.descripcion}>
                                         {pr.descripcion}
                                       </span>
                                       <span className="ml-auto font-bold text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">
                                         {pr.porcentaje_especialista}%
                                       </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleRemovePractice(surg.id, pIdx);
+                                        }}
+                                        className="opacity-0 group-hover/pr:opacity-100 p-0.5 text-slate-400 hover:text-rose-600 rounded transition-opacity"
+                                        title="Eliminar práctica"
+                                      >
+                                        <span className="material-symbols-outlined text-[13px] leading-none">close</span>
+                                      </button>
                                     </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-semibold border border-amber-200">
-                                  Sin práctica AOTER
-                                </span>
-                              )}
+                                  ))
+                                ) : (
+                                  <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded text-[10px] font-semibold border border-amber-200">
+                                    Sin práctica AOTER
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddPractice(surg.id)}
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-700 hover:text-teal-900 mt-0.5 w-fit hover:underline"
+                                >
+                                  <span className="material-symbols-outlined text-xs">add</span>
+                                  Agregar práctica
+                                </button>
+                              </div>
                             </td>
 
                             {/* Botón de Adjuntos */}
@@ -1712,35 +1818,125 @@ export const Tripticos: React.FC = () => {
 
                 {/* Prestaciones AOTER */}
                 <div>
-                  <span className="font-bold text-slate-700 text-[11px] block mb-1.5">
-                    Prácticas Nomencladas AOTER:
-                  </span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-slate-700 text-[11px] block">
+                      Prácticas Nomencladas AOTER:
+                    </span>
+                    {'selected' in selectedItemForDetail && (
+                      <button
+                        type="button"
+                        onClick={() => handleAddPractice(selectedItemForDetail.id)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded-lg border border-teal-200 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-sm font-bold">add</span>
+                        Agregar Práctica
+                      </button>
+                    )}
+                  </div>
                   {'prestaciones' in selectedItemForDetail && selectedItemForDetail.prestaciones.length > 0 ? (
-                    <div className="space-y-1">
-                      {selectedItemForDetail.prestaciones.map((p, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200"
-                        >
-                          <div>
-                            <span className="font-mono font-bold text-teal-800 mr-2">{p.codigo}</span>
-                            <span className="text-slate-700">{p.descripcion}</span>
+                    <div className="space-y-1.5">
+                      {selectedItemForDetail.prestaciones.map((p, idx) => {
+                        const isEditable = 'selected' in selectedItemForDetail;
+                        return (
+                          <div
+                            key={idx}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors"
+                          >
+                            <div className="flex-1 min-w-0">
+                              {isEditable ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={p.codigo}
+                                    onChange={e => handleUpdatePracticeField(selectedItemForDetail.id, idx, 'codigo', e.target.value)}
+                                    placeholder="Código AOTER"
+                                    className="w-24 font-mono font-bold text-teal-800 text-xs bg-white border border-slate-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={p.descripcion}
+                                    onChange={e => handleUpdatePracticeField(selectedItemForDetail.id, idx, 'descripcion', e.target.value)}
+                                    placeholder="Descripción de la práctica"
+                                    className="flex-1 text-slate-700 text-xs bg-white border border-slate-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                  />
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="font-mono font-bold text-teal-800 mr-2">{p.codigo}</span>
+                                  <span className="text-slate-700">{p.descripcion}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isEditable ? (
+                                <>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[10px] text-slate-400 font-bold">Esp%:</span>
+                                    <input
+                                      type="number"
+                                      value={p.porcentaje_especialista}
+                                      onChange={e => handleUpdatePracticeField(selectedItemForDetail.id, idx, 'porcentaje_especialista', Number(e.target.value))}
+                                      className="w-14 text-center text-xs font-bold bg-white border border-slate-300 rounded px-1 py-0.5 text-teal-800 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                      min={0}
+                                      max={100}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[10px] text-slate-400 font-bold">Ayu%:</span>
+                                    <input
+                                      type="number"
+                                      value={p.porcentaje_ayudante_1 || 0}
+                                      onChange={e => {
+                                        const v = Number(e.target.value);
+                                        handleUpdatePracticeField(selectedItemForDetail.id, idx, 'porcentaje_ayudante_1', v);
+                                        handleUpdatePracticeField(selectedItemForDetail.id, idx, 'porcentaje_ayudante_2', v);
+                                      }}
+                                      className="w-14 text-center text-xs font-bold bg-white border border-slate-300 rounded px-1 py-0.5 text-blue-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                      min={0}
+                                      max={100}
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemovePractice(selectedItemForDetail.id, idx)}
+                                    className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                                    title="Eliminar práctica"
+                                  >
+                                    <span className="material-symbols-outlined text-base">delete</span>
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-[10px] font-bold bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded">
+                                    Esp: {p.porcentaje_especialista}%
+                                  </span>
+                                  {p.porcentaje_ayudante_1 && (
+                                    <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+                                      Ayu: {p.porcentaje_ayudante_1}%
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded">
-                              Esp: {p.porcentaje_especialista}%
-                            </span>
-                            {p.porcentaje_ayudante_1 && (
-                              <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
-                                Ayu: {p.porcentaje_ayudante_1}%
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
-                    <p className="text-slate-400 italic">No hay códigos de prestación asociados.</p>
+                    <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                      <p className="text-slate-400 italic text-xs">No hay códigos de prestación asociados.</p>
+                      {'selected' in selectedItemForDetail && (
+                        <button
+                          type="button"
+                          onClick={() => handleAddPractice(selectedItemForDetail.id)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-teal-700 hover:text-teal-900"
+                        >
+                          <span className="material-symbols-outlined text-sm">add</span>
+                          Agregar primera práctica
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
 
