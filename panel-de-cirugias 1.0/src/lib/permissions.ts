@@ -363,6 +363,12 @@ export const checkAccess = (
         const canKanban = checkAccess(rolePermissions, role, 'kanban', requiredLevel);
         return canSurgeries || canKanban;
       }
+      if (sectionId === 'tripticos') {
+        const canSurgeries = checkAccess(rolePermissions, role, 'surgeries', requiredLevel);
+        const canBilling = checkAccess(rolePermissions, role, 'billing', requiredLevel);
+        const canAdmin = checkAccess(rolePermissions, role, 'admin_dashboard', requiredLevel);
+        return canSurgeries || canBilling || canAdmin;
+      }
       return false;
     }
     

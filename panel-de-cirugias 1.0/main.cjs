@@ -1532,5 +1532,150 @@ ipcMain.handle('run-globalapp-scraper', async (event, payload) => {
     });
 });
 
+// --- TRÍPTICOS SCRAPER & SYNC ENGINE HANDLERS ---
+let activeTripticosProcess = null;
+
+ipcMain.handle('select-tripticos-files', async () => {
+    try {
+        const { filePaths, canceled } = await dialog.showOpenDialog(mainWindow, {
+            title: 'Seleccionar Archivos Adjuntos para Trípticos (PDF, JPG, PNG)',
+            properties: ['openFile', 'multiSelections'],
+            filters: [
+                { name: 'Documentos e Imágenes', extensions: ['pdf', 'jpg', 'jpeg', 'png'] }
+            ]
+        });
+        if (canceled || !filePaths || filePaths.length === 0) {
+            return [];
+        }
+        return filePaths.map(fp => {
+            const stat = fs.statSync(fp);
+            return {
+                name: path.basename(fp),
+                path: fp,
+                size: stat.size,
+                type: path.extname(fp).replace('.', '').toLowerCase()
+            };
+        });
+    } catch (err) {
+        console.error('[Trípticos] Error seleccionando archivos:', err);
+        return [];
+    }
+});
+
+ipcMain.handle('run-tripticos-scraper', async (event, payload) => {
+    await ensurePythonDependencies(event);
+    return new Promise((resolve) => {
+        try {
+            let scriptPath = path.join(__dirname, 'tripticos_scraper.py');
+            if (app.isPackaged) {
+                const resPath = path.join(process.resourcesPath, 'tripticos_scraper.py');
+                if (fs.existsSync(resPath)) {
+                    scriptPath = resPath;
+                } else {
+                    const unpackedPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'tripticos_scraper.py');
+                    if (fs.existsSync(unpackedPath)) scriptPath = unpackedPath;
+                }
+            }
+
+            if (!fs.existsSync(scriptPath)) {
+                return resolve({ success: false, error: `No se encontró tripticos_scraper.py en ${scriptPath}` });
+            }
+
+            const tempDir = app.getPath('temp');
+            const payloadFile = path.join(tempDir, `tripticos_payload_${Date.now()}.json`);
+            fs.writeFileSync(payloadFile, JSON.stringify(payload || {}, null, 2), 'utf8');
+
+            const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+            const creds = getGlobalappCredentials();
+
+            const proc = spawn(pythonCommand, ['-u', scriptPath, payloadFile], {
+                cwd: path.dirname(scriptPath),
+                env: {
+                    ...process.env,
+                    PYTHONUNBUFFERED: '1',
+                    PYTHONIOENCODING: 'utf-8',
+                    GLOBALAPP_USER: creds.user,
+                    GLOBALAPP_PASSWORD: creds.password
+                }
+            });
+
+            activeTripticosProcess = proc;
+            let stdoutAcc = '';
+            let stderrAcc = '';
+
+            proc.stdout.on('data', (data) => {
+                const text = data.toString('utf8');
+                stdoutAcc += text;
+                text.split('\n').forEach(line => {
+                    const clean = line.trim();
+                    if (clean && !clean.startsWith('===TRIPTICOS_RESULT')) {
+                        console.log(clean);
+                        event.sender.send('tripticos-log', clean);
+                    }
+                });
+            });
+
+            proc.stderr.on('data', (data) => {
+                const text = data.toString('utf8');
+                stderrAcc += text;
+                text.split('\n').forEach(line => {
+                    const clean = line.trim();
+                    if (clean) {
+                        console.error(`[Trípticos Error] ${clean}`);
+                        event.sender.send('tripticos-log', `[Error] ${clean}`);
+                    }
+                });
+            });
+
+            proc.on('close', (code) => {
+                activeTripticosProcess = null;
+                try {
+                    if (fs.existsSync(payloadFile)) fs.unlinkSync(payloadFile);
+                } catch (e) {}
+
+                try {
+                    const startMarker = '===TRIPTICOS_RESULT_START===';
+                    const endMarker = '===TRIPTICOS_RESULT_END===';
+                    if (stdoutAcc.includes(startMarker) && stdoutAcc.includes(endMarker)) {
+                        const jsonStr = stdoutAcc.split(startMarker)[1].split(endMarker)[0].trim();
+                        const parsed = JSON.parse(jsonStr);
+                        return resolve(parsed);
+                    }
+                } catch (e) {
+                    console.error('[Trípticos] Error parseando resultado JSON:', e);
+                }
+
+                if (code === 0) {
+                    resolve({ success: true });
+                } else {
+                    resolve({ success: false, error: stderrAcc || `El proceso de Trípticos finalizó con código ${code}` });
+                }
+            });
+
+            proc.on('error', (err) => {
+                activeTripticosProcess = null;
+                try {
+                    if (fs.existsSync(payloadFile)) fs.unlinkSync(payloadFile);
+                } catch (e) {}
+                resolve({ success: false, error: err.message });
+            });
+        } catch (err) {
+            resolve({ success: false, error: err.message });
+        }
+    });
+});
+
+ipcMain.handle('stop-tripticos-scraper', () => {
+    if (activeTripticosProcess) {
+        try {
+            activeTripticosProcess.kill();
+        } catch (e) {}
+        activeTripticosProcess = null;
+        return { success: true };
+    }
+    return { success: false, error: 'No hay proceso de Trípticos en ejecución' };
+});
+
+
 
 

@@ -639,6 +639,23 @@ const Sidebar: React.FC<SidebarProps> = ({ mobileOpen = false, setMobileOpen }) 
                 </motion.div>
               )}
 
+              {hasAccess('tripticos') && (
+                <motion.div variants={linkVariants}>
+                  <NavLink
+                    to="/tripticos"
+                    className={linkClass}
+                    onClick={() => setMobileOpen && setMobileOpen(false)}
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <span className={iconClass({ isActive })} title={isCollapsed ? "Trípticos" : ""}>description</span>
+                        {!isCollapsed && <p className="text-sm font-medium leading-normal whitespace-nowrap animate-fadeIn">Trípticos</p>}
+                      </>
+                    )}
+                  </NavLink>
+                </motion.div>
+              )}
+
               {hasAccess('tecnicos') && (
                 <motion.div variants={linkVariants}>
                   <NavLink

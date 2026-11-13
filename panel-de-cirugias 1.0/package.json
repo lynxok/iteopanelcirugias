@@ -1,7 +1,7 @@
 {
   "name": "panel-de-cirugias",
   "private": true,
-  "version": "3.13.41",
+  "version": "3.13.42",
   "type": "module",
   "main": "main.cjs",
   "scripts": {
@@ -76,6 +76,8 @@
       "package.json",
       "prequirurgicos_collector.py",
       "globalapp_scraper.py",
+      "tripticos_scraper.py",
+      "aoter_nomenclador.json",
       "node_modules/**/*",
       "CONFIGURAR_SINCRONIZADOR.bat"
     ],
@@ -87,6 +89,14 @@
       {
         "from": "globalapp_scraper.py",
         "to": "globalapp_scraper.py"
+      },
+      {
+        "from": "tripticos_scraper.py",
+        "to": "tripticos_scraper.py"
+      },
+      {
+        "from": "aoter_nomenclador.json",
+        "to": "aoter_nomenclador.json"
       },
       {
         "from": "sai-scraper/sai-scraper",

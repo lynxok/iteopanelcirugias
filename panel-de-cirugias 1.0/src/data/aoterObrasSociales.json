@@ -1,0 +1,250 @@
+[
+  {
+    "id": "5",
+    "nombre": "AMUPRO"
+  },
+  {
+    "id": "18",
+    "nombre": "AMUR"
+  },
+  {
+    "id": "OS0001",
+    "nombre": "AOTER"
+  },
+  {
+    "id": "13",
+    "nombre": "APM"
+  },
+  {
+    "id": "969",
+    "nombre": "ART MUTUAL RURAL"
+  },
+  {
+    "id": "130",
+    "nombre": "ASOCIACION ARGENTINA MUTUAL DEL MOTOCICLISTA"
+  },
+  {
+    "id": "20",
+    "nombre": "AVALIAN SALUD Y BIENESTAR COOP. LTDA."
+  },
+  {
+    "id": "152",
+    "nombre": "BERKLEY INTERNATIONAL ART SA"
+  },
+  {
+    "id": "142",
+    "nombre": "BRAMED SRL"
+  },
+  {
+    "id": "331",
+    "nombre": "CAJA NOTARIAL"
+  },
+  {
+    "id": "345",
+    "nombre": "DASUTEN"
+  },
+  {
+    "id": "50",
+    "nombre": "FEDERADA SALUD"
+  },
+  {
+    "id": "7",
+    "nombre": "GERDANNA SALUD"
+  },
+  {
+    "id": "964",
+    "nombre": "IAPSER ART"
+  },
+  {
+    "id": "330",
+    "nombre": "JERARQUICOS SALUD"
+  },
+  {
+    "id": "655",
+    "nombre": "LA SEGUNDA ART"
+  },
+  {
+    "id": "967",
+    "nombre": "MAPFRE"
+  },
+  {
+    "id": "960",
+    "nombre": "MEDICAR WORK - NUEVA MUTUAL DE SERVICIOS (NUMUSE)"
+  },
+  {
+    "id": "910",
+    "nombre": "MEDICUS - PLAN MS2 - GENDARMERIA - PREFECTURA"
+  },
+  {
+    "id": "911",
+    "nombre": "MEDICUS PLAN MS1 - GENDARMERIA - PREFECTURA"
+  },
+  {
+    "id": "914",
+    "nombre": "MEDICUS SA DE ASISTENCIA MEDICA Y CIENTIFICA"
+  },
+  {
+    "id": "145",
+    "nombre": "O.S. DEL PERS IND QUIM Y PETROQ ZARATE-CAMPANA"
+  },
+  {
+    "id": "30",
+    "nombre": "OBRA SOCIAL DE PERSONAL DE SEGURIDAD COMERCIAL INDUSTRIAL E INVESTIGACIONES PRIVADAS"
+  },
+  {
+    "id": "975",
+    "nombre": "OBRA SOCIAL DE TRABAJADORES VIALES Y AFINES DE LA REPÚBLICA ARGENTINA"
+  },
+  {
+    "id": "971",
+    "nombre": "OBRA SOCIAL DEL PERSONAL DEL PAPEL CARTON Y QUIMICOS (IMESA)"
+  },
+  {
+    "id": "972",
+    "nombre": "OBRA SOCIAL DEL PERSONAL MARITIMO"
+  },
+  {
+    "id": "973",
+    "nombre": "OBRA SOCIAL EMPLEADOS DE LA MARINA MERCANTE"
+  },
+  {
+    "id": "109",
+    "nombre": "OBRA SOCIAL SERVICIOS SOCIALES BANCARIOS (OSSSB)"
+  },
+  {
+    "id": "876",
+    "nombre": "OMINT S.A. DE SERVICIOS"
+  },
+  {
+    "id": "51",
+    "nombre": "OPDEA"
+  },
+  {
+    "id": "52",
+    "nombre": "OSDE FILIAL PARANA"
+  },
+  {
+    "id": "53",
+    "nombre": "OSDE FILIAL RIO URUGUAY"
+  },
+  {
+    "id": "453",
+    "nombre": "OSER"
+  },
+  {
+    "id": "16",
+    "nombre": "OSETYA"
+  },
+  {
+    "id": "335",
+    "nombre": "OSFA"
+  },
+  {
+    "id": "958",
+    "nombre": "OSFATLYF"
+  },
+  {
+    "id": "974",
+    "nombre": "OSFGPICYD - CARNE (IMESA)"
+  },
+  {
+    "id": "814",
+    "nombre": "OSMATA"
+  },
+  {
+    "id": "70",
+    "nombre": "OSPEDYC"
+  },
+  {
+    "id": "589",
+    "nombre": "OSPES"
+  },
+  {
+    "id": "125",
+    "nombre": "OSPIDA"
+  },
+  {
+    "id": "77",
+    "nombre": "OSPIM"
+  },
+  {
+    "id": "141",
+    "nombre": "OSPIM MOLINEROS"
+  },
+  {
+    "id": "14",
+    "nombre": "OSPIP"
+  },
+  {
+    "id": "128",
+    "nombre": "OSPIQYP"
+  },
+  {
+    "id": "837",
+    "nombre": "OSPPRA"
+  },
+  {
+    "id": "212",
+    "nombre": "OSPTV"
+  },
+  {
+    "id": "970",
+    "nombre": "OSSACRA"
+  },
+  {
+    "id": "9561",
+    "nombre": "OSSEG (O.SOCIAL DEL SEGURO)"
+  },
+  {
+    "id": "215",
+    "nombre": "OSTEP - GLOBAL EMPRESARIA"
+  },
+  {
+    "id": "582",
+    "nombre": "OSTPCPHYARA (ELEVAR)"
+  },
+  {
+    "id": "74",
+    "nombre": "OSUNER"
+  },
+  {
+    "id": "154",
+    "nombre": "OSUOMRA"
+  },
+  {
+    "id": "58",
+    "nombre": "PODER JUDICIAL"
+  },
+  {
+    "id": "116",
+    "nombre": "PREVENCION SALUD"
+  },
+  {
+    "id": "965",
+    "nombre": "RECONQUISTA ART S.A"
+  },
+  {
+    "id": "151",
+    "nombre": "REDSOM"
+  },
+  {
+    "id": "602",
+    "nombre": "SADAIC"
+  },
+  {
+    "id": "919",
+    "nombre": "SANCOR - ASOCIACION MUTUAL SANCOR"
+  },
+  {
+    "id": "729",
+    "nombre": "SAS"
+  },
+  {
+    "id": "115",
+    "nombre": "SCIS"
+  },
+  {
+    "id": "83",
+    "nombre": "SWISS MEDICAL S.A"
+  }
+]

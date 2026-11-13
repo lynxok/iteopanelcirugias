@@ -43,5 +43,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     mergePrequirurgicosPdfs: (destPath, filePaths) => ipcRenderer.invoke('merge-prequirurgicos-pdfs', destPath, filePaths),
     runGlobalappScraper: (payload) => ipcRenderer.invoke('run-globalapp-scraper', payload),
     onGlobalappLog: (callback) => ipcRenderer.on('globalapp-log', (_event, message) => callback(message)),
+    runTripticosScraper: (payload) => ipcRenderer.invoke('run-tripticos-scraper', payload),
+    stopTripticosScraper: () => ipcRenderer.invoke('stop-tripticos-scraper'),
+    onTripticosLog: (callback) => ipcRenderer.on('tripticos-log', (_event, message) => callback(message)),
+    selectTripticosFiles: () => ipcRenderer.invoke('select-tripticos-files'),
     onPowerResume: (callback) => ipcRenderer.on('power-resume', () => callback())
 });
