@@ -63,6 +63,10 @@ export interface TripticoCirugia {
   sync_status?: 'pending' | 'syncing' | 'synced' | 'error';
   sync_error?: string;
   orden_triptico_aoter?: string;
+  egreso_fecha?: string | null;
+  tiene_egreso?: boolean;
+  ya_cargada_aoter?: boolean;
+  orden_aoter_existente?: string;
 }
 
 export interface TripticoSyncHistoryItem {

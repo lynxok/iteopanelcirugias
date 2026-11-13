@@ -173,9 +173,10 @@ def relevar_cirugias(payload):
 
         log(f"[{idx}/{len(rows)}] Procesando parte #{np or pid} - {pac_nombre} ({fecha_cirugia})...")
 
-        # 1. Obtener diagnóstico de internación
+        # 1. Obtener diagnóstico y egreso de internación
         diag_str = ""
         tratamiento_str = ""
+        egreso_fecha = None
         prestaciones = []
 
         if idint:
@@ -187,7 +188,13 @@ def relevar_cirugias(payload):
                 int_resp = json.loads(opener.open(req_int).read().decode("utf-8"))
                 int_rows = int_resp.get("rows", [])
                 if int_rows:
-                    int_diags = int_rows[0].get("intDiagnosticos", [])
+                    first_int = int_rows[0]
+                    # Capturar fecha de egreso o alta
+                    raw_egreso = first_int.get("egresofecha") or first_int.get("altafecha")
+                    if raw_egreso:
+                        egreso_fecha = str(raw_egreso).strip()
+
+                    int_diags = first_int.get("intDiagnosticos", [])
                     for d in int_diags:
                         td = d.get("turnoDiagnostico", {})
                         d_name = td.get("diagnostico") or td.get("codigo")
@@ -195,7 +202,7 @@ def relevar_cirugias(payload):
                             diag_str = d_name.strip().upper()
                             break
             except Exception as e:
-                log(f"  Aviso al consultar diagnóstico de internación #{idint}: {e}")
+                log(f"  Aviso al consultar datos de internación #{idint}: {e}")
 
             # 2. Consultar prestaciones de internación y filtrar con AOTER
             try:
@@ -457,8 +464,10 @@ def relevar_cirugias(payload):
             "protocolo_operatorio": protocolo_text,
             "recargo": recargo_display,
             "prestaciones": prestaciones_finales,
+            "egreso_fecha": egreso_fecha,
+            "tiene_egreso": bool(egreso_fecha),
             "adjuntos": [],
-            "selected": True,
+            "selected": False,
             "matched_panel": False
         })
 
@@ -535,10 +544,15 @@ def transfer_aoter(payload):
                 page.locator("#loginForm").locator('input[type="submit"], button').first.click()
                 page.wait_for_timeout(2500)
 
-                # Check if login succeeded
-                if page.locator("#loginForm").is_visible():
+                # Check if login succeeded o si hay error AJAX
+                err_ajax = page.locator("#errorLoginAjaxTexto")
+                if err_ajax.is_visible() and err_ajax.text_content().strip():
+                    raise Exception(f"Rechazo SGAPI para usuario {username}: {err_ajax.text_content().strip()}")
+
+                if "index.html" in page.url and page.locator("#j_username").is_visible():
                     err_alert = page.locator(".alert-danger, .ui.error.message").text_content() or "Credenciales inválidas"
                     raise Exception(f"Fallo de login en SGAPI para matrícula {username}: {err_alert.strip()}")
+
                 log(f"Sesión iniciada exitosamente para {doc_name}.")
             except Exception as e:
                 err_msg = f"Error autenticando en AOTER SGAPI: {str(e)}"
@@ -709,7 +723,27 @@ def transfer_aoter(payload):
                         proto = anes_header + proto
 
                     if proto:
-                        page.locator('#protocoloOperatorioText').fill(proto)
+                        try:
+                            # Intento 1: selector estándar
+                            proto_el = page.locator('#protocoloOperatorioText, textarea[name*="protocolo" i], textarea[id*="protocolo" i]')
+                            if proto_el.count() > 0 and proto_el.first.is_visible():
+                                proto_el.first.fill(proto)
+                            else:
+                                # Intento 2: asignación directa vía evaluate en cualquier textarea del formulario
+                                page.evaluate('''(txt) => {
+                                    const el = document.querySelector("#protocoloOperatorioText") ||
+                                               document.querySelector("textarea[name*='protocolo' i]") ||
+                                               document.querySelector("textarea[id*='protocolo' i]") ||
+                                               document.querySelectorAll("textarea")[1] ||
+                                               document.querySelector("textarea");
+                                    if (el) {
+                                        el.value = txt;
+                                        el.dispatchEvent(new Event("input", { bubbles: true }));
+                                        el.dispatchEvent(new Event("change", { bubbles: true }));
+                                    }
+                                }''', proto)
+                        except Exception as e_proto:
+                            log(f"  [Aviso Protocolo] No se pudo escribir en textarea por selector: {e_proto}")
                     page.wait_for_timeout(800)
 
                     # 8. Adjuntos (si los hay)
@@ -782,6 +816,150 @@ def transfer_aoter(payload):
     log(f"Transferencia finalizada. Resultados procesados: {len(results)}")
     return {"success": True, "results": results}
 
+def check_aoter_existing_tripticos(payload):
+    """
+    Ingresa al portal SGAPI con las credenciales de cada profesional involucrado,
+    accede a 'Listar Trípticos' (listar_tripticos.html) y extrae las órdenes cargadas
+    en el rango de fechas solicitado para detectar cirugías ya cargadas.
+    """
+    from playwright.sync_api import sync_playwright
+
+    professionals = payload.get("professionals", [])
+    desde = payload.get("desde") or ""
+    hasta = payload.get("hasta") or ""
+    show_browser = bool(payload.get("show_browser", False))
+
+    if not professionals:
+        return {"success": True, "tripticos_existentes": []}
+
+    log(f"Verificando trípticos ya cargados en AOTER SGAPI ({len(professionals)} profesionales configurados)...")
+
+    # Formato AOTER de fechas: DD/MM/AAAA
+    desde_fmt = ""
+    hasta_fmt = ""
+    if desde and len(desde) >= 10:
+        p = desde[:10].split("-")
+        if len(p) == 3:
+            desde_fmt = f"{p[2]}/{p[1]}/{p[0]}"
+    if hasta and len(hasta) >= 10:
+        p = hasta[:10].split("-")
+        if len(p) == 3:
+            hasta_fmt = f"{p[2]}/{p[1]}/{p[0]}"
+
+    existing_orders = []
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=not show_browser,
+            slow_mo=50 if show_browser else 0
+        )
+
+        for prof in professionals:
+            user = prof.get("sgapi_username")
+            pwd = prof.get("sgapi_password")
+            doc_name = prof.get("doctor_name", "Médico")
+            if not user or not pwd:
+                continue
+
+            context = browser.new_context(viewport={"width": 1366, "height": 850})
+            page = context.new_page()
+
+            try:
+                log(f"  Consultando historial de trípticos en AOTER para Dr(a). {doc_name} ({user})...")
+                page.goto("https://servicios.aoter.com.ar/sgapi/index.html", timeout=25000)
+                page.wait_for_timeout(800)
+                page.locator("#j_username").fill(user)
+                page.locator("#password").fill(pwd)
+                page.locator("#loginForm").locator('input[type="submit"], button').first.click()
+                page.wait_for_timeout(2000)
+
+                # Verificar si login falló
+                err_ajax = page.locator("#errorLoginAjaxTexto")
+                if err_ajax.is_visible() and err_ajax.text_content().strip():
+                    log(f"  [Aviso] No se pudo autenticar usuario AOTER {user}: {err_ajax.text_content().strip()}")
+                    context.close()
+                    continue
+
+                if "index.html" in page.url and page.locator("#j_username").is_visible():
+                    log(f"  [Aviso] Login rechazado para usuario {user} en AOTER.")
+                    context.close()
+                    continue
+
+                # Navegar a Listar Trípticos
+                page.goto("https://servicios.aoter.com.ar/sgapi/listar_tripticos.html", timeout=25000)
+                page.wait_for_timeout(1500)
+
+                # Ajustar rango de fechas si existen campos desde/hasta
+                if desde_fmt and hasta_fmt:
+                    try:
+                        page.evaluate('''(fechas) => {
+                            const inps = document.querySelectorAll("input[type='text'], input[placeholder*='dd/mm' i]");
+                            // Tratar de asignar fechas
+                            const dInp = document.querySelector("#fdesde, input[name*='desde' i]") || inps[0];
+                            const hInp = document.querySelector("#fhasta, input[name*='hasta' i]") || inps[1];
+                            if (dInp) {
+                                dInp.value = fechas.d;
+                                dInp.dispatchEvent(new Event("change", { bubbles: true }));
+                            }
+                            if (hInp) {
+                                hInp.value = fechas.h;
+                                hInp.dispatchEvent(new Event("change", { bubbles: true }));
+                            }
+                            const btn = document.querySelector("button:has-text('Buscar'), input[value*='Buscar' i]");
+                            if (btn) btn.click();
+                        }''', {"d": desde_fmt, "h": hasta_fmt})
+                        page.wait_for_timeout(2000)
+                    except Exception as e_f:
+                        pass
+
+                # Extraer filas de la tabla de Trípticos Ingresados
+                rows_data = page.evaluate('''() => {
+                    const results = [];
+                    // Buscar filas de la tabla
+                    const trs = document.querySelectorAll("table tbody tr");
+                    trs.forEach(tr => {
+                        const tds = tr.querySelectorAll("td");
+                        if (tds.length >= 4) {
+                            const fText = tds[0]?.innerText?.trim() || "";
+                            const pText = tds[1]?.innerText?.trim() || "";
+                            const osText = tds[2]?.innerText?.trim() || "";
+                            const estText = tds[3]?.innerText?.trim() || "";
+                            // Extraer NUC u orden si existen en enlaces o botones
+                            const links = Array.from(tr.querySelectorAll("a, button")).map(a => a.getAttribute("href") || a.getAttribute("onclick") || "").join(" ");
+                            results.push({
+                                fecha: fText,
+                                paciente: pText,
+                                obra_social: osText,
+                                estado: estText,
+                                extra: links
+                            });
+                        }
+                    });
+                    return results;
+                }''')
+
+                log(f"  -> {len(rows_data)} tríptico(s) registrado(s) en AOTER para Dr(a). {doc_name}.")
+                for rd in rows_data:
+                    existing_orders.append({
+                        "doctor_name": doc_name,
+                        "matricula": prof.get("matricula", ""),
+                        "fecha": rd.get("fecha"),
+                        "paciente": rd.get("paciente"),
+                        "obra_social": rd.get("obra_social"),
+                        "estado": rd.get("estado"),
+                        "raw_info": rd.get("extra")
+                    })
+
+            except Exception as e_doc:
+                log(f"  [Aviso] Error al consultar historial AOTER de {doc_name}: {e_doc}")
+            finally:
+                context.close()
+
+        browser.close()
+
+    log(f"Total trípticos existentes verificados en AOTER: {len(existing_orders)}")
+    return {"success": True, "tripticos_existentes": existing_orders}
+
 def main():
     if len(sys.argv) < 2:
         print("Uso: python tripticos_scraper.py <payload.json>")
@@ -801,6 +979,8 @@ def main():
         res = relevar_cirugias(payload)
     elif action == "transfer_aoter":
         res = transfer_aoter(payload)
+    elif action == "check_existing_aoter":
+        res = check_aoter_existing_tripticos(payload)
     else:
         res = {"success": False, "error": f"Acción desconocida: {action}"}
 

@@ -448,12 +448,68 @@ export const Tripticos: React.FC = () => {
           obra_social: patient?.insurance_name || ga.obra_social || 'OSER',
           especialista_matricula: doc?.license_number || ga.especialista_matricula || '',
           matched_panel: !!matched,
-          selected: true,
+          selected: false,
           adjuntos: []
         };
       });
 
-      // Filtrar cirugías ya sincronizadas previamente
+      // Paso 4: Chequeo automático de trípticos ya cargados en AOTER SGAPI
+      setLoadingMessage('Verificando trípticos ya existentes en AOTER SGAPI...');
+      setLogs(prev => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] Consultando portal AOTER SGAPI (Listar Trípticos) para detectar cirugías ya cargadas...`
+      ]);
+
+      try {
+        const checkRes = await electronAPI.runTripticosScraper({
+          action: 'check_existing_aoter',
+          desde: dateFrom,
+          hasta: dateTo,
+          professionals,
+          show_browser: false
+        });
+
+        if (checkRes && checkRes.success && Array.isArray(checkRes.tripticos_existentes)) {
+          const aoterItems = checkRes.tripticos_existentes;
+          setLogs(prev => [
+            ...prev,
+            `[${new Date().toLocaleTimeString()}] AOTER SGAPI: ${aoterItems.length} trípticos encontrados en el portal.`
+          ]);
+
+          enrichedList.forEach(surg => {
+            const pNorm = surg.paciente_nombre.toUpperCase().replace(/[^A-Z]/g, '');
+            const matchAoter = aoterItems.find((ao: any) => {
+              const aoDoc = (ao.doctor_name || '').toUpperCase().replace(/[^A-Z]/g, '');
+              const sDoc = surg.especialista_nombre.toUpperCase().replace(/[^A-Z]/g, '');
+              const sameDoc = !aoDoc || !sDoc || aoDoc.includes(sDoc) || sDoc.includes(aoDoc);
+              if (!sameDoc) return false;
+
+              const aoPac = (ao.paciente || '').toUpperCase().replace(/[^A-Z]/g, '');
+              if (aoPac && pNorm && (aoPac.includes(pNorm) || pNorm.includes(aoPac))) return true;
+
+              // Comparación por fecha
+              const aoFecha = (ao.fecha || '').trim();
+              if (aoFecha && (aoFecha === surg.fecha_cirugia || aoFecha.split('/').reverse().join('-') === surg.fecha_cirugia)) {
+                return aoPac && pNorm && (aoPac.slice(0, 5) === pNorm.slice(0, 5));
+              }
+              return false;
+            });
+
+            if (matchAoter) {
+              surg.ya_cargada_aoter = true;
+              surg.orden_aoter_existente = matchAoter.estado || 'Cargada previamente';
+            }
+          });
+        }
+      } catch (errAoter: any) {
+        console.warn('Aviso al chequear trípticos existentes en AOTER:', errAoter);
+        setLogs(prev => [
+          ...prev,
+          `[Aviso AOTER] No se pudo verificar "Listar Trípticos": ${errAoter.message || errAoter}`
+        ]);
+      }
+
+      // Filtrar cirugías ya sincronizadas previamente en historial local
       const pendingList = enrichedList.filter(s => {
         const key = `${s.fecha_cirugia}_${s.paciente_dni || s.paciente_nombre}`;
         return !syncedIds.has(key);
@@ -462,7 +518,7 @@ export const Tripticos: React.FC = () => {
       setCirugias(pendingList);
       setLogs(prev => [
         ...prev,
-        `[${new Date().toLocaleTimeString()}] Cruce finalizado: ${pendingList.length} cirugías pendientes para sincronizar (${enrichedList.length - pendingList.length} ya sincronizadas anteriormente).`
+        `[${new Date().toLocaleTimeString()}] Cruce finalizado: ${pendingList.length} cirugías procesadas (todas desmarcadas por defecto para selección manual).`
       ]);
     } catch (err: any) {
       alert(`Error durante el relevamiento: ${err.message}`);
@@ -502,20 +558,31 @@ export const Tripticos: React.FC = () => {
   }, [practicePickerSurgeryId, cirugias, selectedItemForDetail]);
 
   // Selección
+  const selectableCirugias = cirugias.filter(c => c.tiene_egreso && !c.ya_cargada_aoter);
   const totalCount = cirugias.length;
   const selectedCount = cirugias.filter(c => c.selected).length;
-  const isAllSelected = totalCount > 0 && selectedCount === totalCount;
+  const isAllSelected = selectableCirugias.length > 0 && selectableCirugias.every(c => c.selected);
 
   const handleToggleSelectAll = () => {
     const next = !isAllSelected;
-    setCirugias(prev => prev.map(c => ({ ...c, selected: next })));
+    setCirugias(prev =>
+      prev.map(c => {
+        if (!c.tiene_egreso || c.ya_cargada_aoter) return { ...c, selected: false };
+        return { ...c, selected: next };
+      })
+    );
   };
 
   const handleToggleDoctorSelect = (docName: string) => {
     const docSurgeries = cirugias.filter(c => c.especialista_nombre === docName);
-    const allDocSelected = docSurgeries.every(c => c.selected);
+    const docSelectable = docSurgeries.filter(c => c.tiene_egreso && !c.ya_cargada_aoter);
+    const allDocSelected = docSelectable.length > 0 && docSelectable.every(c => c.selected);
     setCirugias(prev =>
-      prev.map(c => (c.especialista_nombre === docName ? { ...c, selected: !allDocSelected } : c))
+      prev.map(c => {
+        if (c.especialista_nombre !== docName) return c;
+        if (!c.tiene_egreso || c.ya_cargada_aoter) return { ...c, selected: false };
+        return { ...c, selected: !allDocSelected };
+      })
     );
   };
 
@@ -539,7 +606,13 @@ export const Tripticos: React.FC = () => {
   };
 
   const handleToggleSurgery = (id: string) => {
-    setCirugias(prev => prev.map(c => (c.id === id ? { ...c, selected: !c.selected } : c)));
+    setCirugias(prev =>
+      prev.map(c => {
+        if (c.id !== id) return c;
+        if (!c.tiene_egreso || c.ya_cargada_aoter) return c;
+        return { ...c, selected: !c.selected };
+      })
+    );
   };
 
   // 6. Adjuntar archivos por cirugía
@@ -1218,7 +1291,8 @@ export const Tripticos: React.FC = () => {
 
             {/* Listado de Cirugías Agrupadas por Especialista */}
             {cirugiasPorEspecialista.map(([docName, docSurgeries]) => {
-              const allDocSelected = docSurgeries.every(c => c.selected);
+              const docSelectable = docSurgeries.filter(c => c.tiene_egreso && !c.ya_cargada_aoter);
+              const allDocSelected = docSelectable.length > 0 && docSelectable.every(c => c.selected);
               const docCred = professionals.find(
                 p => p.doctor_name.trim().toUpperCase() === docName.trim().toUpperCase()
               );
@@ -1300,11 +1374,14 @@ export const Tripticos: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-medium">
-                        {docSurgeries.map(surg => (
+                        {docSurgeries.map(surg => {
+                          const isBlocked = !surg.tiene_egreso || surg.ya_cargada_aoter;
+
+                          return (
                           <tr
                             key={surg.id}
                             className={`hover:bg-slate-50/80 transition-colors ${
-                              surg.selected ? 'bg-teal-50/30' : ''
+                              surg.selected ? 'bg-teal-50/30' : (isBlocked ? 'bg-slate-50/50' : '')
                             }`}
                           >
                             {/* Checkbox de Fila */}
@@ -1312,8 +1389,16 @@ export const Tripticos: React.FC = () => {
                               <input
                                 type="checkbox"
                                 checked={surg.selected}
+                                disabled={isBlocked}
                                 onChange={() => handleToggleSurgery(surg.id)}
-                                className="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                                className={`size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 ${
+                                  isBlocked ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
+                                }`}
+                                title={
+                                  surg.ya_cargada_aoter
+                                    ? "Cirugía ya cargada en AOTER SGAPI"
+                                    : (!surg.tiene_egreso ? "Paciente sin fecha de egreso de internación" : "Seleccionar para transferir")
+                                }
                               />
                             </td>
 
@@ -1328,12 +1413,34 @@ export const Tripticos: React.FC = () => {
 
                             {/* Paciente y Cobertura */}
                             <td className="py-3 px-3">
-                              <div className="font-bold text-slate-900">{surg.paciente_nombre}</div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-bold text-slate-900">{surg.paciente_nombre}</span>
+
+                                {/* Badges de Estado: Ya cargada o Sin Egreso */}
+                                {surg.ya_cargada_aoter && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs">
+                                    <span className="material-symbols-outlined text-xs">task_alt</span>
+                                    Ya cargada en AOTER
+                                  </span>
+                                )}
+
+                                {!surg.tiene_egreso && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs" title="El paciente aún no cuenta con fecha/hora de alta o egreso en GlobalApp">
+                                    <span className="material-symbols-outlined text-xs">hotel</span>
+                                    Sin egreso de internación
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-1.5 mt-1">
                                 <span>DNI: {surg.paciente_dni || 'S/D'}</span>
                                 {surg.paciente_nuc && (
                                   <span className="bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded font-semibold text-[10px] border border-blue-200">
                                     NUC: {surg.paciente_nuc}
+                                  </span>
+                                )}
+                                {surg.egreso_fecha && (
+                                  <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                    Egreso: {surg.egreso_fecha.slice(0, 16).replace('T', ' ')}
                                   </span>
                                 )}
                               </div>
@@ -1464,7 +1571,8 @@ export const Tripticos: React.FC = () => {
                               </button>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
