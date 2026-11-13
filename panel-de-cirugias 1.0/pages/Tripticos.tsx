@@ -18,17 +18,36 @@ export const Tripticos: React.FC = () => {
   // Tabs
   const [activeTab, setActiveTab] = useState<'carga' | 'profesionales' | 'historial'>('carga');
 
-  // Fechas de relevamiento
+  // Fechas de relevamiento (recuperadas de sessionStorage si existen)
   const todayStr = new Date().toISOString().split('T')[0];
   const firstDayStr = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-  const [dateFrom, setDateFrom] = useState<string>(firstDayStr);
-  const [dateTo, setDateTo] = useState<string>(todayStr);
+  const [dateFrom, setDateFrom] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem('iteo_tripticos_dateFrom') || firstDayStr;
+    } catch {
+      return firstDayStr;
+    }
+  });
+  const [dateTo, setDateTo] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem('iteo_tripticos_dateTo') || todayStr;
+    } catch {
+      return todayStr;
+    }
+  });
 
   // Toggle para ver el navegador Playwright en pantalla
   const [showBrowser, setShowBrowser] = useState<boolean>(false);
 
-  // Estados de datos
-  const [cirugias, setCirugias] = useState<TripticoCirugia[]>([]);
+  // Estados de datos (con persistencia en sesión para no perder el relevamiento al navegar)
+  const [cirugias, setCirugias] = useState<TripticoCirugia[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('iteo_tripticos_cirugias');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [professionals, setProfessionals] = useState<AoterProfessional[]>([]);
   const [history, setHistory] = useState<TripticoSyncHistoryItem[]>([]);
 
@@ -40,8 +59,15 @@ export const Tripticos: React.FC = () => {
   const [progressCurrent, setProgressCurrent] = useState<number>(0);
   const [progressTotal, setProgressTotal] = useState<number>(0);
 
-  // Consola de Logs en vivo
-  const [logs, setLogs] = useState<string[]>([]);
+  // Consola de Logs en vivo (recuperada de sesión)
+  const [logs, setLogs] = useState<string[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('iteo_tripticos_logs');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState<boolean>(false);
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -117,6 +143,28 @@ export const Tripticos: React.FC = () => {
       logEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [logs, isLogDrawerOpen]);
+
+  // Sincronizar cirugías, fechas y logs con sessionStorage para no perder el relevamiento al cambiar de pantalla
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('iteo_tripticos_cirugias', JSON.stringify(cirugias));
+    } catch (e) {
+      console.warn('Error guardando en sessionStorage:', e);
+    }
+  }, [cirugias]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('iteo_tripticos_dateFrom', dateFrom);
+      sessionStorage.setItem('iteo_tripticos_dateTo', dateTo);
+    } catch {}
+  }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('iteo_tripticos_logs', JSON.stringify(logs.slice(-150)));
+    } catch {}
+  }, [logs]);
 
   // 2. Cargar Profesionales y Historial desde Supabase (admin_settings)
   useEffect(() => {
@@ -422,6 +470,15 @@ export const Tripticos: React.FC = () => {
     } finally {
       setIsLoading(false);
       setLoadingMessage('');
+    }
+  };
+
+  const handleClearRelevo = () => {
+    if (confirm('¿Deseas limpiar el relevamiento actual de la pantalla?')) {
+      setCirugias([]);
+      try {
+        sessionStorage.removeItem('iteo_tripticos_cirugias');
+      } catch {}
     }
   };
 
@@ -1024,6 +1081,19 @@ export const Tripticos: React.FC = () => {
                   </span>
                   Relevar Cirugías
                 </button>
+
+                {cirugias.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearRelevo}
+                    disabled={isLoading || isSyncing}
+                    className="flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 text-xs font-semibold border border-slate-200 transition-all disabled:opacity-40"
+                    title="Limpiar relevamiento de pantalla"
+                  >
+                    <span className="material-symbols-outlined text-base">delete_sweep</span>
+                    Limpiar
+                  </button>
+                )}
               </div>
 
               {/* Sugerencia de no cambiar de pantalla durante el relevamiento/sincronización */}
