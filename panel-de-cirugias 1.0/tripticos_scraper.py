@@ -99,6 +99,28 @@ def relevar_cirugias(payload):
     except Exception as e:
         return {"success": False, "error": f"Error consultando partes quirúrgicos: {str(e)}"}
 
+    # Obtener catálogo de médicos traumatólogos registrados en GlobalApp
+    traumatologos_ids = set()
+    traumatologos_nombres = set()
+    try:
+        inc_esp = urllib.parse.quote(json.dumps([{"model": "servicioEspecialidad"}, {"model": "medico"}]))
+        url_esp = f"https://api.er.globalapp.ar/api/especialidades/get-all?includes={inc_esp}&pageSize=300"
+        req_esp = urllib.request.Request(url_esp)
+        resp_esp = json.loads(opener.open(req_esp).read().decode("utf-8"))
+        for it in resp_esp.get("especialidadMedico", []):
+            esp_desc = str((it.get("servicioEspecialidad") or {}).get("descripcion") or "").upper()
+            if "TRAUMA" in esp_desc:
+                med = it.get("medico") or {}
+                m_id = it.get("idmedico") or med.get("id")
+                m_nom = str(med.get("nombre") or "").strip().upper()
+                if m_id:
+                    traumatologos_ids.add(m_id)
+                if m_nom:
+                    traumatologos_nombres.add(m_nom)
+        log(f"Filtro de Especialidad: {len(traumatologos_nombres)} médicos de Traumatología identificados en GlobalApp.")
+    except Exception as e:
+        log(f"Aviso al consultar especialidades en GlobalApp: {e}")
+
     partes_procesados = []
 
     for idx, p in enumerate(rows, start=1):
@@ -109,6 +131,17 @@ def relevar_cirugias(payload):
         medicos = p.get("medicos", [])
 
         espe = next((m for m in medicos if m.get("parteQuirurgicoProfesionales", {}).get("rol") == "Espe."), {})
+        espe_id = espe.get("id")
+        espe_nombre = str(espe.get("nombre") or "").strip().upper()
+
+        # Solo relevar cirugías de médicos que tengan la especialidad Traumatología
+        if traumatologos_ids or traumatologos_nombres:
+            es_traumatologo = (espe_id in traumatologos_ids) or (espe_nombre in traumatologos_nombres) or any(
+                t in espe_nombre for t in ["RIAL", "BARBERO CARLOS", "PEREZLINDO", "CASTILLO", "CRESPO", "FERNANDEZ MARIANO", "OBAID LUIS", "GOLPE LUCIO", "CESPEDES", "LOPEZ DARIO", "DE LEON"]
+            )
+            if not es_traumatologo:
+                log(f"[{idx}/{len(rows)}] Omitiendo parte #{np or pid} - Especialista {espe_nombre or 'S/D'} no pertenece a Traumatología.")
+                continue
         ayu1 = next((m for m in medicos if "1" in str(m.get("parteQuirurgicoProfesionales", {}).get("rol", ""))), {})
         ayu2 = next((m for m in medicos if "2" in str(m.get("parteQuirurgicoProfesionales", {}).get("rol", ""))), {})
         anes = next((m for m in medicos if "Anes" in str(m.get("parteQuirurgicoProfesionales", {}).get("rol", ""))), {})

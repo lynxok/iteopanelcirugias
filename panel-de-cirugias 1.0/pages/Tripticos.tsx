@@ -908,6 +908,14 @@ export const Tripticos: React.FC = () => {
                 </button>
               </div>
 
+              {/* Sugerencia de no cambiar de pantalla durante el relevamiento/sincronización */}
+              {(isLoading || isSyncing) && (
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-900 px-3 py-1.5 rounded-xl text-[11px] animate-pulse">
+                  <span className="material-symbols-outlined text-base text-amber-600">info</span>
+                  <span><strong>Tip:</strong> Permanecer en esta pestaña hasta completar el proceso para conservar la vista de cirugías.</span>
+                </div>
+              )}
+
               {/* Botones de Acción Global */}
               <div className="flex items-center gap-2">
                 <button
