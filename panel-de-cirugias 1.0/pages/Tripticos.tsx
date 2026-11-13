@@ -36,6 +36,9 @@ export const Tripticos: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
+  const [progressPercent, setProgressPercent] = useState<number>(0);
+  const [progressCurrent, setProgressCurrent] = useState<number>(0);
+  const [progressTotal, setProgressTotal] = useState<number>(0);
 
   // Consola de Logs en vivo
   const [logs, setLogs] = useState<string[]>([]);
@@ -64,6 +67,18 @@ export const Tripticos: React.FC = () => {
     if (electronAPI && typeof electronAPI.onTripticosLog === 'function') {
       electronAPI.onTripticosLog((message: string) => {
         setLogs(prev => [...prev.slice(-300), `[${new Date().toLocaleTimeString()}] ${message}`]);
+
+        // Parsear progreso del log estilo "[X/Y] Procesando..." o "[X/Y] Cargando..."
+        const match = message.match(/\[(\d+)\/(\d+)\]/);
+        if (match) {
+          const curr = parseInt(match[1], 10);
+          const tot = parseInt(match[2], 10);
+          if (tot > 0) {
+            setProgressCurrent(curr);
+            setProgressTotal(tot);
+            setProgressPercent(Math.round((curr / tot) * 100));
+          }
+        }
       });
     }
   }, []);
@@ -228,6 +243,9 @@ export const Tripticos: React.FC = () => {
     }
 
     setIsLoading(true);
+    setProgressPercent(0);
+    setProgressCurrent(0);
+    setProgressTotal(0);
     setLoadingMessage('Consultando GlobalApp y cruzando datos con el Panel de Cirugías...');
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Iniciando relevamiento para el rango: ${dateFrom} al ${dateTo}...`]);
     setIsLogDrawerOpen(true);
@@ -476,6 +494,10 @@ export const Tripticos: React.FC = () => {
     }
 
     setIsSyncing(true);
+    setProgressPercent(0);
+    setProgressCurrent(0);
+    setProgressTotal(selectedSurgeries.length);
+    setLoadingMessage(`Transfiriendo ${selectedSurgeries.length} cirugía(s) a SGAPI de AOTER...`);
     setIsLogDrawerOpen(true);
     setLogs(prev => [
       ...prev,
@@ -1540,7 +1562,7 @@ export const Tripticos: React.FC = () => {
             initial={{ y: 200, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 200, opacity: 0 }}
-            className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t border-slate-700 shadow-2xl text-slate-200 font-mono text-xs max-h-72 flex flex-col print:hidden"
+            className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900 border-t border-slate-700 shadow-2xl text-slate-200 font-mono text-xs max-h-80 flex flex-col print:hidden"
           >
             <div className="bg-slate-950 px-4 py-2 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1897,12 +1919,43 @@ export const Tripticos: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Overlay de Bloqueo durante Carga Global */}
-      {isLoading && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900/50 backdrop-blur-sm text-white print:hidden">
-          <div className="size-12 border-4 border-teal-400/30 border-t-teal-400 rounded-full animate-spin mb-4" />
-          <p className="text-sm font-bold tracking-wide">{loadingMessage}</p>
-          <p className="text-xs text-slate-300 mt-1">Por favor espera unos instantes...</p>
+      {/* Overlay / Barra Superior durante Carga Global (Sin Blur, Barra de Progreso y Consola Visible) */}
+      {(isLoading || isSyncing) && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl px-4 pointer-events-none print:hidden">
+          <div className="bg-slate-900/95 text-white p-4 rounded-2xl shadow-2xl border border-teal-500/30 flex flex-col gap-2.5 pointer-events-auto">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="size-5 border-2 border-teal-400/30 border-t-teal-400 rounded-full animate-spin flex-shrink-0" />
+                <span className="text-xs font-bold text-slate-100 truncate">{loadingMessage}</span>
+              </div>
+              {progressTotal > 0 && (
+                <span className="text-xs font-mono font-bold text-teal-400 bg-teal-950/80 px-2 py-0.5 rounded border border-teal-500/40">
+                  {progressCurrent}/{progressTotal} ({progressPercent}%)
+                </span>
+              )}
+            </div>
+
+            {/* Barra de Progreso visual */}
+            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
+              <div
+                className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full transition-all duration-300 ease-out"
+                style={{ width: `${progressTotal > 0 ? progressPercent : 100}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span className="truncate max-w-[380px]">
+                {logs.length > 0 ? logs[logs.length - 1].replace(/\[\d+:\d+:\d+\]\s*/, '') : 'Procesando...'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsLogDrawerOpen(!isLogDrawerOpen)}
+                className="text-teal-400 hover:text-teal-300 font-semibold underline text-[10px] ml-2 flex-shrink-0"
+              >
+                {isLogDrawerOpen ? 'Ocultar logs' : 'Ver consola'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
