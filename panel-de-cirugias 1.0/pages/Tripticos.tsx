@@ -9,7 +9,7 @@ import {
   TripticoPrestacion,
   TripticoAdjunto
 } from '../src/types/tripticos';
-import { AOTER_NOMENCLADOR } from '../src/data/aoterNomenclador';
+import { AOTER_NOMENCLADOR, AOTER_NOMENCLADOR_MAP } from '../src/data/aoterNomenclador';
 import AOTER_OBRAS_SOCIALES from '../src/data/aoterObrasSociales.json';
 
 export const Tripticos: React.FC = () => {
@@ -52,6 +52,31 @@ export const Tripticos: React.FC = () => {
   const [editingProf, setEditingProf] = useState<AoterProfessional | null>(null);
   const [showProfModal, setShowProfModal] = useState<boolean>(false);
   const [showProfPassword, setShowProfPassword] = useState<boolean>(false);
+
+  // Modal Buscador de Prácticas Nomencladas AOTER
+  const [practicePickerSurgeryId, setPracticePickerSurgeryId] = useState<string | null>(null);
+  const [practicePickerSearch, setPracticePickerSearch] = useState<string>('');
+  const [practicePickerEspPct, setPracticePickerEspPct] = useState<number>(100);
+  const [practicePickerAyuPct, setPracticePickerAyuPct] = useState<number>(100);
+
+  const filteredAoterPractices = useMemo(() => {
+    const query = practicePickerSearch.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (!query) {
+      return AOTER_NOMENCLADOR.slice(0, 40);
+    }
+    return AOTER_NOMENCLADOR.filter(item => {
+      const codeMatch = item.codigo.toLowerCase().includes(query);
+      const textNorm = item.practica.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return codeMatch || textNorm.includes(query);
+    }).slice(0, 80);
+  }, [practicePickerSearch]);
+
+  const openPracticePicker = (surgeryId: string) => {
+    setPracticePickerSurgeryId(surgeryId);
+    setPracticePickerSearch('');
+    setPracticePickerEspPct(100);
+    setPracticePickerAyuPct(100);
+  };
 
   // Filtros de búsqueda en Historial / Trípticos Generados
   const [historySearch, setHistorySearch] = useState<string>('');
@@ -252,10 +277,14 @@ export const Tripticos: React.FC = () => {
 
     try {
       // Paso 0: Obtener médicos traumatólogos desde quirofano.doctors (Especialidad / Patología en Panel de Cirugías)
-      const { data: panelDoctors } = await supabase
+      const { data: panelDoctors, error: docErr } = await supabase
         .schema('quirofano')
         .from('doctors')
-        .select('id, name, full_name, license_number, specialty, globalapp_patologia, active');
+        .select('id, full_name, license_number, specialty, globalapp_patologia, active');
+
+      if (docErr) {
+        console.error('Error cargando médicos desde el panel de cirugías:', docErr);
+      }
 
       const traumaDoctorsList = (panelDoctors || []).filter(d => {
         const pat = String(d.globalapp_patologia || '').toUpperCase();
@@ -263,8 +292,7 @@ export const Tripticos: React.FC = () => {
         return pat.includes('TRAUMA') || esp.includes('TRAUMA');
       }).map(d => ({
         id: d.id,
-        name: d.name || d.full_name || '',
-        full_name: d.full_name || d.name || '',
+        full_name: d.full_name || '',
         license_number: d.license_number || '',
         globalapp_patologia: d.globalapp_patologia || 'TRAUMATOLOGIA'
       }));
@@ -281,8 +309,22 @@ export const Tripticos: React.FC = () => {
         throw new Error(gaRes?.error || 'Error al consultar cirugías en GlobalApp.');
       }
 
-      const gaPartes: TripticoCirugia[] = gaRes.partes || [];
-      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Partes obtenidos de GlobalApp: ${gaPartes.length}. Consultando cirugías del Panel...`]);
+      const rawGaPartes: TripticoCirugia[] = gaRes.partes || [];
+
+      // Filtro de resguardo en frontend por Traumatología
+      const traumaNamesSet = new Set(traumaDoctorsList.map(t => t.full_name.trim().toUpperCase()));
+      const traumaLicSet = new Set(traumaDoctorsList.map(t => t.license_number.trim()).filter(Boolean));
+
+      const gaPartes: TripticoCirugia[] = rawGaPartes.filter(ga => {
+        if (traumaNamesSet.size === 0 && traumaLicSet.size === 0) return true;
+        const docName = (ga.especialista_nombre || '').trim().toUpperCase();
+        const docLic = (ga.especialista_matricula || '').trim();
+        if (docLic && traumaLicSet.has(docLic)) return true;
+        if (docName && traumaNamesSet.has(docName)) return true;
+        return Array.from(traumaNamesSet).some(tn => (tn.length >= 4 && docName.includes(tn)) || (docName.length >= 4 && tn.includes(docName)));
+      });
+
+      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Cirugías de Traumatología filtradas: ${gaPartes.length} (de ${rawGaPartes.length} relevadas). Cruzando con el Panel...`]);
 
       // Paso 2: Consultar quirofano.surgeries en Supabase para enriquecer datos (DNI, NUC, nacimiento, sexo, ayudantes)
       const { data: panelSurgeries, error: panelErr } = await supabase
@@ -391,6 +433,14 @@ export const Tripticos: React.FC = () => {
     return Array.from(map.entries());
   }, [cirugias]);
 
+  const targetSurgeryForPractice = useMemo(() => {
+    if (!practicePickerSurgeryId) return null;
+    return (
+      cirugias.find(c => c.id === practicePickerSurgeryId) ||
+      (selectedItemForDetail && selectedItemForDetail.id === practicePickerSurgeryId ? selectedItemForDetail : null)
+    );
+  }, [practicePickerSurgeryId, cirugias, selectedItemForDetail]);
+
   // Selección
   const totalCount = cirugias.length;
   const selectedCount = cirugias.filter(c => c.selected).length;
@@ -453,15 +503,21 @@ export const Tripticos: React.FC = () => {
   };
 
   // Manejo de prácticas por cirugía (Agregar, Eliminar, Editar)
-  const handleAddPractice = (surgeryId: string, cod?: string, desc?: string, pct: number = 100) => {
+  const handleAddPractice = (
+    surgeryId: string,
+    cod?: string,
+    desc?: string,
+    pctEsp: number = 100,
+    pctAyu: number = 100
+  ) => {
     const newCod = cod || '1240704';
-    const newDesc = desc || (AOTER_NOMENCLADOR as any)[newCod] || 'Práctica Nomenclada AOTER';
+    const newDesc = desc || AOTER_NOMENCLADOR_MAP[newCod] || 'Práctica Nomenclada AOTER';
     const newPr: TripticoPrestacion = {
       codigo: newCod,
       descripcion: newDesc,
-      porcentaje_especialista: pct,
-      porcentaje_ayudante_1: pct,
-      porcentaje_ayudante_2: pct,
+      porcentaje_especialista: pctEsp,
+      porcentaje_ayudante_1: pctAyu,
+      porcentaje_ayudante_2: pctAyu,
       tipo: 'principal'
     };
 
@@ -515,8 +571,8 @@ export const Tripticos: React.FC = () => {
           const updated = [...(c.prestaciones || [])];
           if (updated[index]) {
             updated[index] = { ...updated[index], [field]: value };
-            if (field === 'codigo' && (AOTER_NOMENCLADOR as any)[value]) {
-              updated[index].descripcion = (AOTER_NOMENCLADOR as any)[value];
+            if (field === 'codigo' && AOTER_NOMENCLADOR_MAP[value]) {
+              updated[index].descripcion = AOTER_NOMENCLADOR_MAP[value];
             }
           }
           return { ...c, prestaciones: updated };
@@ -530,8 +586,8 @@ export const Tripticos: React.FC = () => {
         const updated = [...(prev.prestaciones || [])];
         if (updated[index]) {
           updated[index] = { ...updated[index], [field]: value };
-          if (field === 'codigo' && (AOTER_NOMENCLADOR as any)[value]) {
-            updated[index].descripcion = (AOTER_NOMENCLADOR as any)[value];
+          if (field === 'codigo' && AOTER_NOMENCLADOR_MAP[value]) {
+            updated[index].descripcion = AOTER_NOMENCLADOR_MAP[value];
           }
         }
         return { ...prev, prestaciones: updated };
@@ -1221,7 +1277,7 @@ export const Tripticos: React.FC = () => {
                                 )}
                                 <button
                                   type="button"
-                                  onClick={() => handleAddPractice(surg.id)}
+                                  onClick={() => openPracticePicker(surg.id)}
                                   className="inline-flex items-center gap-1 text-[10px] font-bold text-teal-700 hover:text-teal-900 mt-0.5 w-fit hover:underline"
                                 >
                                   <span className="material-symbols-outlined text-xs">add</span>
@@ -1852,7 +1908,7 @@ export const Tripticos: React.FC = () => {
                     {'selected' in selectedItemForDetail && (
                       <button
                         type="button"
-                        onClick={() => handleAddPractice(selectedItemForDetail.id)}
+                        onClick={() => openPracticePicker(selectedItemForDetail.id)}
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded-lg border border-teal-200 transition-colors"
                       >
                         <span className="material-symbols-outlined text-sm font-bold">add</span>
@@ -1956,7 +2012,7 @@ export const Tripticos: React.FC = () => {
                       {'selected' in selectedItemForDetail && (
                         <button
                           type="button"
-                          onClick={() => handleAddPractice(selectedItemForDetail.id)}
+                          onClick={() => openPracticePicker(selectedItemForDetail.id)}
                           className="inline-flex items-center gap-1 text-xs font-bold text-teal-700 hover:text-teal-900"
                         >
                           <span className="material-symbols-outlined text-sm">add</span>
@@ -2012,6 +2068,216 @@ export const Tripticos: React.FC = () => {
                 <button
                   onClick={() => setSelectedItemForDetail(null)}
                   className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 font-semibold text-slate-700"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ======================================================== */}
+      {/* MODAL BUSCADOR DE PRÁCTICAS AOTER (NOMENCLADOR) */}
+      {/* ======================================================== */}
+      <AnimatePresence>
+        {practicePickerSurgeryId && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
+            >
+              {/* Header */}
+              <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                    <span className="material-symbols-outlined text-teal-600">medication</span>
+                    Nomenclador Oficial AOTER ({AOTER_NOMENCLADOR.length} prácticas)
+                  </h3>
+                  {targetSurgeryForPractice && (
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Paciente: <span className="font-semibold text-slate-700">{'paciente_nombre' in targetSurgeryForPractice ? targetSurgeryForPractice.paciente_nombre : (targetSurgeryForPractice as any).paciente}</span>
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPracticePickerSurgeryId(null)}
+                  className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-xl">close</span>
+                </button>
+              </div>
+
+              {/* Porcentajes y Atajos Rápidos */}
+              <div className="px-4 py-3 bg-teal-50/50 border-b border-teal-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <label className="font-semibold text-slate-700">Esp %:</label>
+                    <input
+                      type="number"
+                      value={practicePickerEspPct}
+                      onChange={e => setPracticePickerEspPct(Number(e.target.value))}
+                      min={0}
+                      max={100}
+                      className="w-14 px-2 py-1 bg-white border border-slate-300 rounded-lg text-center font-bold text-teal-800 text-xs focus:ring-1 focus:ring-teal-500"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <label className="font-semibold text-slate-700">Ayu %:</label>
+                    <input
+                      type="number"
+                      value={practicePickerAyuPct}
+                      onChange={e => setPracticePickerAyuPct(Number(e.target.value))}
+                      min={0}
+                      max={100}
+                      className="w-14 px-2 py-1 bg-white border border-slate-300 rounded-lg text-center font-bold text-blue-800 text-xs focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Atajos */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Atajos:</span>
+                  <button
+                    type="button"
+                    onClick={() => { setPracticePickerEspPct(100); setPracticePickerAyuPct(100); }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                      practicePickerEspPct === 100 && practicePickerAyuPct === 100
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    100% Base
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPracticePickerEspPct(5); setPracticePickerAyuPct(5); }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                      practicePickerEspPct === 5 && practicePickerAyuPct === 5
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
+                    title="Recargo 5% por Radioscopía"
+                  >
+                    5% Radio
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPracticePickerEspPct(20); setPracticePickerAyuPct(20); }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                      practicePickerEspPct === 20 && practicePickerAyuPct === 20
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
+                    title="Recargo 20% por Edad"
+                  >
+                    20% Edad
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPracticePickerEspPct(25); setPracticePickerAyuPct(25); }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${
+                      practicePickerEspPct === 25 && practicePickerAyuPct === 25
+                        ? 'bg-teal-600 text-white'
+                        : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
+                    title="Recargo 25% por Radioscopía + Edad"
+                  >
+                    25% Ambos
+                  </button>
+                </div>
+              </div>
+
+              {/* Buscador */}
+              <div className="p-3 bg-white border-b border-slate-200">
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
+                    search
+                  </span>
+                  <input
+                    type="text"
+                    autoFocus
+                    value={practicePickerSearch}
+                    onChange={e => setPracticePickerSearch(e.target.value)}
+                    placeholder="Buscar código (ej: 1240704) o nombre (ej: Thompson, cadera, artroscopia)..."
+                    className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all"
+                  />
+                  {practicePickerSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setPracticePickerSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                  )}
+                </div>
+                <div className="flex justify-between items-center mt-1.5 px-1 text-[11px] text-slate-400">
+                  <span>
+                    {practicePickerSearch ? `Resultados: ${filteredAoterPractices.length}` : 'Mostrando primeras prácticas (escribí para filtrar)'}
+                  </span>
+                  <span>Total en catálogo: {AOTER_NOMENCLADOR.length}</span>
+                </div>
+              </div>
+
+              {/* Lista Scrollable */}
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-100 p-2 max-h-[50vh]">
+                {filteredAoterPractices.length === 0 ? (
+                  <div className="text-center py-10 text-slate-400">
+                    <span className="material-symbols-outlined text-4xl text-slate-300 mb-2 block">search_off</span>
+                    <p className="text-xs font-semibold">No se encontraron prácticas para "{practicePickerSearch}"</p>
+                    <p className="text-[11px] text-slate-400 mt-1">Probá con el número de código o términos clave (cadera, fémur, clavo, prótesis).</p>
+                  </div>
+                ) : (
+                  filteredAoterPractices.map(item => (
+                    <div
+                      key={item.codigo}
+                      onClick={() => {
+                        handleAddPractice(
+                          practicePickerSurgeryId,
+                          item.codigo,
+                          item.practica,
+                          practicePickerEspPct,
+                          practicePickerAyuPct
+                        );
+                        setPracticePickerSurgeryId(null);
+                      }}
+                      className="p-2.5 rounded-xl hover:bg-teal-50/70 border border-transparent hover:border-teal-200 transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-mono font-bold text-xs text-teal-800 bg-teal-100/80 px-2 py-0.5 rounded border border-teal-200">
+                            {item.codigo}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-700 leading-snug line-clamp-2 group-hover:text-teal-950 font-medium">
+                          {item.practica}
+                        </p>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="px-3 py-1.5 bg-white group-hover:bg-teal-600 text-teal-700 group-hover:text-white border border-teal-300 group-hover:border-transparent rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-sm">add</span>
+                          Seleccionar
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setPracticePickerSurgeryId(null)}
+                  className="px-4 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 font-semibold text-slate-700 text-xs transition-colors"
                 >
                   Cerrar
                 </button>

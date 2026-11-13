@@ -1,6 +1,4 @@
-// Catálogo Oficial AOTER (Asociación de Ortopedia y Traumatología de Entre Ríos)
-// 358 prácticas oficiales nomencladas para liquidación de honorarios médicos.
-
+// Catálogo Oficial AOTER Completo
 export interface AoterNomencladorItem {
   codigo: string;
   practica: string;
@@ -2685,17 +2683,6 @@ export const AOTER_NOMENCLADOR: AoterNomencladorItem[] = [
   }
 ];
 
-const aoterMap = new Map<string, string>();
-AOTER_NOMENCLADOR.forEach(item => {
-  aoterMap.set(item.codigo.trim(), item.practica.trim());
-});
-
-export function isAoterCode(code: string | number | undefined | null): boolean {
-  if (!code) return false;
-  return aoterMap.has(String(code).trim());
-}
-
-export function getAoterPractice(code: string | number | undefined | null): string | undefined {
-  if (!code) return undefined;
-  return aoterMap.get(String(code).trim());
-}
+export const AOTER_NOMENCLADOR_MAP: Record<string, string> = Object.fromEntries(
+  AOTER_NOMENCLADOR.map(item => [item.codigo, item.practica])
+);

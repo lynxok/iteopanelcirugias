@@ -123,18 +123,33 @@ def relevar_cirugias(payload):
         idint = p.get("idinternacion")
         medicos = p.get("medicos", [])
 
-        espe = next((m for m in medicos if m.get("parteQuirurgicoProfesionales", {}).get("rol") == "Espe."), {})
+        # Determinar especialista principal
+        espe = next((m for m in medicos if "espe" in str(m.get("parteQuirurgicoProfesionales", {}).get("rol", "")).lower()), None)
+        if not espe:
+            espe = next((m for m in medicos if "ciruj" in str(m.get("parteQuirurgicoProfesionales", {}).get("rol", "")).lower()), None)
+        if not espe and medicos:
+            espe = next((m for m in medicos if not any(x in str(m.get("parteQuirurgicoProfesionales", {}).get("rol", "")).lower() for x in ["ayu", "anes"])), medicos[0])
+        espe = espe or {}
+
         espe_id = espe.get("id")
         espe_nombre = str(espe.get("nombre") or "").strip().upper()
         espe_matricula = str(espe.get("matricula") or "").strip()
 
         # 1. Filtro estricto por especialidad Traumatología según Panel de Cirugías
         if panel_trauma_names or panel_trauma_licenses:
-            es_trauma_panel = (
-                espe_nombre in panel_trauma_names
-                or espe_matricula in panel_trauma_licenses
-                or any(tn in espe_nombre or espe_nombre in tn for tn in panel_trauma_names if len(tn) >= 4)
-            )
+            es_trauma_panel = False
+            if espe_nombre and len(espe_nombre) >= 3:
+                es_trauma_panel = (
+                    espe_nombre in panel_trauma_names
+                    or any(
+                        (len(tn) >= 4 and tn in espe_nombre)
+                        or (len(espe_nombre) >= 4 and espe_nombre in tn)
+                        for tn in panel_trauma_names
+                    )
+                )
+            if not es_trauma_panel and espe_matricula:
+                es_trauma_panel = espe_matricula in panel_trauma_licenses
+
             if not es_trauma_panel:
                 log(f"[{idx}/{len(rows)}] Omitiendo parte #{np or pid} - Especialista '{espe_nombre}' (Mat: {espe_matricula}) no figura como Traumatólogo en el Panel de Cirugías.")
                 continue
