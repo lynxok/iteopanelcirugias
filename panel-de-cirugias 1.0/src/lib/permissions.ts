@@ -322,6 +322,16 @@ export const checkAccess = (
   if (!role) return false;
   if (role.toLowerCase() === 'superadmin') return true;
 
+  // Trípticos: Restricción estricta exclusiva para Super Admin y Dirección
+  if (sectionId === 'tripticos') {
+    const lowerRole = role.toLowerCase();
+    return (
+      lowerRole === 'superadmin' ||
+      lowerRole.includes('direccion') ||
+      lowerRole.includes('dirección')
+    );
+  }
+
   // Normalizar alias de roles frecuentes (ej: 'ART' -> 'Oficina ART')
   const normalizedRole = role.toLowerCase() === 'art' ? 'oficina art' : role.toLowerCase();
 
@@ -363,12 +373,6 @@ export const checkAccess = (
         const canKanban = checkAccess(rolePermissions, role, 'kanban', requiredLevel);
         return canSurgeries || canKanban;
       }
-      if (sectionId === 'tripticos') {
-        const canSurgeries = checkAccess(rolePermissions, role, 'surgeries', requiredLevel);
-        const canBilling = checkAccess(rolePermissions, role, 'billing', requiredLevel);
-        const canAdmin = checkAccess(rolePermissions, role, 'admin_dashboard', requiredLevel);
-        return canSurgeries || canBilling || canAdmin;
-      }
       return false;
     }
     
@@ -389,6 +393,16 @@ export const checkFieldPermission = (
 ): boolean => {
   if (!role) return false;
   if (role.toLowerCase() === 'superadmin') return true;
+
+  // Trípticos: Restricción estricta exclusiva para Super Admin y Dirección
+  if (sectionId === 'tripticos') {
+    const lowerRole = role.toLowerCase();
+    return (
+      lowerRole === 'superadmin' ||
+      lowerRole.includes('direccion') ||
+      lowerRole.includes('dirección')
+    );
+  }
 
   const normalizedRole = role.toLowerCase() === 'art' ? 'oficina art' : role.toLowerCase();
 

@@ -86,6 +86,9 @@ export const Tripticos: React.FC = () => {
   const [historyInsurance, setHistoryInsurance] = useState<string>('');
   const [historyStatusFilter, setHistoryStatusFilter] = useState<'all' | 'synced' | 'error'>('all');
 
+  // Estado de listados de médicos colapsados
+  const [collapsedDoctors, setCollapsedDoctors] = useState<Record<string, boolean>>({});
+
   // 1. Escuchar logs del proceso en Electron
   useEffect(() => {
     const electronAPI = (window as any).electronAPI;
@@ -457,6 +460,25 @@ export const Tripticos: React.FC = () => {
     setCirugias(prev =>
       prev.map(c => (c.especialista_nombre === docName ? { ...c, selected: !allDocSelected } : c))
     );
+  };
+
+  const toggleDoctorCollapse = (docName: string) => {
+    setCollapsedDoctors(prev => ({
+      ...prev,
+      [docName]: !prev[docName]
+    }));
+  };
+
+  const handleCollapseAllDoctors = () => {
+    const next: Record<string, boolean> = {};
+    cirugiasPorEspecialista.forEach(([docName]) => {
+      next[docName] = true;
+    });
+    setCollapsedDoctors(next);
+  };
+
+  const handleExpandAllDoctors = () => {
+    setCollapsedDoctors({});
   };
 
   const handleToggleSurgery = (id: string) => {
@@ -848,6 +870,27 @@ export const Tripticos: React.FC = () => {
     });
   }, [history, historySearch, historyDateFrom, historyDateTo, historyDoctor, historyInsurance, historyStatusFilter]);
 
+  // Restricción de acceso: Exclusivo para Super Admin y Dirección
+  const userRoleLower = (user?.role || '').toLowerCase();
+  const hasTripticosAccess =
+    userRoleLower === 'superadmin' ||
+    userRoleLower.includes('direccion') ||
+    userRoleLower.includes('dirección');
+
+  if (!hasTripticosAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] p-8 text-center bg-slate-50">
+        <div className="size-20 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mb-4 border border-rose-200 shadow-sm">
+          <span className="material-symbols-outlined text-4xl">lock</span>
+        </div>
+        <h2 className="text-xl font-bold text-slate-900 mb-2">Acceso Restringido</h2>
+        <p className="text-sm text-slate-500 max-w-md leading-relaxed">
+          El módulo de Trípticos Quirúrgicos AOTER está reservado exclusivamente para roles de <strong>Super Admin</strong> y <strong>Dirección</strong>.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 text-slate-800 pb-20">
       {/* Header Superior */}
@@ -1042,9 +1085,9 @@ export const Tripticos: React.FC = () => {
               </div>
             </div>
 
-            {/* Selector Global */}
+            {/* Selector Global y Acciones de Pantalla */}
             {cirugias.length > 0 && (
-              <div className="flex items-center justify-between bg-teal-50/70 border border-teal-200/80 px-4 py-2.5 rounded-xl print:hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-teal-50/70 border border-teal-200/80 px-4 py-2.5 rounded-xl print:hidden">
                 <label className="flex items-center gap-2.5 text-xs font-semibold text-teal-900 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1052,11 +1095,34 @@ export const Tripticos: React.FC = () => {
                     onChange={handleToggleSelectAll}
                     className="size-4 rounded border-teal-400 text-teal-600 focus:ring-teal-500"
                   />
-                  Seleccionar todas las cirugías de todos los profesionales ({selectedCount} de {totalCount})
+                  Seleccionar todas las cirugías ({selectedCount} de {totalCount})
                 </label>
-                <span className="text-[11px] font-medium text-teal-700">
-                  {cirugiasPorEspecialista.length} profesional(es) con cirugías en el período
-                </span>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] font-medium text-teal-700">
+                    {cirugiasPorEspecialista.length} profesional(es)
+                  </span>
+                  <div className="flex items-center gap-1.5 border-l border-teal-300 pl-3">
+                    <button
+                      type="button"
+                      onClick={handleCollapseAllDoctors}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-800 hover:text-teal-950 bg-white hover:bg-teal-100/60 px-2.5 py-1 rounded-lg border border-teal-300 transition-colors shadow-2xs"
+                      title="Colapsar listados de todos los médicos"
+                    >
+                      <span className="material-symbols-outlined text-xs">unfold_less</span>
+                      Colapsar todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExpandAllDoctors}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-teal-800 hover:text-teal-950 bg-white hover:bg-teal-100/60 px-2.5 py-1 rounded-lg border border-teal-300 transition-colors shadow-2xs"
+                      title="Expandir listados de todos los médicos"
+                    >
+                      <span className="material-symbols-outlined text-xs">unfold_more</span>
+                      Expandir todos
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1087,18 +1153,24 @@ export const Tripticos: React.FC = () => {
                 p => p.doctor_name.trim().toUpperCase() === docName.trim().toUpperCase()
               );
               const hasCreds = docCred && docCred.sgapi_username && docCred.sgapi_password;
+              const isCollapsed = !!collapsedDoctors[docName];
 
               return (
                 <div
                   key={docName}
                   className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden break-inside-avoid"
                 >
-                  {/* Encabezado del Profesional */}
-                  <div className="bg-slate-100/80 px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                  {/* Encabezado del Profesional (Clickeable para Colapsar/Expandir) */}
+                  <div
+                    onClick={() => toggleDoctorCollapse(docName)}
+                    className="bg-slate-100/80 hover:bg-slate-200/60 px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 cursor-pointer transition-colors select-none"
+                    title={isCollapsed ? "Clic para desplegar listado de cirugías" : "Clic para colapsar listado"}
+                  >
                     <div className="flex items-center gap-3">
                       <input
                         type="checkbox"
                         checked={allDocSelected}
+                        onClick={e => e.stopPropagation()}
                         onChange={() => handleToggleDoctorSelect(docName)}
                         className="size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 cursor-pointer print:hidden"
                         title="Seleccionar todas las de este médico"
@@ -1130,11 +1202,20 @@ export const Tripticos: React.FC = () => {
                       <span className="text-xs font-semibold text-slate-600 bg-slate-200/80 px-2.5 py-1 rounded-lg">
                         {docSurgeries.length} cirugía(s)
                       </span>
+
+                      <span
+                        className={`material-symbols-outlined text-slate-500 text-xl transition-transform duration-200 print:hidden ${
+                          isCollapsed ? '' : 'rotate-180'
+                        }`}
+                      >
+                        expand_more
+                      </span>
                     </div>
                   </div>
 
                   {/* Tabla de Cirugías del Médico */}
-                  <div className="overflow-x-auto">
+                  {!isCollapsed && (
+                    <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50/70 text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider text-[10px]">
                         <tr>
@@ -1317,6 +1398,7 @@ export const Tripticos: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </div>
               );
             })}
