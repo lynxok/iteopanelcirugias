@@ -225,8 +225,6 @@ def relevar_cirugias(payload):
         protocolo_text = ""
         if np:
             try:
-                # Espera preventiva de 3.5 segundos para permitir que GlobalApp indexe/cargue registros de protocolo
-                time.sleep(3.5)
                 q_hc = urllib.parse.quote(json.dumps({"datos.numero_parte": {"$exists": True, "$eq": np}}))
                 req_hc = urllib.request.Request(f"https://api.er.globalapp.ar/api/historia-clinica-get-registros?page=1&pageSize=3&query={q_hc}")
                 hc_resp = json.loads(opener.open(req_hc).read().decode("utf-8"))
