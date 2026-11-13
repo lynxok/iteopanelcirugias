@@ -99,27 +99,20 @@ def relevar_cirugias(payload):
     except Exception as e:
         return {"success": False, "error": f"Error consultando partes quirúrgicos: {str(e)}"}
 
-    # Obtener catálogo de médicos traumatólogos registrados en GlobalApp
-    traumatologos_ids = set()
-    traumatologos_nombres = set()
-    try:
-        inc_esp = urllib.parse.quote(json.dumps([{"model": "servicioEspecialidad"}, {"model": "medico"}]))
-        url_esp = f"https://api.er.globalapp.ar/api/especialidades/get-all?includes={inc_esp}&pageSize=300"
-        req_esp = urllib.request.Request(url_esp)
-        resp_esp = json.loads(opener.open(req_esp).read().decode("utf-8"))
-        for it in resp_esp.get("especialidadMedico", []):
-            esp_desc = str((it.get("servicioEspecialidad") or {}).get("descripcion") or "").upper()
-            if "TRAUMA" in esp_desc:
-                med = it.get("medico") or {}
-                m_id = it.get("idmedico") or med.get("id")
-                m_nom = str(med.get("nombre") or "").strip().upper()
-                if m_id:
-                    traumatologos_ids.add(m_id)
-                if m_nom:
-                    traumatologos_nombres.add(m_nom)
-        log(f"Filtro de Especialidad: {len(traumatologos_nombres)} médicos de Traumatología identificados en GlobalApp.")
-    except Exception as e:
-        log(f"Aviso al consultar especialidades en GlobalApp: {e}")
+    # Médicos traumatólogos informados desde el Panel de Cirugías (quirofano.doctors)
+    trauma_doctors = payload.get("trauma_doctors") or []
+    panel_trauma_names = set()
+    panel_trauma_licenses = set()
+    for td in trauma_doctors:
+        fn = str(td.get("full_name") or td.get("name") or "").strip().upper()
+        lic = str(td.get("license_number") or "").strip()
+        if fn:
+            panel_trauma_names.add(fn)
+        if lic:
+            panel_trauma_licenses.add(lic)
+
+    if panel_trauma_names:
+        log(f"Filtro de Médicos del Panel: {len(panel_trauma_names)} traumatólogos activos recibidos.")
 
     partes_procesados = []
 
@@ -133,14 +126,17 @@ def relevar_cirugias(payload):
         espe = next((m for m in medicos if m.get("parteQuirurgicoProfesionales", {}).get("rol") == "Espe."), {})
         espe_id = espe.get("id")
         espe_nombre = str(espe.get("nombre") or "").strip().upper()
+        espe_matricula = str(espe.get("matricula") or "").strip()
 
-        # Solo relevar cirugías de médicos que tengan la especialidad Traumatología
-        if traumatologos_ids or traumatologos_nombres:
-            es_traumatologo = (espe_id in traumatologos_ids) or (espe_nombre in traumatologos_nombres) or any(
-                t in espe_nombre for t in ["RIAL", "BARBERO CARLOS", "PEREZLINDO", "CASTILLO", "CRESPO", "FERNANDEZ MARIANO", "OBAID LUIS", "GOLPE LUCIO", "CESPEDES", "LOPEZ DARIO", "DE LEON"]
+        # 1. Filtro estricto por especialidad Traumatología según Panel de Cirugías
+        if panel_trauma_names or panel_trauma_licenses:
+            es_trauma_panel = (
+                espe_nombre in panel_trauma_names
+                or espe_matricula in panel_trauma_licenses
+                or any(tn in espe_nombre or espe_nombre in tn for tn in panel_trauma_names if len(tn) >= 4)
             )
-            if not es_traumatologo:
-                log(f"[{idx}/{len(rows)}] Omitiendo parte #{np or pid} - Especialista {espe_nombre or 'S/D'} no pertenece a Traumatología.")
+            if not es_trauma_panel:
+                log(f"[{idx}/{len(rows)}] Omitiendo parte #{np or pid} - Especialista '{espe_nombre}' (Mat: {espe_matricula}) no figura como Traumatólogo en el Panel de Cirugías.")
                 continue
         ayu1 = next((m for m in medicos if "1" in str(m.get("parteQuirurgicoProfesionales", {}).get("rol", ""))), {})
         ayu2 = next((m for m in medicos if "2" in str(m.get("parteQuirurgicoProfesionales", {}).get("rol", ""))), {})
@@ -229,6 +225,8 @@ def relevar_cirugias(payload):
         protocolo_text = ""
         if np:
             try:
+                # Espera preventiva de 3.5 segundos para permitir que GlobalApp indexe/cargue registros de protocolo
+                time.sleep(3.5)
                 q_hc = urllib.parse.quote(json.dumps({"datos.numero_parte": {"$exists": True, "$eq": np}}))
                 req_hc = urllib.request.Request(f"https://api.er.globalapp.ar/api/historia-clinica-get-registros?page=1&pageSize=3&query={q_hc}")
                 hc_resp = json.loads(opener.open(req_hc).read().decode("utf-8"))
@@ -387,6 +385,17 @@ def relevar_cirugias(payload):
                 })
 
         recargo_display = ", ".join(f"{pct}%" for pct, _ in recargos_a_aplicar) if recargos_a_aplicar else ""
+
+        # Formar el texto de Tratamiento con la descripción de los códigos utilizados como práctica/s
+        descripciones_practicas = []
+        for pf in prestaciones_finales:
+            if pf.get("tipo") == "principal" and pf.get("descripcion"):
+                descripciones_practicas.append(pf["descripcion"])
+
+        if descripciones_practicas:
+            tratamiento_str = " + ".join(dict.fromkeys(descripciones_practicas))
+        elif not tratamiento_str and prestaciones_finales:
+            tratamiento_str = " + ".join(dict.fromkeys(pf["descripcion"] for pf in prestaciones_finales if pf.get("descripcion")))
 
         partes_procesados.append({
             "id": f"ga_{pid}",

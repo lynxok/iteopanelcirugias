@@ -251,11 +251,30 @@ export const Tripticos: React.FC = () => {
     setIsLogDrawerOpen(true);
 
     try {
+      // Paso 0: Obtener médicos traumatólogos desde quirofano.doctors (Especialidad / Patología en Panel de Cirugías)
+      const { data: panelDoctors } = await supabase
+        .schema('quirofano')
+        .from('doctors')
+        .select('id, name, full_name, license_number, specialty, globalapp_patologia, active');
+
+      const traumaDoctorsList = (panelDoctors || []).filter(d => {
+        const pat = String(d.globalapp_patologia || '').toUpperCase();
+        const esp = String(d.specialty || '').toUpperCase();
+        return pat.includes('TRAUMA') || esp.includes('TRAUMA');
+      }).map(d => ({
+        id: d.id,
+        name: d.name || d.full_name || '',
+        full_name: d.full_name || d.name || '',
+        license_number: d.license_number || '',
+        globalapp_patologia: d.globalapp_patologia || 'TRAUMATOLOGIA'
+      }));
+
       // Paso 1: Ejecutar scraper en GlobalApp
       const gaRes = await electronAPI.runTripticosScraper({
         action: 'relevar',
         desde: dateFrom,
-        hasta: dateTo
+        hasta: dateTo,
+        trauma_doctors: traumaDoctorsList
       });
 
       if (!gaRes || !gaRes.success) {
