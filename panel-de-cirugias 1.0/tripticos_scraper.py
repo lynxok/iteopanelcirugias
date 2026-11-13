@@ -338,36 +338,55 @@ def relevar_cirugias(payload):
         recargos_a_aplicar = [] # Tuplas de (porcentaje, etiqueta_motivo)
 
         if has_checkbox_25:
-            # 25% = Radioscopía (5%) + Edad (20%)
-            recargos_a_aplicar.append((25, "Recargo 25% (Radioscopía + Edad)"))
+            # 25% = Radioscopía + Paciente Mayor de Edad
+            recargos_a_aplicar.append((25, "Recargo 25% (Radioscopía + Paciente Mayor de Edad)"))
         else:
-            if has_checkbox_20:
-                recargos_a_aplicar.append((20, "Recargo 20% (Edad)"))
-            # Si tiene checkbox 5% O tiene radioscopía detectada (y no tenía 25%), aplicar 5% (NO DUPLICAR)
+            # Si tiene radioscopía (código 340907 o checkbox 5%)
             if has_checkbox_5 or has_radioscopia_en_cirugia:
-                recargos_a_aplicar.append((5, "Recargo 5% (Radioscopía)"))
+                recargos_a_aplicar.append((5, "Recargo 5% (Utilización de Radioscopía en Quirófano)"))
+            # Si tiene sobrecargo por edad (checkbox 20%)
+            if has_checkbox_20:
+                recargos_a_aplicar.append((20, "Recargo 20% (Paciente Mayor de Edad)"))
 
         if has_checkbox_30:
             recargos_a_aplicar.append((30, "Recargo 30%"))
 
-        # Prácticas principales quirúrgicas (excluyendo 340907 de la lista de cirugías base para no sobrecargar el estudio)
-        prestaciones_quirurgicas = [p for p in prestaciones if p.get('codigo') != '340907']
+        # Prácticas principales quirúrgicas:
+        # Excluir radioscopía (340907) y excluir filas previas que vinieran con porcentajes de recargo (ej: 5%, 20%, 25%)
+        # Desduplicar por código para que NUNCA se compute dos veces el mismo procedimiento al 100%
+        prestaciones_quirurgicas = []
+        codigos_principales_vistos = set()
+
+        for p in prestaciones:
+            cod = str(p.get('codigo') or '').strip()
+            # Ignorar radioscopía directa ya que se procesa como recargo del 5%
+            if cod == '340907':
+                continue
+            # Ignorar si ya vino con porcentaje de recargo en internación para no duplicar
+            pct_e = p.get('porcentaje_especialista')
+            if pct_e is not None and pct_e in (5, 20, 25, 30):
+                continue
+            # Desduplicar práctica base
+            if cod not in codigos_principales_vistos:
+                codigos_principales_vistos.add(cod)
+                prestaciones_quirurgicas.append(p)
+
         if not prestaciones_quirurgicas and prestaciones:
-            # Si solo vino 340907 y no hubo otra, no se le aplica recargo a la radioscopia
-            prestaciones_quirurgicas = prestaciones
+            # Si solo vino 340907 y no hubo otra, mantenerla como único registro
+            prestaciones_quirurgicas = [p for p in prestaciones if p.get('codigo') == '340907'][:1]
 
         prestaciones_finales = []
         for p in prestaciones_quirurgicas:
             prestaciones_finales.append({
                 "codigo": p["codigo"],
                 "descripcion": p["descripcion"],
-                "porcentaje_especialista": p.get("porcentaje_especialista", 100),
-                "porcentaje_ayudante_1": p.get("porcentaje_ayudante_1", 100),
-                "porcentaje_ayudante_2": p.get("porcentaje_ayudante_2", 100),
+                "porcentaje_especialista": 100,
+                "porcentaje_ayudante_1": 100,
+                "porcentaje_ayudante_2": 100,
                 "tipo": "principal"
             })
 
-        # Aplicar los recargos sobre TODAS las prácticas quirúrgicas cargadas
+        # Aplicar los recargos sobre TODAS las prácticas quirúrgicas cargadas al 100%
         # Nota: las radioscopias nunca llevan recargo de 25% ni de 5%.
         for p_base in list(prestaciones_finales):
             if p_base["codigo"] == "340907":
