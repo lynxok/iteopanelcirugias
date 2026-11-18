@@ -49,6 +49,7 @@ const Tripticos = lazyWithRetry(() => import('./pages/Tripticos'));
 import { PatientPrintLabel } from './components/PatientPrintLabel';
 import { ObsBackgroundController } from './components/ObsBackgroundController';
 import { GlobalappBackgroundController } from './components/GlobalappBackgroundController';
+import { GlobalappBridgeBadge } from './components/GlobalappBridgeBadge';
 import { AmbulatoryAutoCompleter } from './components/AmbulatoryAutoCompleter';
 import { CommandPalette } from './components/CommandPalette';
 import { NetworkStatusBanner } from './components/NetworkStatusBanner';
@@ -197,6 +198,9 @@ const App: React.FC = () => {
           <DependencyCheckerOverlay />
           <ObsBackgroundController />
           <GlobalappBackgroundController />
+          <div className="fixed bottom-3 right-3 z-40 print:hidden">
+            <GlobalappBridgeBadge />
+          </div>
           <AmbulatoryAutoCompleter />
           <NetworkStatusBanner />
           <HashRouter>
