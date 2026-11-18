@@ -398,5 +398,15 @@ export async function triggerGlobalappSync(
         }
     }
 
+    await supabase.from('audit_logs').insert({
+        user_name: 'Sistema Globalapp (Web/Tablet)',
+        user_role: 'Quirofano',
+        action: 'SYNC_GLOBALAPP_ERROR',
+        resource: 'Cirugía',
+        resource_id: surgeryId,
+        description: `No se pudo sincronizar Globalapp (${action.toUpperCase()}) para ${payload.patientName} (DNI ${payload.patientDni}): falló Cloud y no hay puente Electron local.`,
+        diff: { payload }
+    });
+
     return { success: false, error: 'No se pudo conectar con el servicio Cloud de Globalapp.' };
 }

@@ -1088,8 +1088,31 @@ def run_sync(payload: dict):
             print("===GLOBALAPP_RESULT_END===", flush=True)
 
         except Exception as e:
-            err_res = {"success": False, "error": str(e)}
-            log(f"ERROR: {e}")
+            import traceback
+            from datetime import datetime
+            err_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "globalapp_errors")
+            os.makedirs(err_dir, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            dni = str(data.get("patientDni", "sin_dni")).strip()
+            screenshot_path = os.path.join(err_dir, f"error_{ts}_{dni}.png")
+            log_path = os.path.join(err_dir, f"error_{ts}_{dni}.log")
+            try:
+                page.screenshot(path=screenshot_path, full_page=True)
+            except Exception:
+                screenshot_path = None
+            try:
+                with open(log_path, "w", encoding="utf-8") as lf:
+                    lf.write(f"Timestamp: {ts}\nAction: {data.get('action')}\nDNI: {dni}\nError: {e}\n\n")
+                    lf.write(traceback.format_exc())
+            except Exception:
+                log_path = None
+            err_res = {
+                "success": False,
+                "error": str(e),
+                "screenshot": screenshot_path,
+                "log_file": log_path
+            }
+            log(f"ERROR: {e} | Screenshot: {screenshot_path} | Log: {log_path}")
             print("===GLOBALAPP_RESULT_START===", flush=True)
             print(json.dumps(err_res, ensure_ascii=False), flush=True)
             print("===GLOBALAPP_RESULT_END===", flush=True)
