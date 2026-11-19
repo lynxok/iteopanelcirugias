@@ -658,6 +658,21 @@ def update_existing_surgery_in_globalapp(page, payload: dict) -> bool:
     log("Cirugía actualizada y sincronizada con éxito en Globalapp.")
     return True
 
+def _open_internacion_prestaciones(page, matching_row) -> bool:
+    """Selects the matching internacion row and clicks the Prestaciones button (in-row or right-side toolbar)."""
+    row_btn = matching_row.get_by_role("button", name=re.compile(r"Prestac", re.I))
+    if row_btn.count() > 0:
+        row_btn.first.click()
+        return True
+    matching_row.click()
+    page.wait_for_timeout(400)
+    page_btn = page.get_by_role("button", name=re.compile(r"Prestac", re.I))
+    if page_btn.count() > 0:
+        page_btn.first.click()
+        return True
+    return False
+
+
 def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
     """
     Automates registration of practice 340907 (Arco en C) inside Internaciones -> Prestaciones:
@@ -726,10 +741,8 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
 
             is_match, reason, msg = validate_patient_identity(dni, patient_name, row_text)
             if is_match:
-                btn = row.get_by_role("button", name=re.compile(r"Prestac", re.I))
-                if btn.count() > 0:
-                    matching_row = row
-                    break
+                matching_row = row
+                break
             elif reason == "DISCREPANCY":
                 discrepancy_error = msg
 
@@ -741,8 +754,8 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
             log(f"[Arco en C] No se encontró internación para el DNI {dni} ({patient_name}) en GlobalApp.")
             return {"success": False, "error": f"No se encontró ninguna internación activa en GlobalApp para el DNI {dni} ({patient_name})."}
 
-        prestac_btn = matching_row.get_by_role("button", name=re.compile(r"Prestac", re.I))
-        prestac_btn.first.click()
+        if not _open_internacion_prestaciones(page, matching_row):
+            return {"success": False, "error": "Se encontró la internación pero no el botón 'Prestac.' en GlobalApp."}
         page.wait_for_timeout(3000)
 
         # 5. CONTROL ANTI-DUPLICADOS ESTRICTO EN SITIO
@@ -945,10 +958,8 @@ def revert_arco_en_c_in_internaciones(page, payload: dict) -> dict:
 
             is_match, reason, msg = validate_patient_identity(dni, patient_name, row_text)
             if is_match:
-                btn = row.get_by_role("button", name=re.compile(r"Prestac", re.I))
-                if btn.count() > 0:
-                    matching_row = row
-                    break
+                matching_row = row
+                break
             elif reason == "DISCREPANCY":
                 discrepancy_error = msg
 
@@ -960,8 +971,8 @@ def revert_arco_en_c_in_internaciones(page, payload: dict) -> dict:
             log(f"[Arco en C Revert] No se encontró internación para el DNI {dni} ({patient_name}) en GlobalApp.")
             return {"success": False, "error": f"No se encontró ninguna internación activa en GlobalApp para DNI {dni} ({patient_name})."}
 
-        prestac_btn = matching_row.get_by_role("button", name=re.compile(r"Prestac", re.I))
-        prestac_btn.first.click()
+        if not _open_internacion_prestaciones(page, matching_row):
+            return {"success": False, "error": "Se encontró la internación pero no el botón 'Prestac.' en GlobalApp."}
         page.wait_for_timeout(3000)
 
         # 5. REGLA ESTRICTA DE SEGURIDAD:
