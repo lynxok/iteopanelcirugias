@@ -725,7 +725,7 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         page.wait_for_timeout(3000)
 
         # 4. DOBLE CHEQUEO ESTRICTO DE LA FILA EN LA GRILLA (DNI EXACTO + NOMBRE)
-        rows = page.locator("tbody tr, .vs-table--tbody-table tbody tr, tr")
+        rows = page.locator("[role='row'], tbody tr, .vs-table--tbody-table tbody tr, tr")
         matching_row = None
         discrepancy_error = None
 
@@ -942,7 +942,7 @@ def revert_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         page.wait_for_timeout(2500)
 
         # 4. DOBLE CHEQUEO ESTRICTO EN REVERSIÓN (DNI EXACTO + NOMBRE)
-        rows = page.locator("tbody tr, .vs-table--tbody-table tbody tr, tr")
+        rows = page.locator("[role='row'], tbody tr, .vs-table--tbody-table tbody tr, tr")
         matching_row = None
         discrepancy_error = None
 
