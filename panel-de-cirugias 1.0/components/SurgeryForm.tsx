@@ -296,7 +296,9 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
 
     // Escuchar respuestas de sincronización de Globalapp emitidas por la PC de Quirófano (para Tablets/Web)
     useEffect(() => {
-        const channel = supabase.channel(`globalapp-sync-listener-${surgery.id}-${Math.random()}`);
+        if ((window as any).electronAPI?.runGlobalappScraper) return;
+
+        const channel = supabase.channel('globalapp-sync-bridge');
         channel
             .on('broadcast', { event: 'GLOBALAPP_SYNC_RESULT' }, (msg: any) => {
                 const { surgeryId, action, result } = msg?.payload || {};

@@ -1089,7 +1089,6 @@ def run_sync(payload: dict):
 
         except Exception as e:
             import traceback
-            from datetime import datetime
             err_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "globalapp_errors")
             os.makedirs(err_dir, exist_ok=True)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
