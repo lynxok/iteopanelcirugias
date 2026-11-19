@@ -447,6 +447,7 @@ export const Tripticos: React.FC = () => {
           paciente_nuc: gaNuc || panelNuc || undefined,
           paciente_nuc_globalapp: gaNuc || undefined,
           paciente_nuc_panel: panelNuc || undefined,
+          paciente_nuc_source: gaNuc ? 'globalapp' : panelNuc ? 'panel' : 'custom',
           paciente_fecha_nacimiento: patient?.birth_date || ga.paciente_fecha_nacimiento || undefined,
           paciente_sexo: patient?.sexo || ga.paciente_sexo || undefined,
           obra_social: patient?.insurance_name || ga.obra_social || 'OSER',
@@ -2124,65 +2125,88 @@ export const Tripticos: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-slate-400 text-[10px] uppercase font-bold block">DNI / NUC</span>
-                    {'selected' in selectedItemForDetail ? (
-                      <div className="mt-0.5 space-y-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-800 shrink-0">
-                            {selectedItemForDetail.paciente_dni || 'S/D'}
-                          </span>
-                          <span className="text-slate-400">•</span>
-                          <span className="text-[10px] font-bold text-slate-500 uppercase shrink-0">NUC:</span>
-                          <input
-                            type="text"
-                            value={selectedItemForDetail.paciente_nuc || ''}
-                            placeholder="Vacío = DNI"
-                            onChange={e => {
-                              const val = e.target.value;
-                              handleUpdateSurgeryField(selectedItemForDetail.id, 'paciente_nuc', val || undefined);
-                              setSelectedItemForDetail({ ...selectedItemForDetail, paciente_nuc: val || undefined });
-                            }}
-                            className="w-full min-w-[90px] text-[11px] bg-white border border-slate-300 rounded px-1.5 py-0.5 font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500"
-                          />
-                        </div>
-                        {selectedItemForDetail.paciente_nuc_globalapp &&
-                          selectedItemForDetail.paciente_nuc_panel &&
-                          selectedItemForDetail.paciente_nuc_globalapp !== selectedItemForDetail.paciente_nuc_panel && (
-                            <div className="flex flex-wrap items-center gap-1 text-[10px]">
-                              <span className="text-amber-700 font-semibold">Elegir:</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const val = selectedItemForDetail.paciente_nuc_globalapp!;
-                                  handleUpdateSurgeryField(selectedItemForDetail.id, 'paciente_nuc', val);
-                                  setSelectedItemForDetail({ ...selectedItemForDetail, paciente_nuc: val });
-                                }}
-                                className={`px-1.5 py-0.5 rounded border font-semibold transition-colors ${
-                                  selectedItemForDetail.paciente_nuc === selectedItemForDetail.paciente_nuc_globalapp
-                                    ? 'bg-teal-600 text-white border-teal-600'
-                                    : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
-                                }`}
-                              >
-                                GlobalApp: {selectedItemForDetail.paciente_nuc_globalapp}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const val = selectedItemForDetail.paciente_nuc_panel!;
-                                  handleUpdateSurgeryField(selectedItemForDetail.id, 'paciente_nuc', val);
-                                  setSelectedItemForDetail({ ...selectedItemForDetail, paciente_nuc: val });
-                                }}
-                                className={`px-1.5 py-0.5 rounded border font-semibold transition-colors ${
-                                  selectedItemForDetail.paciente_nuc === selectedItemForDetail.paciente_nuc_panel
-                                    ? 'bg-teal-600 text-white border-teal-600'
-                                    : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
-                                }`}
-                              >
-                                Panel: {selectedItemForDetail.paciente_nuc_panel}
-                              </button>
-                            </div>
+                    {'selected' in selectedItemForDetail ? (() => {
+                      const currentSource: 'globalapp' | 'panel' | 'custom' =
+                        selectedItemForDetail.paciente_nuc_source ||
+                        (selectedItemForDetail.paciente_nuc_globalapp &&
+                        selectedItemForDetail.paciente_nuc === selectedItemForDetail.paciente_nuc_globalapp
+                          ? 'globalapp'
+                          : selectedItemForDetail.paciente_nuc_panel &&
+                              selectedItemForDetail.paciente_nuc === selectedItemForDetail.paciente_nuc_panel
+                            ? 'panel'
+                            : 'custom');
+                      return (
+                        <div className="mt-0.5 space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-800 shrink-0">
+                              {selectedItemForDetail.paciente_dni || 'S/D'}
+                            </span>
+                            <span className="text-slate-400">•</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase shrink-0">NUC:</span>
+                            <select
+                              value={currentSource}
+                              onChange={e => {
+                                const src = e.target.value as 'globalapp' | 'panel' | 'custom';
+                                const nextNuc =
+                                  src === 'globalapp'
+                                    ? selectedItemForDetail.paciente_nuc_globalapp
+                                    : src === 'panel'
+                                      ? selectedItemForDetail.paciente_nuc_panel
+                                      : selectedItemForDetail.paciente_nuc || undefined;
+                                setCirugias(prev =>
+                                  prev.map(c =>
+                                    c.id === selectedItemForDetail.id
+                                      ? { ...c, paciente_nuc_source: src, paciente_nuc: nextNuc }
+                                      : c
+                                  )
+                                );
+                                setSelectedItemForDetail({
+                                  ...selectedItemForDetail,
+                                  paciente_nuc_source: src,
+                                  paciente_nuc: nextNuc,
+                                });
+                              }}
+                              className="w-full text-[11px] bg-white border border-slate-300 rounded px-1.5 py-0.5 font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                            >
+                              {selectedItemForDetail.paciente_nuc_globalapp && (
+                                <option value="globalapp">
+                                  GlobalApp: {selectedItemForDetail.paciente_nuc_globalapp}
+                                </option>
+                              )}
+                              {selectedItemForDetail.paciente_nuc_panel && (
+                                <option value="panel">
+                                  Panel: {selectedItemForDetail.paciente_nuc_panel}
+                                </option>
+                              )}
+                              <option value="custom">Personalizado...</option>
+                            </select>
+                          </div>
+                          {currentSource === 'custom' && (
+                            <input
+                              type="text"
+                              value={selectedItemForDetail.paciente_nuc || ''}
+                              placeholder="Ingresar NUC (vacío = usa DNI)"
+                              onChange={e => {
+                                const val = e.target.value;
+                                setCirugias(prev =>
+                                  prev.map(c =>
+                                    c.id === selectedItemForDetail.id
+                                      ? { ...c, paciente_nuc_source: 'custom', paciente_nuc: val || undefined }
+                                      : c
+                                  )
+                                );
+                                setSelectedItemForDetail({
+                                  ...selectedItemForDetail,
+                                  paciente_nuc_source: 'custom',
+                                  paciente_nuc: val || undefined,
+                                });
+                              }}
+                              className="w-full text-[11px] bg-white border border-teal-400 rounded px-1.5 py-0.5 font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            />
                           )}
-                      </div>
-                    ) : (
+                        </div>
+                      );
+                    })() : (
                       <span className="font-bold text-slate-800">
                         {selectedItemForDetail.paciente_dni || 'S/D'}{' '}
                         {selectedItemForDetail.paciente_nuc ? `• NUC: ${selectedItemForDetail.paciente_nuc}` : ''}

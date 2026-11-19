@@ -41,6 +41,7 @@ export interface TripticoCirugia {
   paciente_nuc?: string;
   paciente_nuc_globalapp?: string;
   paciente_nuc_panel?: string;
+  paciente_nuc_source?: 'globalapp' | 'panel' | 'custom';
   paciente_fecha_nacimiento?: string; // YYYY-MM-DD
   paciente_sexo?: string; // 'Masculino' | 'Femenino'
   obra_social: string;
