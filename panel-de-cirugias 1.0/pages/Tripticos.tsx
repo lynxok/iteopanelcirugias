@@ -437,12 +437,16 @@ export const Tripticos: React.FC = () => {
 
         const patient = matched?.patient;
         const doc = matched?.doctor;
+        const gaNuc = (ga.paciente_nuc || '').trim();
+        const panelNuc = (patient?.nuc || '').trim();
 
         return {
           ...ga,
           surgery_id: matched?.id || undefined,
           paciente_dni: patient?.document_number || ga.paciente_dni || '',
-          paciente_nuc: patient?.nuc || undefined,
+          paciente_nuc: gaNuc || panelNuc || undefined,
+          paciente_nuc_globalapp: gaNuc || undefined,
+          paciente_nuc_panel: panelNuc || undefined,
           paciente_fecha_nacimiento: patient?.birth_date || ga.paciente_fecha_nacimiento || undefined,
           paciente_sexo: patient?.sexo || ga.paciente_sexo || undefined,
           obra_social: patient?.insurance_name || ga.obra_social || 'OSER',
@@ -1438,6 +1442,16 @@ export const Tripticos: React.FC = () => {
                                     NUC: {surg.paciente_nuc}
                                   </span>
                                 )}
+                                {surg.paciente_nuc_globalapp &&
+                                  surg.paciente_nuc_panel &&
+                                  surg.paciente_nuc_globalapp !== surg.paciente_nuc_panel && (
+                                    <span
+                                      className="bg-amber-50 text-amber-700 px-1.5 py-0.2 rounded font-semibold text-[10px] border border-amber-200"
+                                      title={`GlobalApp: ${surg.paciente_nuc_globalapp} vs Panel: ${surg.paciente_nuc_panel}`}
+                                    >
+                                      NUC distinto (elegir en ficha)
+                                    </span>
+                                  )}
                                 {surg.egreso_fecha && (
                                   <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
                                     Egreso: {surg.egreso_fecha.slice(0, 16).replace('T', ' ')}
@@ -2110,9 +2124,70 @@ export const Tripticos: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-slate-400 text-[10px] uppercase font-bold block">DNI / NUC</span>
-                    <span className="font-bold text-slate-800">
-                      {selectedItemForDetail.paciente_dni || 'S/D'} {selectedItemForDetail.paciente_nuc ? `• NUC: ${selectedItemForDetail.paciente_nuc}` : ''}
-                    </span>
+                    {'selected' in selectedItemForDetail ? (
+                      <div className="mt-0.5 space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-800 shrink-0">
+                            {selectedItemForDetail.paciente_dni || 'S/D'}
+                          </span>
+                          <span className="text-slate-400">•</span>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase shrink-0">NUC:</span>
+                          <input
+                            type="text"
+                            value={selectedItemForDetail.paciente_nuc || ''}
+                            placeholder="Vacío = DNI"
+                            onChange={e => {
+                              const val = e.target.value;
+                              handleUpdateSurgeryField(selectedItemForDetail.id, 'paciente_nuc', val || undefined);
+                              setSelectedItemForDetail({ ...selectedItemForDetail, paciente_nuc: val || undefined });
+                            }}
+                            className="w-full min-w-[90px] text-[11px] bg-white border border-slate-300 rounded px-1.5 py-0.5 font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                          />
+                        </div>
+                        {selectedItemForDetail.paciente_nuc_globalapp &&
+                          selectedItemForDetail.paciente_nuc_panel &&
+                          selectedItemForDetail.paciente_nuc_globalapp !== selectedItemForDetail.paciente_nuc_panel && (
+                            <div className="flex flex-wrap items-center gap-1 text-[10px]">
+                              <span className="text-amber-700 font-semibold">Elegir:</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const val = selectedItemForDetail.paciente_nuc_globalapp!;
+                                  handleUpdateSurgeryField(selectedItemForDetail.id, 'paciente_nuc', val);
+                                  setSelectedItemForDetail({ ...selectedItemForDetail, paciente_nuc: val });
+                                }}
+                                className={`px-1.5 py-0.5 rounded border font-semibold transition-colors ${
+                                  selectedItemForDetail.paciente_nuc === selectedItemForDetail.paciente_nuc_globalapp
+                                    ? 'bg-teal-600 text-white border-teal-600'
+                                    : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                }`}
+                              >
+                                GlobalApp: {selectedItemForDetail.paciente_nuc_globalapp}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const val = selectedItemForDetail.paciente_nuc_panel!;
+                                  handleUpdateSurgeryField(selectedItemForDetail.id, 'paciente_nuc', val);
+                                  setSelectedItemForDetail({ ...selectedItemForDetail, paciente_nuc: val });
+                                }}
+                                className={`px-1.5 py-0.5 rounded border font-semibold transition-colors ${
+                                  selectedItemForDetail.paciente_nuc === selectedItemForDetail.paciente_nuc_panel
+                                    ? 'bg-teal-600 text-white border-teal-600'
+                                    : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                }`}
+                              >
+                                Panel: {selectedItemForDetail.paciente_nuc_panel}
+                              </button>
+                            </div>
+                          )}
+                      </div>
+                    ) : (
+                      <span className="font-bold text-slate-800">
+                        {selectedItemForDetail.paciente_dni || 'S/D'}{' '}
+                        {selectedItemForDetail.paciente_nuc ? `• NUC: ${selectedItemForDetail.paciente_nuc}` : ''}
+                      </span>
+                    )}
                   </div>
                   <div>
                     <span className="text-slate-400 text-[10px] uppercase font-bold block">Obra Social</span>

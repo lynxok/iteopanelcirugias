@@ -173,10 +173,11 @@ def relevar_cirugias(payload):
 
         log(f"[{idx}/{len(rows)}] Procesando parte #{np or pid} - {pac_nombre} ({fecha_cirugia})...")
 
-        # 1. Obtener diagnóstico y egreso de internación
+        # 1. Obtener diagnóstico, egreso y número de autorización (NUC) de internación
         diag_str = ""
         tratamiento_str = ""
         egreso_fecha = None
+        autorizacion_num = ""
         prestaciones = []
 
         if idint:
@@ -189,6 +190,11 @@ def relevar_cirugias(payload):
                 int_rows = int_resp.get("rows", [])
                 if int_rows:
                     first_int = int_rows[0]
+                    # Capturar número de autorización de internación (NUC)
+                    raw_auth = first_int.get("autorizacionnumero")
+                    if raw_auth is not None:
+                        autorizacion_num = str(raw_auth).strip()
+
                     # Capturar fecha de egreso o alta
                     raw_egreso = first_int.get("egresofecha") or first_int.get("altafecha")
                     if raw_egreso:
@@ -446,6 +452,7 @@ def relevar_cirugias(payload):
             "hora_fin": hora_fin,
             "paciente_nombre": pac_nombre,
             "paciente_dni": pac_dni,
+            "paciente_nuc": autorizacion_num,
             "paciente_fecha_nacimiento": pac_fnac[:10] if pac_fnac else "",
             "paciente_sexo": "Femenino" if "F" in pac_sexo.upper() else ("Masculino" if "M" in pac_sexo.upper() else pac_sexo),
             "obra_social": obra_social,
