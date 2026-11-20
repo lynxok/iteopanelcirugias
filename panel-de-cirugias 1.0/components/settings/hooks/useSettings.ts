@@ -135,8 +135,12 @@ export const useSettings = () => {
     });
 
     const [showCie10Modal, setShowCie10Modal] = useState(false);
-    const [cie10Form, setCie10Form] = useState<any>({ code: '', description: '', region: 'Cráneo', part: '', injury_type: '' });
+    const [cie10Form, setCie10Form] = useState<any>({ code: '', description: '', region: 'Cráneo', part: '', injury_type: '', is_frequent: false });
     const [isEditingCie10, setIsEditingCie10] = useState(false);
+    const [cie10TotalCount, setCie10TotalCount] = useState(0);
+    const [cie10Page, setCie10Page] = useState(0);
+    const [cie10OnlyFrequent, setCie10OnlyFrequent] = useState(false);
+    const [isLoadingCie10, setIsLoadingCie10] = useState(false);
 
     const [showNomencladorModal, setShowNomencladorModal] = useState(false);
     const [nomencladorForm, setNomencladorForm] = useState<{ id?: string; code: string; description: string; type: string; active: boolean }>({ code: '', description: '', type: 'AOTER', active: true });
@@ -270,10 +274,53 @@ export const useSettings = () => {
         setIsLoadingCatalog(false);
     }, []);
 
-    const fetchCie10Items = useCallback(async () => {
-        const { data, error } = await supabase.from('cie10_catalog').select('*').order('code');
-        if (!error && data) setCie10Items(data);
-    }, []);
+    const fetchCie10Items = useCallback(async (opts?: { page?: number; search?: string; onlyFrequent?: boolean }) => {
+        setIsLoadingCie10(true);
+        const page = opts?.page ?? cie10Page;
+        const term = (opts?.search ?? searchCie10).trim();
+        const onlyFreq = opts?.onlyFrequent ?? cie10OnlyFrequent;
+        const pageSize = 50;
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+
+        try {
+            let query = supabase
+                .from('cie10_catalog')
+                .select('*', { count: 'exact' });
+
+            if (onlyFreq) {
+                query = query.eq('is_frequent', true);
+            }
+            if (term) {
+                const safeTerm = term.replace(/[%_,()]/g, ' ').trim();
+                query = query.or(`code.ilike.%${safeTerm}%,description.ilike.%${safeTerm}%`);
+            }
+
+            let { data, error, count } = await query
+                .order('is_frequent', { ascending: false })
+                .order('code', { ascending: true })
+                .range(from, to);
+
+            if (error && error.message?.includes('is_frequent')) {
+                let fallback = supabase.from('cie10_catalog').select('*', { count: 'exact' });
+                if (term) {
+                    const safeTerm = term.replace(/[%_,()]/g, ' ').trim();
+                    fallback = fallback.or(`code.ilike.%${safeTerm}%,description.ilike.%${safeTerm}%`);
+                }
+                const res = await fallback.order('code', { ascending: true }).range(from, to);
+                data = res.data;
+                error = res.error;
+                count = res.count;
+            }
+
+            if (!error && data) {
+                setCie10Items(data);
+                setCie10TotalCount(count ?? data.length);
+            }
+        } finally {
+            setIsLoadingCie10(false);
+        }
+    }, [cie10Page, searchCie10, cie10OnlyFrequent]);
 
     const fetchNomencladorItems = useCallback(async () => {
         setIsLoadingNomenclador(true);
@@ -396,6 +443,14 @@ export const useSettings = () => {
     useEffect(() => {
         fetchInitialData();
     }, [fetchInitialData]);
+
+    useEffect(() => {
+        if (activeTab !== 'cie10') return;
+        const timer = setTimeout(() => {
+            fetchCie10Items({ page: cie10Page, search: searchCie10, onlyFrequent: cie10OnlyFrequent });
+        }, 200);
+        return () => clearTimeout(timer);
+    }, [activeTab, cie10Page, searchCie10, cie10OnlyFrequent, fetchCie10Items]);
 
     useEffect(() => {
         if (user) fetchUserSignature();
@@ -623,11 +678,29 @@ export const useSettings = () => {
 
     const handleSaveCie10 = async () => {
         if (!cie10Form.code || !cie10Form.description) return;
-        const payload = { code: cie10Form.code, description: cie10Form.description, region: cie10Form.region, part: cie10Form.part, injury_type: cie10Form.injury_type };
+        const payload = {
+            code: cie10Form.code,
+            description: cie10Form.description,
+            region: cie10Form.region,
+            part: cie10Form.part,
+            injury_type: cie10Form.injury_type,
+            is_frequent: Boolean(cie10Form.is_frequent)
+        };
         if (isEditingCie10 && cie10Form.id) await supabase.from('cie10_catalog').update(payload).eq('id', cie10Form.id);
         else await supabase.from('cie10_catalog').insert([payload]);
         fetchCie10Items();
         setShowCie10Modal(false);
+    };
+
+    const handleToggleCie10Frequent = async (item: any) => {
+        const nextVal = !item.is_frequent;
+        const { error } = await supabase
+            .from('cie10_catalog')
+            .update({ is_frequent: nextVal })
+            .eq('id', item.id);
+        if (!error) {
+            fetchCie10Items();
+        }
     };
 
     const handleSaveNomenclador = async () => {
@@ -1003,7 +1076,7 @@ export const useSettings = () => {
 
     return {
         user, activeTab, setActiveTab, isPrintingBlank, setIsPrintingBlank, materialPagesCount, setMaterialPagesCount,
-        vendors, coverages, users, doctors, ors, procedures, categories, catalogItems, cie10Items, nomencladorItems, nomencladorCatalogs, specialties, globalappPatologias,
+        vendors, coverages, users, doctors, ors, procedures, categories, catalogItems, cie10Items, cie10TotalCount, cie10Page, setCie10Page, cie10OnlyFrequent, setCie10OnlyFrequent, isLoadingCie10, nomencladorItems, nomencladorCatalogs, specialties, globalappPatologias,
         isLoading, isLoadingCatalog, isLoadingNomenclador, isSavingNomenclador, isSavingCatalogType, isSavingPermissions, isSavingSmtp, isSavingSignature,
         rolePermissions, telegramGlobalEnabled, bccEnabled, cie10Enabled, stockConsumptionEnabled, isTogglingStockConsumption, smtpSettings, setSmtpSettings,
         signaturePin, setSignaturePin, currentSignature, setCurrentSignature, signatureRef, setSignatureRef,
@@ -1025,7 +1098,7 @@ export const useSettings = () => {
         nomencladorFilterType, setNomencladorFilterType,
         selectedProcedureId, setSelectedProcedureId, isAddingCategory, setIsAddingCategory, newCategoryName, setNewCategoryName,
         catalogFilters, setCatalogFilters, sortCatalog, setSortCatalog,
-        fetchInitialData, handleSaveUser, handleSaveDoctor, handleSaveVendor, handleSaveCoverage, handleSaveSmtp, handleSaveOR, handleSaveCatalogItem, handleSaveCie10, handleSaveNomenclador, handleDeleteNomenclador, handleToggleNomencladorActive, openNewNomencladorModal, openEditNomencladorModal, handleSaveUserSignature,
+        fetchInitialData, handleSaveUser, handleSaveDoctor, handleSaveVendor, handleSaveCoverage, handleSaveSmtp, handleSaveOR, handleSaveCatalogItem, handleSaveCie10, handleToggleCie10Frequent, handleSaveNomenclador, handleDeleteNomenclador, handleToggleNomencladorActive, openNewNomencladorModal, openEditNomencladorModal, handleSaveUserSignature,
         setPermissionLevel, setFieldPermission, fetchCatalogItems, fetchCie10Items, fetchNomencladorItems, fetchUsers, fetchDoctors, fetchOperatingRooms, fetchVendors, fetchCoverages, fetchProcedures, fetchSpecialties, fetchCategories,
         toggleTelegramGlobal: async () => {
             const newValue = !telegramGlobalEnabled;

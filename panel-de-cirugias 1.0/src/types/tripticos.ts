@@ -68,6 +68,7 @@ export interface TripticoCirugia {
   orden_triptico_aoter?: string;
   egreso_fecha?: string | null;
   tiene_egreso?: boolean;
+  tiene_internacion_globalapp?: boolean;
   ya_cargada_aoter?: boolean;
   orden_aoter_existente?: string;
 }

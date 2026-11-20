@@ -479,10 +479,17 @@ const Settings: React.FC = () => {
                                 setSearchCie10={s.setSearchCie10}
                                 openNewCie10Modal={() => {
                                     s.setIsEditingCie10(false);
-                                    s.setCie10Form({ code: '', description: '', region: 'Cráneo', part: '', injury_type: '' });
+                                    s.setCie10Form({ code: '', description: '', region: 'Cráneo', part: '', injury_type: '', is_frequent: true });
                                     s.setShowCie10Modal(true);
                                 }}
                                 cie10Items={s.cie10Items}
+                                cie10TotalCount={s.cie10TotalCount}
+                                cie10Page={s.cie10Page}
+                                setCie10Page={s.setCie10Page}
+                                cie10OnlyFrequent={s.cie10OnlyFrequent}
+                                setCie10OnlyFrequent={s.setCie10OnlyFrequent}
+                                isLoadingCie10={s.isLoadingCie10}
+                                handleToggleCie10Frequent={s.handleToggleCie10Frequent}
                                 openEditCie10Modal={(item) => {
                                     s.setIsEditingCie10(true);
                                     s.setCie10Form(item);

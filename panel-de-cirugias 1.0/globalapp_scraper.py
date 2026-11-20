@@ -25,8 +25,103 @@ import unicodedata
 from datetime import datetime
 from playwright.sync_api import sync_playwright
 
+_RUN_LOG_PATH = None
+_CONNECTIONS_LOG_PATH = None
+
+
+def _resolve_writable_dir(folder_name: str) -> str:
+    """Returns a writable directory next to the script, falling back to %APPDATA%/PanelCirugias_ITEO."""
+    primary = os.path.join(os.path.dirname(os.path.abspath(__file__)), folder_name)
+    try:
+        os.makedirs(primary, exist_ok=True)
+        probe = os.path.join(primary, ".write_test")
+        with open(probe, "w", encoding="utf-8") as f:
+            f.write("ok")
+        os.remove(probe)
+        return primary
+    except Exception:
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        fallback = os.path.join(base, "PanelCirugias_ITEO", folder_name)
+        os.makedirs(fallback, exist_ok=True)
+        return fallback
+
+
+def _init_run_log(payload: dict) -> str:
+    """Initializes a per-trigger log file and appends a start entry to the daily connections log."""
+    global _RUN_LOG_PATH, _CONNECTIONS_LOG_PATH
+    logs_dir = _resolve_writable_dir("globalapp_logs")
+    now = datetime.now()
+    ts = now.strftime("%Y%m%d_%H%M%S")
+    day = now.strftime("%Y-%m-%d")
+    dni = re.sub(r"[^a-zA-Z0-9_-]+", "", str((payload or {}).get("patientDni", "sin_dni")).strip()) or "sin_dni"
+    action = re.sub(r"[^a-zA-Z0-9_-]+", "_", str((payload or {}).get("action", "sync")).strip()) or "sync"
+
+    _RUN_LOG_PATH = os.path.join(logs_dir, f"run_{ts}_{dni}_{action}.log")
+    _CONNECTIONS_LOG_PATH = os.path.join(logs_dir, f"connections_{day}.log")
+
+    safe_payload = {k: v for k, v in (payload or {}).items() if "password" not in k.lower()}
+    try:
+        with open(_RUN_LOG_PATH, "w", encoding="utf-8") as f:
+            f.write(f"=== GlobalApp Run Start: {now.isoformat()} ===\n")
+            f.write(f"Action: {action} | DNI: {dni} | Patient: {(payload or {}).get('patientName', '')}\n")
+            f.write(f"Payload: {json.dumps(safe_payload, ensure_ascii=False)}\n\n")
+    except Exception:
+        _RUN_LOG_PATH = None
+
+    try:
+        with open(_CONNECTIONS_LOG_PATH, "a", encoding="utf-8") as cf:
+            cf.write(f"[{now.strftime('%H:%M:%S')}] START action={action} dni={dni} patient=\"{(payload or {}).get('patientName', '')}\" run_log={os.path.basename(_RUN_LOG_PATH or '-')}\n")
+    except Exception:
+        pass
+
+    return _RUN_LOG_PATH
+
+
+def _finalize_run_log(result: dict, duration_ms: int, diagnostics: dict = None):
+    """Appends the final result and network/console summary to both the per-run log and daily connections log."""
+    now = datetime.now()
+    if _RUN_LOG_PATH:
+        try:
+            with open(_RUN_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(f"\n=== GlobalApp Run End: {now.isoformat()} ({duration_ms} ms) ===\n")
+                f.write(f"Result: {json.dumps(result, ensure_ascii=False)}\n")
+                if diagnostics:
+                    if diagnostics.get("network_errors"):
+                        f.write("Network errors:\n" + "\n".join(diagnostics["network_errors"]) + "\n")
+                    if diagnostics.get("console_errors"):
+                        f.write("Console errors:\n" + "\n".join(diagnostics["console_errors"]) + "\n")
+        except Exception:
+            pass
+
+    if _CONNECTIONS_LOG_PATH:
+        try:
+            status = "OK" if result.get("success") else "ERROR"
+            detail = result.get("mode") or result.get("error", "")
+            if result.get("alreadyExisted"):
+                detail = f"{detail} (alreadyExisted=True)"
+            elif result.get("created"):
+                detail = f"{detail} (created=True)"
+            elif result.get("deleted"):
+                detail = f"{detail} (deleted=True)"
+            with open(_CONNECTIONS_LOG_PATH, "a", encoding="utf-8") as cf:
+                cf.write(
+                    f"[{now.strftime('%H:%M:%S')}] END {status} ({duration_ms}ms) "
+                    f"action={result.get('action', '')} detail={str(detail)[:220]} "
+                    f"run_log={os.path.basename(_RUN_LOG_PATH or '-')}\n"
+                )
+        except Exception:
+            pass
+
+
 def log(msg: str):
-    print(f"[Globalapp] {msg}", flush=True)
+    line = f"[Globalapp] {msg}"
+    print(line, flush=True)
+    if _RUN_LOG_PATH:
+        try:
+            with open(_RUN_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(f"[{datetime.now().strftime('%H:%M:%S')}] {line}\n")
+        except Exception:
+            pass
 
 def normalize_str(s: str) -> str:
     if not s:
@@ -658,6 +753,168 @@ def update_existing_surgery_in_globalapp(page, payload: dict) -> bool:
     log("Cirugía actualizada y sincronizada con éxito en Globalapp.")
     return True
 
+def _extract_globalapp_modal_error(page) -> str:
+    """Reads any visible GlobalApp modal/dialog/notification message (e.g. .vs-dialog-text) and closes Accept if present."""
+    for sel in [".vs-dialog-text", ".vs-dialog", "[role='dialog']", ".swal2-html-container", ".vs-notifications"]:
+        try:
+            loc = page.locator(sel)
+            if loc.count() > 0 and loc.first.is_visible():
+                raw = loc.first.inner_text().strip()
+                lines = [
+                    ln.strip()
+                    for ln in raw.splitlines()
+                    if ln.strip() and ln.strip().lower() not in {"accept", "aceptar", "close", "cerrar", "advertencia", "atención", "error"}
+                ]
+                msg = " ".join(lines).strip()
+                if msg:
+                    try:
+                        acc = page.locator(".vs-dialog button, [role='dialog'] button").filter(has_text=re.compile(r"Accept|Aceptar", re.I))
+                        if acc.count() > 0 and acc.first.is_visible():
+                            acc.first.click()
+                    except Exception:
+                        pass
+                    return msg
+        except Exception:
+            continue
+    return ""
+
+
+def _attach_diagnostics(page) -> dict:
+    """Attaches lightweight console and network error listeners to a Playwright page."""
+    diag = {"console_errors": [], "network_errors": []}
+
+    def on_console(msg):
+        if msg.type in ("error", "warning") and len(diag["console_errors"]) < 25:
+            diag["console_errors"].append(f"[{msg.type}] {msg.text[:300]}")
+
+    def on_request_failed(req):
+        if len(diag["network_errors"]) < 25:
+            failure = req.failure or "unknown"
+            diag["network_errors"].append(f"[REQ_FAILED] {req.method} {req.url[:180]} -> {failure}")
+
+    def on_response(resp):
+        if resp.status >= 400 and len(diag["network_errors"]) < 25:
+            diag["network_errors"].append(f"[HTTP {resp.status}] {resp.request.method} {resp.url[:180]}")
+
+    page.on("console", on_console)
+    page.on("requestfailed", on_request_failed)
+    page.on("response", on_response)
+    return diag
+
+
+def _capture_error_artifacts(
+    page,
+    payload: dict,
+    stage: str,
+    error_msg: str,
+    exc: Exception = None,
+    diagnostics: dict = None,
+) -> dict:
+    """Saves a full-page screenshot and diagnostic log (URL, modal, network/console, traceback) on failure."""
+    import traceback
+
+    err_dir = _resolve_writable_dir("globalapp_errors")
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dni = str((payload or {}).get("patientDni", "sin_dni")).strip() or "sin_dni"
+    safe_stage = re.sub(r"[^a-zA-Z0-9_-]+", "_", stage)
+    screenshot_path = os.path.join(err_dir, f"error_{ts}_{dni}_{safe_stage}.png")
+    log_path = os.path.join(err_dir, f"error_{ts}_{dni}_{safe_stage}.log")
+
+    current_url = ""
+    page_title = ""
+    visible_text = ""
+    modal_err = ""
+    try:
+        current_url = page.url
+    except Exception:
+        pass
+    try:
+        page_title = page.title()
+    except Exception:
+        pass
+    try:
+        modal_err = _extract_globalapp_modal_error(page)
+    except Exception:
+        pass
+    try:
+        body_txt = page.locator("body").inner_text(timeout=2000).strip()
+        visible_text = " | ".join(ln.strip() for ln in body_txt.splitlines() if ln.strip())[:800]
+    except Exception:
+        pass
+    try:
+        page.screenshot(path=screenshot_path, full_page=True)
+    except Exception:
+        screenshot_path = None
+
+    try:
+        with open(log_path, "w", encoding="utf-8") as lf:
+            lf.write(f"Timestamp: {ts}\n")
+            lf.write(f"Stage: {stage}\n")
+            lf.write(f"Action: {(payload or {}).get('action')}\n")
+            lf.write(f"DNI: {dni}\n")
+            lf.write(f"Patient: {(payload or {}).get('patientName', '')}\n")
+            lf.write(f"URL: {current_url}\n")
+            lf.write(f"Title: {page_title}\n")
+            lf.write(f"Modal/Alert: {modal_err or 'ninguno'}\n")
+            lf.write(f"Error: {error_msg}\n")
+            if visible_text:
+                lf.write(f"\nVisible body text (excerpt):\n{visible_text}\n")
+            if diagnostics:
+                if diagnostics.get("network_errors"):
+                    lf.write("\nNetwork errors (>=400 / failed):\n" + "\n".join(diagnostics["network_errors"]) + "\n")
+                if diagnostics.get("console_errors"):
+                    lf.write("\nConsole warnings/errors:\n" + "\n".join(diagnostics["console_errors"]) + "\n")
+            if exc is not None:
+                lf.write("\nTraceback:\n" + traceback.format_exc())
+    except Exception:
+        log_path = None
+
+    log(f"[{stage}] ERROR: {error_msg} | URL: {current_url} | Modal: {modal_err or '-'} | Screenshot: {screenshot_path} | Log: {log_path}")
+    return {
+        "screenshot": screenshot_path,
+        "log_file": log_path,
+        "url": current_url,
+        "modal_error": modal_err,
+    }
+
+
+def _login_globalapp(page, user_email: str, user_password: str, diagnostics: dict):
+    """Logs into GlobalApp and verifies the main navigation shell loaded instead of relying on a blind sleep."""
+    log("Iniciando sesión en https://er.globalapp.ar/login ...")
+    page.goto("https://er.globalapp.ar/login", timeout=30000)
+    page.get_by_role("textbox", name="Ingrese su usuario").fill(user_email)
+    page.locator("input[type=\"password\"]").fill(user_password)
+    page.get_by_role("button", name="Ingresar").click()
+
+    # Wait up to 15s for either navigation links to appear or a login error to surface
+    nav_ready = False
+    for _ in range(30):
+        page.wait_for_timeout(500)
+        try:
+            has_nav = (
+                page.get_by_role("link", name="Internaciones").count() > 0
+                or page.get_by_role("link", name="Quirofanos").count() > 0
+            )
+            if has_nav and "/login" not in page.url:
+                nav_ready = True
+                break
+        except Exception:
+            pass
+
+        modal_err = _extract_globalapp_modal_error(page)
+        if modal_err:
+            raise RuntimeError(f"GlobalApp rechazó el login: {modal_err}")
+
+    if not nav_ready:
+        modal_err = _extract_globalapp_modal_error(page)
+        net_tail = diagnostics["network_errors"][-1] if diagnostics and diagnostics.get("network_errors") else ""
+        raise RuntimeError(
+            f"Login en GlobalApp no completó en 15s (URL: {page.url})"
+            + (f" | Modal: {modal_err}" if modal_err else "")
+            + (f" | Red: {net_tail}" if net_tail else "")
+        )
+
+
 def _open_internacion_prestaciones(page, matching_row) -> bool:
     """Selects the matching internacion row and clicks the Prestaciones button (in-row or right-side toolbar)."""
     row_btn = matching_row.get_by_role("button", name=re.compile(r"Prestac", re.I))
@@ -673,7 +930,48 @@ def _open_internacion_prestaciones(page, matching_row) -> bool:
     return False
 
 
-def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
+def _open_and_wait_prestaciones(page, matching_row, timeout_ms: int = 12000) -> str:
+    """Opens Prestaciones and waits until the grid finishes loading (or a modal error appears) to avoid false empty reads."""
+    if not _open_internacion_prestaciones(page, matching_row):
+        return "Se encontró la internación pero no el botón 'Prestac.' en GlobalApp."
+
+    page.wait_for_timeout(800)
+    elapsed = 800
+    stable_empty_ms = 0
+
+    while elapsed <= timeout_ms:
+        modal_err = _extract_globalapp_modal_error(page)
+        if modal_err:
+            log(f"[Arco en C] GlobalApp mostró modal al abrir Prestac.: {modal_err}")
+            return f"GlobalApp: {modal_err}"
+
+        try:
+            header_visible = page.get_by_text(re.compile(r"Prestaciones de la Internaci", re.I)).count() > 0
+            add_visible = page.get_by_role("main").get_by_role("button", name=re.compile(r"Agregar", re.I)).count() > 0
+            loading_visible = page.locator(".vs-loading, [role='progressbar'], .loading-bar").count() > 0
+
+            if (header_visible or add_visible) and not loading_visible:
+                has_cells = page.get_by_role("gridcell").count() > 0
+                has_empty_msg = page.get_by_text(re.compile(r"No hay datos|Sin prestaciones|No se encontraron", re.I)).count() > 0
+                if has_cells or has_empty_msg:
+                    page.wait_for_timeout(500)
+                    return ""
+                stable_empty_ms += 400
+                if stable_empty_ms >= 2400:
+                    return ""
+            else:
+                stable_empty_ms = 0
+        except Exception:
+            pass
+
+        page.wait_for_timeout(400)
+        elapsed += 400
+
+    log("[Arco en C] Aviso: timeout esperando carga completa de grilla Prestaciones; se continúa con verificación.")
+    return ""
+
+
+def sync_arco_en_c_in_internaciones(page, payload: dict, diagnostics: dict = None) -> dict:
     """
     Automates registration of practice 340907 (Arco en C) inside Internaciones -> Prestaciones:
     - Filters by patient DNI (Nro. Documento).
@@ -754,9 +1052,9 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
             log(f"[Arco en C] No se encontró internación para el DNI {dni} ({patient_name}) en GlobalApp.")
             return {"success": False, "error": f"No se encontró ninguna internación activa en GlobalApp para el DNI {dni} ({patient_name})."}
 
-        if not _open_internacion_prestaciones(page, matching_row):
-            return {"success": False, "error": "Se encontró la internación pero no el botón 'Prestac.' en GlobalApp."}
-        page.wait_for_timeout(3000)
+        prest_err = _open_and_wait_prestaciones(page, matching_row)
+        if prest_err:
+            return {"success": False, "error": prest_err}
 
         # 5. CONTROL ANTI-DUPLICADOS ESTRICTO EN SITIO
         grid_340907 = page.get_by_role("gridcell", name="340907")
@@ -792,6 +1090,10 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         log("[Arco en C] Agregando nueva práctica 340907...")
         add_btn = page.get_by_role("main").get_by_role("button", name=re.compile(r"Agregar", re.I))
         if add_btn.count() == 0:
+            modal_err = _extract_globalapp_modal_error(page)
+            if modal_err:
+                log(f"[Arco en C] GlobalApp mostró modal en Prestaciones: {modal_err}")
+                return {"success": False, "error": f"GlobalApp: {modal_err}"}
             return {"success": False, "error": "No se encontró el botón Agregar en Prestaciones."}
         add_btn.first.click()
         page.wait_for_timeout(1800)
@@ -889,10 +1191,23 @@ def sync_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         return {"success": True, "created": True}
 
     except Exception as e:
-        log(f"[Arco en C] Excepción durante la carga: {e}")
-        return {"success": False, "error": str(e)}
+        artifacts = _capture_error_artifacts(page, payload, "arco_en_c", str(e), exc=e, diagnostics=diagnostics)
+        detail_parts = [str(e)]
+        if artifacts.get("url"):
+            detail_parts.append(f"URL: {artifacts['url']}")
+        if artifacts.get("modal_error"):
+            detail_parts.append(f"Modal: {artifacts['modal_error']}")
+        if artifacts.get("log_file"):
+            detail_parts.append(f"Log: {os.path.basename(artifacts['log_file'])}")
+        return {
+            "success": False,
+            "error": " | ".join(detail_parts),
+            "screenshot": artifacts.get("screenshot"),
+            "log_file": artifacts.get("log_file"),
+            "url": artifacts.get("url"),
+        }
 
-def revert_arco_en_c_in_internaciones(page, payload: dict) -> dict:
+def revert_arco_en_c_in_internaciones(page, payload: dict, diagnostics: dict = None) -> dict:
     """
     Automates reverting/deleting practice 340907 (Arco en C) inside Internaciones -> Prestaciones:
     - Filters by patient DNI.
@@ -971,9 +1286,9 @@ def revert_arco_en_c_in_internaciones(page, payload: dict) -> dict:
             log(f"[Arco en C Revert] No se encontró internación para el DNI {dni} ({patient_name}) en GlobalApp.")
             return {"success": False, "error": f"No se encontró ninguna internación activa en GlobalApp para DNI {dni} ({patient_name})."}
 
-        if not _open_internacion_prestaciones(page, matching_row):
-            return {"success": False, "error": "Se encontró la internación pero no el botón 'Prestac.' en GlobalApp."}
-        page.wait_for_timeout(3000)
+        prest_err = _open_and_wait_prestaciones(page, matching_row)
+        if prest_err:
+            return {"success": False, "error": prest_err}
 
         # 5. REGLA ESTRICTA DE SEGURIDAD:
         # Seleccionar ÚNICAMENTE la celda con el código exacto '340907'. Si no existe, no tocar nada.
@@ -1021,8 +1336,21 @@ def revert_arco_en_c_in_internaciones(page, payload: dict) -> dict:
         return {"success": True, "deleted": True}
 
     except Exception as e:
-        log(f"[Arco en C Revert] Excepción al eliminar: {e}")
-        return {"success": False, "error": str(e)}
+        artifacts = _capture_error_artifacts(page, payload, "arco_en_c_revert", str(e), exc=e, diagnostics=diagnostics)
+        detail_parts = [str(e)]
+        if artifacts.get("url"):
+            detail_parts.append(f"URL: {artifacts['url']}")
+        if artifacts.get("modal_error"):
+            detail_parts.append(f"Modal: {artifacts['modal_error']}")
+        if artifacts.get("log_file"):
+            detail_parts.append(f"Log: {os.path.basename(artifacts['log_file'])}")
+        return {
+            "success": False,
+            "error": " | ".join(detail_parts),
+            "screenshot": artifacts.get("screenshot"),
+            "log_file": artifacts.get("log_file"),
+            "url": artifacts.get("url"),
+        }
 
 def run_sync(payload: dict):
     user_email = os.environ.get("GLOBALAPP_USER", "quirofano@correo.com")
@@ -1036,31 +1364,29 @@ def run_sync(payload: dict):
     specialty = payload.get("specialty", "TRAUMATOLOGIA")
     arco_en_c = bool(payload.get("arcoEnC", False))
     arco_en_c_synced = bool(payload.get("arcoEnCSynced", False))
+    run_log_path = _init_run_log(payload)
+    started_at = time.monotonic()
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=not show_browser)
-        context = browser.new_context()
+        context = browser.new_context(viewport={"width": 1440, "height": 900})
         page = context.new_page()
+        diagnostics = _attach_diagnostics(page)
 
         try:
-            log("Iniciando sesión en https://er.globalapp.ar/login ...")
-            page.goto("https://er.globalapp.ar/login", timeout=30000)
-            page.get_by_role("textbox", name="Ingrese su usuario").fill(user_email)
-            page.locator("input[type=\"password\"]").fill(user_password)
-            page.get_by_role("button", name="Ingresar").click()
-            page.wait_for_timeout(3000)
+            _login_globalapp(page, user_email, user_password, diagnostics)
 
             result = {"success": True, "action": action}
 
             # 1. Si es únicamente sincronización de Arco en C (disparado tras 5s del checkbox)
             if action == "arco_en_c_only":
-                arco_res = sync_arco_en_c_in_internaciones(page, payload)
+                arco_res = sync_arco_en_c_in_internaciones(page, payload, diagnostics=diagnostics)
                 result.update(arco_res)
                 result["mode"] = "arco_en_c_only"
 
             # 2. Si es reversión/eliminación de Arco en C (disparado tras destildar el checkbox)
             elif action == "arco_en_c_revert":
-                arco_res = revert_arco_en_c_in_internaciones(page, payload)
+                arco_res = revert_arco_en_c_in_internaciones(page, payload, diagnostics=diagnostics)
                 result.update(arco_res)
                 result["mode"] = "arco_en_c_revert"
 
@@ -1087,42 +1413,42 @@ def run_sync(payload: dict):
 
                 # Si está tildado Arco en C y aún no se sincronizó, procesarlo a continuación
                 if arco_en_c and not arco_en_c_synced:
-                    arco_res = sync_arco_en_c_in_internaciones(page, payload)
+                    arco_res = sync_arco_en_c_in_internaciones(page, payload, diagnostics=diagnostics)
                     result["arcoEnCResult"] = arco_res
                 # Si está destildado pero estaba sincronizado previamente, eliminarlo
                 elif not arco_en_c and arco_en_c_synced:
-                    arco_res = revert_arco_en_c_in_internaciones(page, payload)
+                    arco_res = revert_arco_en_c_in_internaciones(page, payload, diagnostics=diagnostics)
                     result["arcoEnCRevertResult"] = arco_res
+
+            duration_ms = int((time.monotonic() - started_at) * 1000)
+            result["duration_ms"] = duration_ms
+            if run_log_path:
+                result["run_log"] = run_log_path
+            _finalize_run_log(result, duration_ms, diagnostics)
 
             print("===GLOBALAPP_RESULT_START===", flush=True)
             print(json.dumps(result, ensure_ascii=False), flush=True)
             print("===GLOBALAPP_RESULT_END===", flush=True)
 
         except Exception as e:
-            import traceback
-            err_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "globalapp_errors")
-            os.makedirs(err_dir, exist_ok=True)
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            dni = str(data.get("patientDni", "sin_dni")).strip()
-            screenshot_path = os.path.join(err_dir, f"error_{ts}_{dni}.png")
-            log_path = os.path.join(err_dir, f"error_{ts}_{dni}.log")
-            try:
-                page.screenshot(path=screenshot_path, full_page=True)
-            except Exception:
-                screenshot_path = None
-            try:
-                with open(log_path, "w", encoding="utf-8") as lf:
-                    lf.write(f"Timestamp: {ts}\nAction: {data.get('action')}\nDNI: {dni}\nError: {e}\n\n")
-                    lf.write(traceback.format_exc())
-            except Exception:
-                log_path = None
+            duration_ms = int((time.monotonic() - started_at) * 1000)
+            artifacts = _capture_error_artifacts(page, payload, action or "run_sync", str(e), exc=e, diagnostics=diagnostics)
+            detail_parts = [str(e)]
+            if artifacts.get("url"):
+                detail_parts.append(f"URL: {artifacts['url']}")
+            if artifacts.get("modal_error"):
+                detail_parts.append(f"Modal: {artifacts['modal_error']}")
             err_res = {
                 "success": False,
-                "error": str(e),
-                "screenshot": screenshot_path,
-                "log_file": log_path
+                "action": action,
+                "error": " | ".join(detail_parts),
+                "screenshot": artifacts.get("screenshot"),
+                "log_file": artifacts.get("log_file"),
+                "run_log": run_log_path,
+                "url": artifacts.get("url"),
+                "duration_ms": duration_ms,
             }
-            log(f"ERROR: {e} | Screenshot: {screenshot_path} | Log: {log_path}")
+            _finalize_run_log(err_res, duration_ms, diagnostics)
             print("===GLOBALAPP_RESULT_START===", flush=True)
             print(json.dumps(err_res, ensure_ascii=False), flush=True)
             print("===GLOBALAPP_RESULT_END===", flush=True)

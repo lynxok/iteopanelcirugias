@@ -1399,11 +1399,15 @@ export const Tripticos: React.FC = () => {
                                 className={`size-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 ${
                                   isBlocked ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
                                 }`}
-                                title={
-                                  surg.ya_cargada_aoter
-                                    ? "Cirugía ya cargada en AOTER SGAPI"
-                                    : (!surg.tiene_egreso ? "Paciente sin fecha de egreso de internación" : "Seleccionar para transferir")
-                                }
+                                  title={
+                                    surg.ya_cargada_aoter
+                                      ? "Cirugía ya cargada en AOTER SGAPI"
+                                      : (!surg.tiene_egreso
+                                          ? (surg.tiene_internacion_globalapp === false
+                                              ? "Tiene parte quirúrgico en GlobalApp, pero sin internación registrada"
+                                              : "Paciente sin fecha de egreso de internación")
+                                          : "Seleccionar para transferir")
+                                  }
                               />
                             </td>
 
@@ -1429,8 +1433,37 @@ export const Tripticos: React.FC = () => {
                                   </span>
                                 )}
 
-                                {!surg.tiene_egreso && (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs" title="El paciente aún no cuenta con fecha/hora de alta o egreso en GlobalApp">
+                                {!surg.tiene_egreso && surg.tiene_internacion_globalapp === false && (
+                                  <>
+                                    <span
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs"
+                                      title="No se encontró internación registrada para este paciente en GlobalApp"
+                                    >
+                                      <span className="material-symbols-outlined text-xs">hotel</span>
+                                      Sin internación en GlobalApp
+                                    </span>
+                                    {(surg.parte_id || surg.numero_parte || surg.protocolo_operatorio?.trim()) ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs"
+                                        title="Tiene parte quirúrgico (protocolo) cargado en GlobalApp"
+                                      >
+                                        <span className="material-symbols-outlined text-xs">description</span>
+                                        Protocolo
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs"
+                                        title="No tiene parte quirúrgico (protocolo) cargado en GlobalApp"
+                                      >
+                                        <span className="material-symbols-outlined text-xs">edit_off</span>
+                                        Sin protocolo
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+
+                                {!surg.tiene_egreso && surg.tiene_internacion_globalapp !== false && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs" title="El paciente tiene internación en GlobalApp pero aún no registra fecha/hora de alta o egreso">
                                     <span className="material-symbols-outlined text-xs">hotel</span>
                                     Sin egreso de internación
                                   </span>

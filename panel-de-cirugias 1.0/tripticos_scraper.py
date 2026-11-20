@@ -179,36 +179,99 @@ def relevar_cirugias(payload):
         egreso_fecha = None
         autorizacion_num = ""
         prestaciones = []
+        first_int = None
+        pac_id = p.get("idpaciente") or pac.get("id")
+
+        def _to_art_date(raw_dt):
+            s = str(raw_dt or "").strip()
+            if not s:
+                return ""
+            try:
+                clean = s.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(clean)
+                if dt.tzinfo is not None and dt.utcoffset() == timedelta(0):
+                    dt = dt - timedelta(hours=3)
+                return dt.strftime("%Y-%m-%d")
+            except Exception:
+                return s[:10]
+
+        def _pick_internacion(rows_list, target_date):
+            if not rows_list:
+                return None
+            # 1) Internación cuyo rango [ingreso, egreso] contiene la fecha de cirugía
+            for row in rows_list:
+                ing_d = _to_art_date(row.get("ingresofecha"))
+                egr_d = _to_art_date(row.get("egresofecha") or row.get("altafecha"))
+                if ing_d and ing_d <= target_date and (not egr_d or target_date <= egr_d):
+                    return row
+            # 2) Fallback: internación más cercana (±2 días)
+            try:
+                t_dt = datetime.strptime(target_date, "%Y-%m-%d").date()
+                best = None
+                best_diff = 999
+                for row in rows_list:
+                    ing_d = _to_art_date(row.get("ingresofecha"))
+                    if not ing_d:
+                        continue
+                    diff = abs((datetime.strptime(ing_d, "%Y-%m-%d").date() - t_dt).days)
+                    if diff <= 2 and diff < best_diff:
+                        best = row
+                        best_diff = diff
+                return best
+            except Exception:
+                return None
 
         if idint:
             try:
                 f_int = urllib.parse.quote(json.dumps({"id": idint}))
-                inc_int = urllib.parse.quote(json.dumps([{"required": True, "model": "paciente"}, {"required": True, "model": "cobertura"}, {"model": "planCobertura"}]))
+                inc_int = urllib.parse.quote(json.dumps([{"model": "paciente"}, {"model": "cobertura"}, {"model": "planCobertura"}]))
                 url_int = f"https://api.er.globalapp.ar/api/internaciones/get-all?filters={f_int}&includes={inc_int}&pageSize=1&page=1"
                 req_int = urllib.request.Request(url_int)
                 int_resp = json.loads(opener.open(req_int).read().decode("utf-8"))
                 int_rows = int_resp.get("rows", [])
                 if int_rows:
                     first_int = int_rows[0]
-                    # Capturar número de autorización de internación (NUC)
-                    raw_auth = first_int.get("autorizacionnumero")
-                    if raw_auth is not None:
-                        autorizacion_num = str(raw_auth).strip()
-
-                    # Capturar fecha de egreso o alta
-                    raw_egreso = first_int.get("egresofecha") or first_int.get("altafecha")
-                    if raw_egreso:
-                        egreso_fecha = str(raw_egreso).strip()
-
-                    int_diags = first_int.get("intDiagnosticos", [])
-                    for d in int_diags:
-                        td = d.get("turnoDiagnostico", {})
-                        d_name = td.get("diagnostico") or td.get("codigo")
-                        if d_name:
-                            diag_str = d_name.strip().upper()
-                            break
             except Exception as e:
                 log(f"  Aviso al consultar datos de internación #{idint}: {e}")
+
+        # Fallback por idpaciente cuando el parte quirúrgico vino sin idinternacion vinculado
+        if not first_int and pac_id:
+            try:
+                f_int_pac = urllib.parse.quote(json.dumps({"idpaciente": pac_id}))
+                inc_int_pac = urllib.parse.quote(json.dumps([{"model": "paciente"}, {"model": "cobertura"}, {"model": "planCobertura"}]))
+                url_int_pac = f"https://api.er.globalapp.ar/api/internaciones/get-all?filters={f_int_pac}&includes={inc_int_pac}&order=[[%22ingresofecha%22,%22DESC%22]]&pageSize=20&page=1"
+                req_int_pac = urllib.request.Request(url_int_pac)
+                int_pac_resp = json.loads(opener.open(req_int_pac).read().decode("utf-8"))
+                matched_int = _pick_internacion(int_pac_resp.get("rows", []), fecha_cirugia)
+                if matched_int:
+                    first_int = matched_int
+                    idint = matched_int.get("id")
+                    log(f"  [Fallback Internación] Parte #{np or pid} vinculado a internación #{idint} por paciente ({pac_nombre}).")
+            except Exception as e:
+                log(f"  Aviso al buscar internación por paciente #{pac_id}: {e}")
+
+        tiene_internacion_globalapp = bool(first_int)
+
+        if first_int:
+            # Capturar número de autorización de internación (NUC)
+            raw_auth = first_int.get("autorizacionnumero")
+            if raw_auth is not None:
+                autorizacion_num = str(raw_auth).strip()
+
+            # Capturar fecha de egreso o alta
+            raw_egreso = first_int.get("egresofecha") or first_int.get("altafecha")
+            if raw_egreso:
+                egreso_fecha = str(raw_egreso).strip()
+
+            int_diags = first_int.get("intDiagnosticos", [])
+            for d in int_diags:
+                td = d.get("turnoDiagnostico", {})
+                d_name = td.get("diagnostico") or td.get("codigo")
+                if d_name:
+                    diag_str = d_name.strip().upper()
+                    break
+
+        if idint:
 
             # 2. Consultar prestaciones de internación y filtrar con AOTER
             try:
@@ -473,6 +536,7 @@ def relevar_cirugias(payload):
             "prestaciones": prestaciones_finales,
             "egreso_fecha": egreso_fecha,
             "tiene_egreso": bool(egreso_fecha),
+            "tiene_internacion_globalapp": tiene_internacion_globalapp,
             "adjuntos": [],
             "selected": False,
             "matched_panel": False
