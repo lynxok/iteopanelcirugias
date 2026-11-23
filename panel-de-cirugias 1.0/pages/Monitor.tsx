@@ -6,6 +6,7 @@ import { OperatingRoom, SurgeryStatus } from '../types';
 import { useAuth } from '../src/lib/AuthContext';
 import { triggerGlobalappSync } from '../src/lib/globalappSync';
 import { useSurgeryForm } from '../src/lib/SurgeryFormContext';
+import StartSurgeryValidationModal, { ValidatedTeamData } from '../components/StartSurgeryValidationModal';
 
 // In-memory cache for instant monitor opening
 let monitorCache: {
@@ -18,6 +19,7 @@ export interface MonitorCase {
     patient: string;
     procedure: string;
     doctor: string;
+    doctorId?: string;
     anesthetist?: string;
     anesthesiologistId?: string;
     status: 'previous' | 'current' | 'next';
@@ -57,6 +59,8 @@ const Monitor: React.FC = () => {
     const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
     const [activeRoomIdx, setActiveRoomIdx] = useState(0);
     const [manuallyExpandedRooms, setManuallyExpandedRooms] = useState<string[]>([]);
+    const [pendingStart, setPendingStart] = useState<{ surgery: MonitorCase; roomId?: string } | null>(null);
+    const [startingSurgery, setStartingSurgery] = useState(false);
 
     const toggleRoomExpansion = (roomId: string) => {
         setManuallyExpandedRooms(prev => 
@@ -262,6 +266,7 @@ const Monitor: React.FC = () => {
                         patient: s.patient_name || 'N/A',
                         procedure: s.procedure_name || 'N/A',
                         doctor: s.doctor_name || 'N/A',
+                        doctorId: s.doctor_id || undefined,
                         status: status === 'current' ? 'current' : status === 'next' ? 'next' : 'previous',
                         startTime: s.actual_start_time || s.start_time || '--:--',
                         endTime: s.actual_end_time || s.end_time || s.planned_end_time || '--:--',
@@ -332,7 +337,7 @@ const Monitor: React.FC = () => {
         }
     };
 
-    const handleStartSurgery = async (id: string, roomId?: string, patientAvailableFrom?: string | null) => {
+    const handleStartSurgery = async (surgery: MonitorCase, roomId?: string) => {
         if (!isTecnico) return;
 
         try {
@@ -342,18 +347,14 @@ const Monitor: React.FC = () => {
             const now = new Date();
             const todayStr = now.toISOString().split('T')[0];
 
-            if (patientAvailableFrom && todayStr < patientAvailableFrom) {
-                if (!confirm(`⚠️ ALERTA: El paciente tiene disponibilidad a partir del ${patientAvailableFrom}. Hoy es ${todayStr}. ¿Desea iniciar la cirugía de todas formas?`)) {
-                    setLoading(false);
+            if (surgery.patientAvailableFrom && todayStr < surgery.patientAvailableFrom) {
+                if (!confirm(`⚠️ ALERTA: El paciente tiene disponibilidad a partir del ${surgery.patientAvailableFrom}. Hoy es ${todayStr}. ¿Desea iniciar la cirugía de todas formas?`)) {
                     return;
                 }
             }
 
             // 1. Validation: Check if there is already a surgery in progress in this room
             if (roomId) {
-                const now = new Date();
-                const todayStr = now.toISOString().split('T')[0];
-
                 const { data: existing, error: checkError } = await supabase
                     .from('surgeries')
                     .select('id')
@@ -370,23 +371,59 @@ const Monitor: React.FC = () => {
                 }
             }
 
+            // 2. Open team validation modal before starting & syncing with GlobalApp
+            setPendingStart({ surgery, roomId });
+        } catch (err) {
+            console.error('Error preparing surgery start:', err);
+            alert('Error al preparar el inicio de la cirugía');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleConfirmStartSurgery = async (validated: ValidatedTeamData) => {
+        if (!isTecnico || !pendingStart) return;
+        const surgeryId = pendingStart.surgery.id;
+
+        try {
+            setStartingSurgery(true);
+            const now = new Date();
             const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' });
 
-            const { error } = await supabase
+            // 1. Save validated specialist & anesthesiologist + start surgery
+            const { error: sxError } = await supabase
                 .from('surgeries')
                 .update({
                     status: 'in_progress',
-                    actual_start_time: timeStr
+                    actual_start_time: timeStr,
+                    doctor_id: validated.doctorId,
+                    anesthesiologist_id: validated.anesthesiologistId
                 })
-                .eq('id', id);
+                .eq('id', surgeryId);
 
-            if (error) throw error;
+            if (sxError) throw sxError;
 
-            // Log Audit
-            await logAction('UPDATE', id, `Cirugía iniciada manualmente en Monitor a las ${timeStr}`);
+            // 2. Save validated assistants in surgery_forms before GlobalApp sync
+            const { error: formError } = await supabase
+                .from('surgery_forms')
+                .upsert({
+                    surgery_id: surgeryId,
+                    ayudante_1: validated.ayudante1 || '',
+                    ayudante_2: validated.ayudante2 || ''
+                }, { onConflict: 'surgery_id' });
 
-            // Trigger Globalapp Stage 1 Sync (non-blocking for Monitor, alerts user if Globalapp skips sync)
-            triggerGlobalappSync(id, 'start')
+            if (formError) throw formError;
+
+            // 3. Log Audit
+            const assistantsSummary = [validated.ayudante1, validated.ayudante2].filter(Boolean).join(', ') || 'Sin ayudantes';
+            await logAction(
+                'UPDATE',
+                surgeryId,
+                `Cirugía iniciada manualmente en Monitor a las ${timeStr} | Espe: ${validated.doctorName} | Anes: ${validated.anesthetistName} | Ayudantes: ${assistantsSummary}`
+            );
+
+            // 4. Trigger Globalapp Stage 1 Sync AFTER DB has validated team data
+            triggerGlobalappSync(surgeryId, 'start')
                 .then(res => {
                     if (res && !res.success && res.error) {
                         alert(`⚠️ Aviso Globalapp:\n${res.error}\n\n(La cirugía continúa normalmente en el Panel de Cirugías).`);
@@ -394,12 +431,13 @@ const Monitor: React.FC = () => {
                 })
                 .catch(err => console.error('[GlobalappSync] Error al disparar inicio:', err));
 
-            fetchMonitorData();
+            setPendingStart(null);
+            fetchMonitorData(true);
         } catch (err) {
             console.error('Error starting surgery:', err);
             alert('Error al iniciar la cirugía');
         } finally {
-            setLoading(false);
+            setStartingSurgery(false);
         }
     };
 
@@ -713,7 +751,7 @@ const Monitor: React.FC = () => {
                             <span className={`font-mono text-slate-400 ${isCompact ? 'text-[10px]' : 'text-xs'}`}>Est. {data.startTime}</span>
                             {isTecnico && (
                                 <button
-                                    onClick={() => handleStartSurgery(data.id, room?.id, data.patientAvailableFrom)}
+                                    onClick={() => handleStartSurgery(data, room?.id)}
                                     className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-black uppercase transition-all shadow-lg active:scale-95 flex items-center gap-2"
                                 >
                                     <span className="material-symbols-outlined text-[20px]">play_arrow</span>
@@ -1091,6 +1129,14 @@ const Monitor: React.FC = () => {
                     </div>
                 )}
             </main>
+
+            <StartSurgeryValidationModal
+                isOpen={Boolean(pendingStart)}
+                surgery={pendingStart?.surgery || null}
+                submitting={startingSurgery}
+                onClose={() => !startingSurgery && setPendingStart(null)}
+                onConfirm={handleConfirmStartSurgery}
+            />
         </div>
     );
 };
