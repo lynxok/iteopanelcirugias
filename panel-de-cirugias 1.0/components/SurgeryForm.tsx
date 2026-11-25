@@ -126,6 +126,22 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
             arcoEnCIntervalRef.current = null;
         }
 
+        const upsertArcoEnCForm = async (fields: Record<string, any>) => {
+            const { data } = await supabase
+                .from('surgery_forms')
+                .upsert({
+                    surgery_id: surgery.id,
+                    ...fields,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'surgery_id' })
+                .select('id, updated_at')
+                .single();
+            if (data) {
+                if (!formId && data.id) setFormId(data.id);
+                if (data.updated_at) setLastUpdatedAt(data.updated_at);
+            }
+        };
+
         // CASO 1: SE DESTILDA
         if (!checked) {
             // Si nunca se había sincronizado con GlobalApp, cancelar cuenta regresiva y limpiar
@@ -151,32 +167,19 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                 }
             }, 1000);
 
-            arcoEnCTimerRef.current = setTimeout(async () => {
+        arcoEnCTimerRef.current = setTimeout(async () => {
                 if (arcoEnCIntervalRef.current) clearInterval(arcoEnCIntervalRef.current);
                 setArcoEnCSyncTimer(null);
                 setArcoEnCStatusMsg('Eliminando en GlobalApp...');
 
                 try {
-                    await supabase
-                        .from('surgery_forms')
-                        .upsert({
-                            surgery_id: surgery.id,
-                            arco_en_c: false,
-                            updated_at: new Date().toISOString()
-                        }, { onConflict: 'surgery_id' });
+                    await upsertArcoEnCForm({ arco_en_c: false });
 
                     const res = await triggerGlobalappSync(surgery.id, 'arco_en_c_revert');
                     if (res?.success) {
                         setArcoEnCSynced(false);
                         setArcoEnCStatusMsg('Arco en C eliminado de GlobalApp');
-                        await supabase
-                            .from('surgery_forms')
-                            .upsert({
-                                surgery_id: surgery.id,
-                                arco_en_c: false,
-                                arco_en_c_synced: false,
-                                updated_at: new Date().toISOString()
-                            }, { onConflict: 'surgery_id' });
+                        await upsertArcoEnCForm({ arco_en_c: false, arco_en_c_synced: false });
                         setTimeout(() => setArcoEnCStatusMsg(null), 4000);
                     } else {
                         setArcoEnCStatusMsg(res?.error || 'Aviso al revertir en GlobalApp');
@@ -220,17 +223,11 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
 
             try {
                 // Persistir estado en la base de datos de inmediato con upsert
-                const formUpsert: any = {
-                    surgery_id: surgery.id,
-                    arco_en_c: true,
-                    updated_at: new Date().toISOString()
-                };
-                if (hcc) formUpsert.cirugia_inicio = hcc;
-                if (hfc) formUpsert.cirugia_fin = hfc;
+                const formFields: Record<string, any> = { arco_en_c: true };
+                if (hcc) formFields.cirugia_inicio = hcc;
+                if (hfc) formFields.cirugia_fin = hfc;
 
-                await supabase
-                    .from('surgery_forms')
-                    .upsert(formUpsert, { onConflict: 'surgery_id' });
+                await upsertArcoEnCForm(formFields);
 
                 const overrides: any = {};
                 if (hcc) overrides.startTime = hcc;
@@ -243,14 +240,7 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                     } else {
                         setArcoEnCSynced(true);
                         setArcoEnCStatusMsg('Cargado en GlobalApp (PAC)');
-                        await supabase
-                            .from('surgery_forms')
-                            .upsert({
-                                surgery_id: surgery.id,
-                                arco_en_c: true,
-                                arco_en_c_synced: true,
-                                updated_at: new Date().toISOString()
-                            }, { onConflict: 'surgery_id' });
+                        await upsertArcoEnCForm({ arco_en_c: true, arco_en_c_synced: true });
                         setTimeout(() => setArcoEnCStatusMsg(null), 4000);
                     }
                 } else {
@@ -258,14 +248,7 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                     setArcoEnC(false);
                     setArcoEnCSynced(false);
                     setArcoEnCStatusMsg('No cargado en GlobalApp');
-                    await supabase
-                        .from('surgery_forms')
-                        .upsert({
-                            surgery_id: surgery.id,
-                            arco_en_c: false,
-                            arco_en_c_synced: false,
-                            updated_at: new Date().toISOString()
-                        }, { onConflict: 'surgery_id' });
+                    await upsertArcoEnCForm({ arco_en_c: false, arco_en_c_synced: false });
                     alert(`⚠️ GlobalApp - Arco en C:\n\n${errMsg}\n\nEl tilde de Arco en C ha sido cancelado.`);
                 }
             } catch (err: any) {
@@ -274,14 +257,7 @@ const SurgeryForm: React.FC<SurgeryFormProps> = ({ surgery, onClose, onSave, onM
                 setArcoEnC(false);
                 setArcoEnCSynced(false);
                 setArcoEnCStatusMsg('Error de conexión');
-                await supabase
-                    .from('surgery_forms')
-                    .upsert({
-                        surgery_id: surgery.id,
-                        arco_en_c: false,
-                        arco_en_c_synced: false,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'surgery_id' });
+                await upsertArcoEnCForm({ arco_en_c: false, arco_en_c_synced: false });
                 alert(`⚠️ GlobalApp - Arco en C:\n\n${errMsg}\n\nEl tilde de Arco en C ha sido cancelado.`);
             }
         }, 5000);
