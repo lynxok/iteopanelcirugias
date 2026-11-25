@@ -176,6 +176,10 @@ function createWindow() {
 
     autoUpdater.on('update-downloaded', () => {
         mainWindow.webContents.send('update-downloaded');
+        // Instalar y reiniciar automáticamente tras 2.5s para que la UI muestre el aviso
+        setTimeout(() => {
+            autoUpdater.quitAndInstall(true, true);
+        }, 2500);
     });
 
     autoUpdater.on('download-progress', (progressObj) => {
