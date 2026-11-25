@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { supabase } from '../src/lib/supabase';
+import { logGlobalappAudit } from '../src/lib/globalappSync';
 
 /**
  * Background listener that runs only inside the Electron Desktop App.
@@ -59,16 +60,16 @@ export const GlobalappBackgroundController: React.FC = () => {
                             })
                             .eq('id', item.id);
 
-                        await supabase.from('audit_logs').insert({
-                            user_name: 'Puente Globalapp (Cola)',
-                            user_role: 'Quirofano',
-                            action: 'SYNC_GLOBALAPP',
-                            resource: 'Cirugía',
-                            resource_id: item.surgery_id,
+                        await logGlobalappAudit({
+                            surgeryId: item.surgery_id,
+                            userName: 'Puente Globalapp (Cola)',
+                            auditAction: res?.success ? 'SYNC_GLOBALAPP' : 'SYNC_GLOBALAPP_ERROR',
+                            syncAction: String(item.action),
+                            payload: item.payload,
+                            result: res,
                             description: res?.success
                                 ? `Sincronización en cola (${String(item.action).toUpperCase()}) completada para ${item.payload?.patientName || ''} (DNI ${item.payload?.patientDni || ''}).`
-                                : `Error en cola Globalapp (${String(item.action).toUpperCase()}): ${res?.error || 'Desconocido'}`,
-                            diff: { payload: item.payload, result: res }
+                                : `Error en cola Globalapp (${String(item.action).toUpperCase()}): ${res?.error || 'Desconocido'}`
                         });
                     } catch (err: any) {
                         await supabase
@@ -118,8 +119,7 @@ export const GlobalappBackgroundController: React.FC = () => {
                                 .upsert({
                                     surgery_id: syncPayload.surgeryId,
                                     arco_en_c: false,
-                                    arco_en_c_synced: false,
-                                    updated_at: new Date().toISOString()
+                                    arco_en_c_synced: false
                                 }, { onConflict: 'surgery_id' });
                         } else if (syncPayload.arcoEnC || syncPayload.action === 'arco_en_c_only') {
                             await supabase
@@ -127,8 +127,7 @@ export const GlobalappBackgroundController: React.FC = () => {
                                 .upsert({
                                     surgery_id: syncPayload.surgeryId,
                                     arco_en_c: true,
-                                    arco_en_c_synced: true,
-                                    updated_at: new Date().toISOString()
+                                    arco_en_c_synced: true
                                 }, { onConflict: 'surgery_id' });
                         }
                     } else {
@@ -138,8 +137,7 @@ export const GlobalappBackgroundController: React.FC = () => {
                                 .upsert({
                                     surgery_id: syncPayload.surgeryId,
                                     arco_en_c: false,
-                                    arco_en_c_synced: false,
-                                    updated_at: new Date().toISOString()
+                                    arco_en_c_synced: false
                                 }, { onConflict: 'surgery_id' });
                         }
                     }
@@ -160,16 +158,16 @@ export const GlobalappBackgroundController: React.FC = () => {
                         console.error('[GlobalappBridge] Error broadcasting resultado:', bErr);
                     }
 
-                    await supabase.from('audit_logs').insert({
-                        user_name: 'Puente Globalapp (Tablet -> PC)',
-                        user_role: 'Quirofano',
-                        action: 'SYNC_GLOBALAPP',
-                        resource: 'Cirugía',
-                        resource_id: syncPayload.surgeryId,
+                    await logGlobalappAudit({
+                        surgeryId: syncPayload.surgeryId,
+                        userName: 'Puente Globalapp (Tablet -> PC)',
+                        auditAction: res?.success ? 'SYNC_GLOBALAPP' : 'SYNC_GLOBALAPP_ERROR',
+                        syncAction: String(syncPayload.action),
+                        payload: syncPayload,
+                        result: res,
                         description: res?.success
                             ? `Sincronización Globalapp (${String(syncPayload.action).toUpperCase()} - ${res.mode || 'ok'}) completada para ${syncPayload.patientName} (DNI ${syncPayload.patientDni}).`
-                            : `Error en sincronización Globalapp (${String(syncPayload.action).toUpperCase()}): ${res?.error || 'Desconocido'}`,
-                        diff: { payload: syncPayload, result: res }
+                            : `Error en sincronización Globalapp (${String(syncPayload.action).toUpperCase()}): ${res?.error || 'Desconocido'}`
                     });
                 } catch (err) {
                     console.error('[GlobalappBridge] Error ejecutando scraper:', err);
