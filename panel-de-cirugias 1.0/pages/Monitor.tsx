@@ -391,14 +391,23 @@ const Monitor: React.FC = () => {
             const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' });
 
             // 1. Save validated specialist & anesthesiologist + start surgery
+            const previousDoctorId = pendingStart.surgery.doctorId;
+            const doctorChanged = Boolean(previousDoctorId && previousDoctorId !== validated.doctorId);
+
+            const updatePayload: Record<string, any> = {
+                status: 'in_progress',
+                actual_start_time: timeStr,
+                doctor_id: validated.doctorId,
+                anesthesiologist_id: validated.anesthesiologistId
+            };
+
+            if (doctorChanged) {
+                updatePayload.referring_doctor_id = previousDoctorId;
+            }
+
             const { error: sxError } = await supabase
                 .from('surgeries')
-                .update({
-                    status: 'in_progress',
-                    actual_start_time: timeStr,
-                    doctor_id: validated.doctorId,
-                    anesthesiologist_id: validated.anesthesiologistId
-                })
+                .update(updatePayload)
                 .eq('id', surgeryId);
 
             if (sxError) throw sxError;
